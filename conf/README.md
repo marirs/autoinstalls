@@ -6,6 +6,11 @@
 openssl dhparam -out dhparam.pem 4096
 ```
 
+To verify:
+```bash
+openssl dhparam -inform PEM -in dhparam.pem -check -text
+```
+
 ### PageSpeed
 
 Add this in your http block:
