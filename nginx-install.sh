@@ -243,16 +243,16 @@ case $OPTION in
 		# LDAP Auth
 		if [[ "$LDAPAUTH" = 'y' ]]; then
 			cd /usr/local/src/nginx/modules
-			echo -ne "       Downloading LDAP Auth   [..]\r"
+			echo -ne "       Downloading LDAP Auth        [..]\r"
 			wget -O ldap-auth.zip https://github.com/kvspb/nginx-auth-ldap/archive/master.zip >> /tmp/nginx-install.log 2>&1
 			unzip ldap-auth.zip >> /tmp/nginx-install.log 2>&1
 			rm -f ldap-auth.zip >> /tmp/nginx-install.log 2>&1
 				
 			if [ $? -eq 0 ]; then
-				echo -ne "       Downloading LDAP Auth   [${CGREEN}OK${CEND}]\r"
+				echo -ne "       Downloading LDAP Auth        [${CGREEN}OK${CEND}]\r"
 				echo -ne "\n"
 			else
-				echo -e "       Downloading LDAP Auth   [${CRED}FAIL${CEND}]"
+				echo -e "       Downloading LDAP Auth        [${CRED}FAIL${CEND}]"
 				echo ""
 				echo "Please look at /tmp/nginx-install.log"
 				echo ""
@@ -263,16 +263,16 @@ case $OPTION in
 		# NAXSI
 		if [[ "$NAXSI" = 'y' ]]; then
 			cd /usr/local/src/nginx/modules
-			echo -ne "       Downloading LDAP Auth   [..]\r"
+			echo -ne "       Downloading NAXSI        [..]\r"
 			wget -O naxsi.zip https://github.com/nbs-system/naxsi/archive/master.zip >> /tmp/nginx-install.log 2>&1
 			unzip naxsi.zip >> /tmp/nginx-install.log 2>&1
 			rm -f naxsi.zip >> /tmp/nginx-install.log 2>&1
 				
 			if [ $? -eq 0 ]; then
-				echo -ne "       Downloading LDAP Auth   [${CGREEN}OK${CEND}]\r"
+				echo -ne "       Downloading NAXSI        [${CGREEN}OK${CEND}]\r"
 				echo -ne "\n"
 			else
-				echo -e "       Downloading LDAP Auth   [${CRED}FAIL${CEND}]"
+				echo -e "       Downloading NAXSI        [${CRED}FAIL${CEND}]"
 				echo ""
 				echo "Please look at /tmp/nginx-install.log"
 				echo ""
