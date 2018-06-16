@@ -245,8 +245,8 @@ case $OPTION in
 			cd /usr/local/src/nginx/modules
 			echo -ne "       Downloading LDAP Auth   [..]\r"
 			wget -O ldap-auth.zip https://github.com/kvspb/nginx-auth-ldap/archive/master.zip >> /tmp/nginx-install.log 2>&1
-			unzip ldap-auth.zip
-			rm -f ldap-auth.zip
+			unzip ldap-auth.zip >> /tmp/nginx-install.log 2>&1
+			rm -f ldap-auth.zip >> /tmp/nginx-install.log 2>&1
 				
 			if [ $? -eq 0 ]; then
 				echo -ne "       Downloading LDAP Auth   [${CGREEN}OK${CEND}]\r"
@@ -265,8 +265,8 @@ case $OPTION in
 			cd /usr/local/src/nginx/modules
 			echo -ne "       Downloading LDAP Auth   [..]\r"
 			wget -O naxsi.zip https://github.com/nbs-system/naxsi/archive/master.zip >> /tmp/nginx-install.log 2>&1
-			unzip naxsi.zip
-			rm -f naxsi.zip
+			unzip naxsi.zip >> /tmp/nginx-install.log 2>&1
+			rm -f naxsi.zip >> /tmp/nginx-install.log 2>&1
 				
 			if [ $? -eq 0 ]; then
 				echo -ne "       Downloading LDAP Auth   [${CGREEN}OK${CEND}]\r"
@@ -525,7 +525,7 @@ case $OPTION in
 
 		# NAXSI WAF
 		if [[ "$NAXSI" = 'y' ]]; then
-			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--add-module=/usr/local/src/nginx/modules/naxsi-master")
+			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--add-module=/usr/local/src/nginx/modules/naxsi-master/naxsi_src")
 		fi
 
 		# More Headers
