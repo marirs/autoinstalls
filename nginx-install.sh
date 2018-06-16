@@ -67,10 +67,10 @@ case $OPTION in
 		while [[ $BROTLI != "y" && $BROTLI != "n" ]]; do
 			read -p "       Brotli [y/n]: " -e BROTLI
 		done
-		while [[ $LDAPAUTH !="y" && $LDAPAUTH != "n" ]]; do
+		while [[ $LDAPAUTH != "y" && $LDAPAUTH != "n" ]]; do
 			read -p "       LDAP Auth $LDAPAUTH [y/n]: " -e LDAPAUTH
 		done
-		while [[ $NAXSI !="y" && $NAXSI != "n" ]]; do
+		while [[ $NAXSI != "y" && $NAXSI != "n" ]]; do
 			read -p "       NAXSI WAF (Does not play well with HTTP2) $NAXSI [y/n]: " -e NAXSI
 		done
 		while [[ $HEADERMOD != "y" && $HEADERMOD != "n" ]]; do
