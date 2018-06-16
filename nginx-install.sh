@@ -615,6 +615,8 @@ case $OPTION in
 		fi
 
         mkdir -p /etc/nginx/ssl >> /tmp/nginx-install.log 2>&1
+        mkdir -p /etc/nginx/conf.d >> /tmp/nginx-install.log 2>&1
+        wget -O /etc/nginx/conf.d/geo_fence.conf https://raw.githubusercontent.com/marirs/autoinstalls/master/conf/geo_fence.conf >> /tmp/nginx-install.log 2>&1
 		# Nginx installation from source does not add an init script for systemd and logrotate
 		# Using the official systemd script and logrotate conf from nginx.org
 		if [[ ! -e /lib/systemd/system/nginx.service ]]; then
