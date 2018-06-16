@@ -614,6 +614,7 @@ case $OPTION in
 			exit 1
 		fi
 
+        mkdir -p /etc/nginx/ssl >> /tmp/nginx-install.log 2>&1
 		# Nginx installation from source does not add an init script for systemd and logrotate
 		# Using the official systemd script and logrotate conf from nginx.org
 		if [[ ! -e /lib/systemd/system/nginx.service ]]; then
