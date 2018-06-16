@@ -312,8 +312,8 @@ case $OPTION in
 			wget http://geolite.maxmind.com/download/geoip/database/GeoLiteCity.dat.gz >> /tmp/nginx-install.log 2>&1
 			gunzip GeoIP.dat.gz
 			gunzip GeoLiteCity.dat.gz
-			mv GeoIP.dat /etc/geoip/GeoIP-Country.dat
-			mv GeoLiteCity.dat /etc/geoip/GeoIP-City.dat
+			mv GeoIP.dat /etc/nginx/geoip/GeoIP-Country.dat
+			mv GeoLiteCity.dat /etc/nginx/geoip/GeoIP-City.dat
 
 			if [ $? -eq 0 ]; then
 				echo -ne "       Downloading GeoIP databases    [${CGREEN}OK${CEND}]\r"
