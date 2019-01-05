@@ -36,6 +36,7 @@ Modules to install :
        NAXSI WAF (Does not play well with HTTP2)  [y/n]: y
        Headers More 0.33 [y/n]: y
        Fancy index [y/n]: y
+       Nginx virtual host traffic status [y/n]: y
        GeoIP 2 [y/n]: y
        Cloudflare's TLS Dynamic Record Resizing patch [y/n]: y
        Http LUA module [y/n]: y
@@ -57,6 +58,7 @@ Nginx is ready to be installed, press any key to continue...
        Installing libbrotli           [OK]
        Downloading ngx_brotli         [OK]
        Downloading LDAP Auth          [OK]
+       Downloading Nginx VTS          [OK]
        Downloading HTTP Redis 2       [OK]
        Downloading NAXSI              [OK]
        Downloading ngx_headers_more   [OK]
@@ -73,13 +75,13 @@ Nginx is ready to be installed, press any key to continue...
        Compiling Nginx                [OK]
        Installing Nginx               [OK]
        Restarting Nginx               [OK]
-       Blocking Nginx from APT        [OK]
+       Blocking nginx from APT        [OK]
        Removing Nginx files           [OK]
 
        Installation successful !
 
        Installation log: /tmp/nginx-install.log
-       
+             
 ```
 
 ## Compatibility
