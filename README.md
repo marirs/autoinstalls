@@ -5,6 +5,20 @@ Repo of couple of scripts that does auto install for:
 - Compile and install Nginx from source with optionnal modules. Modified from [here](https://github.com/Angristan/nginx-autoinstall)
 
 ```bash
+
+Welcome to the nginx-autoinstall script.
+
+What do you want to do?
+   1) Install or update Nginx
+   2) Uninstall Nginx
+   3) Update the script
+   4) Exit
+
+Select an option [1-4]: 1
+
+This script will install Nginx with some optional modules.
+
+Do you want to install Nginx stable or mainline?
    1) Stable 1.14.2
    2) Mainline 1.15.8
 
