@@ -638,7 +638,7 @@ case $OPTION in
 		if [[ ! -e /etc/nginx/nginx.conf ]]; then
 			mkdir -p /etc/nginx
 			cd /etc/nginx
-			wget https://raw.githubusercontent.com/marirs/autoinstalls/master/conf/nginx.conf >> /tmp/nginx-install.log 2>&1
+			wget https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/conf/nginx.conf >> /tmp/nginx-install.log 2>&1
             if [[ "$TLSPATCH" == "y" ]]; then
                 sed -i '/ssl_dyn_rec_enable/s/#//g' nginx.conf
             fi
@@ -768,8 +768,8 @@ case $OPTION in
                 wget -O nginx.patch https://raw.githubusercontent.com/cujanovic/nginx-dynamic-tls-records-patch/master/nginx__dynamic_tls_records_1.11.5%2B.patch >> /tmp/nginx-install.log 2>&1
             elif [[ "$NGINX_VER" == *"1.13"* ]]; then
                 wget -O nginx.patch https://raw.githubusercontent.com/cujanovic/nginx-dynamic-tls-records-patch/master/nginx__dynamic_tls_records_1.13.0%2B.patch >> /tmp/nginx-install.log 2>&1
-            elif [[ "$NGINX_VER" == *"1.15"* ]]; then
-                wget -O nginx.patch https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx-dynamic-tls-1.15.patch >> /tmp/nginx-install.log 2>&1
+            elif [[ "$NGINX_VER" == *"1.15.8"* ]]; then
+                wget -O nginx.patch https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/nginx-dynamic-tls-1.15.8.patch >> /tmp/nginx-install.log 2>&1
             fi
             patch -p1 < nginx.patch >> /tmp/nginx-install.log 2>&1
 		        
@@ -835,19 +835,19 @@ case $OPTION in
 
         mkdir -p /etc/nginx/ssl >> /tmp/nginx-install.log 2>&1
         mkdir -p /etc/nginx/conf.d >> /tmp/nginx-install.log 2>&1
-        wget -O /etc/nginx/conf.d/ https://raw.githubusercontent.com/marirs/autoinstalls/master/conf/geo_fence.conf >> /tmp/nginx-install.log 2>&1
+        wget -O /etc/nginx/conf.d/ https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/conf/geo_fence.conf >> /tmp/nginx-install.log 2>&1
 		# Nginx installation from source does not add an init script for systemd and logrotate
 		# Using the official systemd script and logrotate conf from nginx.org
 		if [[ ! -e /lib/systemd/system/nginx.service ]]; then
 			cd /lib/systemd/system/
-			wget https://raw.githubusercontent.com/marirs/autoinstalls/master/conf/nginx.service >> /tmp/nginx-install.log 2>&1
+			wget https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/conf/nginx.service >> /tmp/nginx-install.log 2>&1
 			# Enable nginx start at boot
 			systemctl enable nginx >> /tmp/nginx-install.log 2>&1
 		fi
 
 		if [[ ! -e /etc/logrotate.d/nginx ]]; then
 			cd /etc/logrotate.d/
-			wget https://raw.githubusercontent.com/marirs/autoinstalls/master/conf/nginx-logrotate -O nginx >> /tmp/nginx-install.log 2>&1
+			wget https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/conf/nginx-logrotate -O nginx >> /tmp/nginx-install.log 2>&1
 		fi
 
 		# Nginx's cache directory is not created by default
@@ -962,7 +962,7 @@ case $OPTION in
 	exit
 	;;
 	3) # Update the script
-		wget https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx-autoinstall.sh -O nginx-autoinstall.sh >> /tmp/nginx-install.log 2>&1
+		wget https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/nginx-install.sh -O nginx-install.sh >> /tmp/nginx-install.log 2>&1
 		chmod +x nginx-autoinstall.sh
 		echo ""
 		echo -e "${CGREEN}Update succcessful !${CEND}"
