@@ -23,6 +23,11 @@ LUA_JIT_VER=2.1-20181029
 LUA_NGINX_VER=0.10.14rc2
 NGINX_DEV_KIT=0.3.0
 
+cores=$(nproc)
+if [ $? -ne 0 ]; then
+    cores=1
+fi
+
 # Clear log file
 rm /tmp/nginx-install.log
 
@@ -222,7 +227,7 @@ case $OPTION in
 			fi
 
 			echo -ne "       Compiling libbrotli            [..]\r"
-			make -j $(nproc) >> /tmp/nginx-install.log 2>&1
+			make -j $cores >> /tmp/nginx-install.log 2>&1
 
 			if [ $? -eq 0 ]; then
 				echo -ne "       Compiling libbrotli            [${CGREEN}OK${CEND}]\r"
@@ -802,7 +807,7 @@ case $OPTION in
 
 		# Then we compile
 		echo -ne "       Compiling Nginx                [..]\r"
-		make -j $(nproc) >> /tmp/nginx-install.log 2>&1
+		make -j $cores >> /tmp/nginx-install.log 2>&1
 
 		if [ $? -eq 0 ]; then
 			echo -ne "       Compiling Nginx                [${CGREEN}OK${CEND}]\r"
