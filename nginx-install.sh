@@ -858,10 +858,10 @@ case $OPTION in
 
 		if [[ $(lsb_release -si) == "Debian" ]] || [[ $(lsb_release -si) == "Ubuntu" ]]
 		then
-			echo -ne "       Blocking nginx from APT        [..]\r"
+			echo -ne "       Blocking Nginx from APT        [..]\r"
 			cd /etc/apt/preferences.d/
 			echo -e "Package: nginx*\nPin: release *\nPin-Priority: -1" > nginx-block
-			echo -ne "       Blocking nginx from APT        [${CGREEN}OK${CEND}]\r"
+			echo -ne "       Blocking Nginx from APT        [${CGREEN}OK${CEND}]\r"
 			echo -ne "\n"
 		fi
 
