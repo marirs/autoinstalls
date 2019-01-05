@@ -88,6 +88,9 @@ case $OPTION in
 		while [[ $FANCYINDEX != "y" && $FANCYINDEX != "n" ]]; do
 			read -p "       Fancy index [y/n]: " -e FANCYINDEX
 		done
+        while [[ $VTS != "y" && $VTS != "n" ]]; do
+            read -p "       Nginx virtual host traffic status [y/n]: " -e VTS
+        done
 		while [[ $GEOIP2 != "y" && $GEOIP2 != "n" ]]; do
 			read -p "       GeoIP 2 [y/n]: " -e GEOIP2
 		done
@@ -287,6 +290,23 @@ case $OPTION in
 				exit 1
 			fi
 		fi
+
+        # Nginx virtual host traffic status
+        if [[ "$VTS" = 'y' ]]; then
+            cd /usr/local/src/nginx/modules
+			echo -ne "       Downloading Nginx VTS          [..]\r"
+            git clone https://github.com/vozlt/nginx-module-vts.git >> /tmp/nginx-install.log 2>&1
+			if [ $? -eq 0 ]; then
+				echo -ne "       Downloading Nginx VTS          [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Downloading Nginx VTS          [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/nginx-install.log"
+				echo ""
+				exit 1
+			fi
+        fi
 
         # HTTP REDIS 2
         if [[ "$REDIS2" = 'y' ]]; then
@@ -689,6 +709,11 @@ case $OPTION in
 			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--add-module=/usr/local/src/nginx/modules/nginx-auth-ldap-master")
 		fi
 
+		# Nginx virtual host traffic status
+		if [[ "$VTS" = 'y' ]]; then
+			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--add-module=/usr/local/src/nginx/modules/nginx-module-vts")
+		fi
+
 		# NAXSI WAF
 		if [[ "$NAXSI" = 'y' ]]; then
 			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--add-module=/usr/local/src/nginx/modules/naxsi-master/naxsi_src")
@@ -858,10 +883,10 @@ case $OPTION in
 
 		if [[ $(lsb_release -si) == "Debian" ]] || [[ $(lsb_release -si) == "Ubuntu" ]]
 		then
-			echo -ne "       Blocking Nginx from APT        [..]\r"
+			echo -ne "       Blocking nginx from APT        [..]\r"
 			cd /etc/apt/preferences.d/
 			echo -e "Package: nginx*\nPin: release *\nPin-Priority: -1" > nginx-block
-			echo -ne "       Blocking Nginx from APT        [${CGREEN}OK${CEND}]\r"
+			echo -ne "       Blocking nginx from APT        [${CGREEN}OK${CEND}]\r"
 			echo -ne "\n"
 		fi
 
