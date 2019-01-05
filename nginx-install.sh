@@ -19,6 +19,9 @@ LIBRESSL_VER=2.7.4
 OPENSSL_VER=1.1.0h
 NPS_VER=1.13.35.2
 HEADERMOD_VER=0.33
+LUA_JIT_VER=2.1-20181029
+LUA_NGINX_VER=0.10.14rc2
+NGINX_DEV_KIT=0.3.0
 
 # Clear log file
 rm /tmp/nginx-install.log
@@ -64,8 +67,14 @@ case $OPTION in
 		while [[ $PAGESPEED != "y" && $PAGESPEED != "n" ]]; do
 			read -p "       PageSpeed $NPS_VER [y/n]: " -e PAGESPEED
 		done
+		while [[ $CACHEPURGE != "y" && $CACHEPURGE != "n" ]]; do
+			read -p "       ngx_cache_purge [y/n]: " -e CACHEPURGE
+		done
 		while [[ $BROTLI != "y" && $BROTLI != "n" ]]; do
 			read -p "       Brotli [y/n]: " -e BROTLI
+		done
+		while [[ $REDIS2 != "y" && $REDIS2 != "n" ]]; do
+			read -p "       Http Redis 2 [y/n]: " -e REDIS2
 		done
 		while [[ $LDAPAUTH != "y" && $LDAPAUTH != "n" ]]; do
 			read -p "       LDAP Auth $LDAPAUTH [y/n]: " -e LDAPAUTH
@@ -76,14 +85,30 @@ case $OPTION in
 		while [[ $HEADERMOD != "y" && $HEADERMOD != "n" ]]; do
 			read -p "       Headers More $HEADERMOD_VER [y/n]: " -e HEADERMOD
 		done
-		while [[ $GEOIP != "y" && $GEOIP != "n" ]]; do
-			read -p "       GeoIP [y/n]: " -e GEOIP
+		while [[ $FANCYINDEX != "y" && $FANCYINDEX != "n" ]]; do
+			read -p "       Fancy index [y/n]: " -e FANCYINDEX
 		done
-		while [[ $TCP != "y" && $TCP != "n" ]]; do
-			read -p "       Cloudflare's TLS Dynamic Record Resizing patch [y/n]: " -e TCP
+		while [[ $GEOIP2 != "y" && $GEOIP2 != "n" ]]; do
+			read -p "       GeoIP 2 [y/n]: " -e GEOIP2
 		done
-		while [[ $CACHEPURGE != "y" && $CACHEPURGE != "n" ]]; do
-			read -p "       ngx_cache_purge [y/n]: " -e CACHEPURGE
+        if [[ "$GEOIP2" != "y" ]]; then
+            # if GEOIP 2 is not selected, then give option of 
+            # Legacy GEOIP (just in case for some reason)
+            while [[ $GEOIP != "y" && $GEOIP != "n" ]]; do
+                read -p "       GeoIP (Legacy) [y/n]: " -e GEOIP
+            done
+        else
+            GEOIP="n"
+        fi
+        if [[ "$NGINX_VER" == *"1.11"* ]] ||  [[ "$NGINX_VER" == *"1.13"* ]] || [[ "$NGINX_VER" == *"1.15"* ]]; then
+            while [[ $TLSPATCH != "y" && $TLSPATCH != "n" ]]; do
+                read -p "       Cloudflare's TLS Dynamic Record Resizing patch [y/n]: " -e TLSPATCH
+            done
+        else
+            TLSPATCH="n"
+        fi
+		while [[ $LUA != "y" && $LUA != "n" ]]; do
+			read -p "       Http LUA module [y/n]: " -e LUA
 		done
 		echo ""
 		echo "Choose your OpenSSL implementation :"
@@ -118,6 +143,9 @@ case $OPTION in
 		echo -ne "       Installing dependencies      [..]\r"
 		apt-get update >> /tmp/nginx-install.log 2>&1
 		apt-get install build-essential ca-certificates wget curl libpcre3 libpcre3-dev libldap2-dev autoconf unzip automake libtool tar git libssl-dev zlib1g-dev uuid-dev -y >> /tmp/nginx-install.log 2>&1
+        if [[ "$LUA" = 'y' ]]; then
+            apt-get install liblualib50-dev libluajit-5.1-dev -y >> /tmp/nginx-install.log 2>&1
+        fi
 
 		if [ $? -eq 0 ]; then
 			echo -ne "       Installing dependencies        [${CGREEN}OK${CEND}]\r"
@@ -260,6 +288,23 @@ case $OPTION in
 			fi
 		fi
 
+        # HTTP REDIS 2
+        if [[ "$REDIS2" = 'y' ]]; then
+            cd /usr/local/src/nginx/modules
+			echo -ne "       Downloading HTTP Redis 2       [..]\r"
+            git clone https://github.com/openresty/redis2-nginx-module.git >> /tmp/nginx-install.log 2>&1
+			if [ $? -eq 0 ]; then
+				echo -ne "       Downloading HTTP Redis 2       [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Downloading HTTP Redis 2       [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/nginx-install.log"
+				echo ""
+				exit 1
+			fi
+        fi
+
 		# NAXSI
 		if [[ "$NAXSI" = 'y' ]]; then
 			cd /usr/local/src/nginx/modules
@@ -299,7 +344,39 @@ case $OPTION in
 			fi
 		fi
 
-		# GeoIP
+		# GeoIP 2
+		if [[ "$GEOIP2" = 'y' ]]; then
+			# Dependence
+			apt-get install libgeoip-dev -y >> /tmp/nginx-install.log 2>&1
+            add-apt-repository ppa:maxmind/ppa -y >> /tmp/nginx-install.log 2>&1
+            apt update >> /tmp/nginx-install.log 2>&1
+            apt install libmaxminddb0 libmaxminddb-dev mmdb-bin >> /tmp/nginx-install.log 2>&1
+
+			cd /usr/local/src/nginx/modules || exit 1
+            git clone --recursive https://github.com/leev/ngx_http_geoip2_module >> /tmp/nginx-install.log 2>&1
+
+			mkdir -p /etc/nginx/geoip2/
+			echo -ne "       Downloading GeoIP 2 databases  [..]\r"
+			wget http://geolite.maxmind.com/download/geoip/database/GeoLite2-Country.tar.gz >> /tmp/nginx-install.log 2>&1
+			wget https://geolite.maxmind.com/download/geoip/database/GeoLite2-City.tar.gz >> /tmp/nginx-install.log 2>&1
+			tar xaf GeoLite2-Country.tar.gz  --strip 1
+			tar xaf GeoLite2-City.tar.gz --strip 1
+			mv GeoLite2-Country.mmdb /etc/nginx/geoip2/
+			mv GeoLite2-City.mmdb /etc/nginx/geoip2/
+
+			if [ $? -eq 0 ]; then
+				echo -ne "       Downloading GeoIP 2 databases  [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Downloading GeoIP 2 databases  [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/nginx-install.log"
+				echo ""
+				exit 1
+			fi
+		fi
+
+		# GeoIP Legacy
 		if [[ "$GEOIP" = 'y' ]]; then
 			# Dependence
 			apt-get install libgeoip-dev -y >> /tmp/nginx-install.log 2>&1
@@ -433,6 +510,91 @@ case $OPTION in
 			fi
 		fi
 
+		# Lua
+		if [[ "$LUA" = 'y' ]]; then	
+			# LuaJIT download		
+			echo -ne "       Downloading OpenResty's LuaJIT [..]\r"
+			cd /usr/local/src/nginx/modules						
+			wget https://github.com/openresty/luajit2/archive/v${LUA_JIT_VER}.tar.gz >> /tmp/nginx-autoinstall.log 2>&1		
+			tar xaf v${LUA_JIT_VER}.tar.gz
+			cd luajit2-${LUA_JIT_VER}
+			
+			if [ $? -eq 0 ]; then
+				echo -ne "       Downloading OpenResty's LuaJIT [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Downloading OpenResty's LuaJIT [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/nginx-autoinstall.log"
+				echo ""
+				exit 1
+			fi
+
+			echo -ne "       Configuring OpenResty's LuaJIT [..]\r"
+			make >> /tmp/nginx-autoinstall.log 2>&1
+
+			if [ $? -eq 0 ]; then
+				echo -ne "       Configuring OpenResty's LuaJIT [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Configuring OpenResty's LuaJIT [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/nginx-autoinstall.log"
+				echo ""
+				exit 1
+			fi
+
+			# LuaJIT install
+			echo -ne "       Installing LuaJIT            [..]\r"
+			make install >> /tmp/nginx-autoinstall.log 2>&1
+
+			if [ $? -eq 0 ]; then
+				echo -ne "       Installing OpenResty's LuaJIT  [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Installing OpenResty's LuaJIT  [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/nginx-autoinstall.log"
+				echo ""
+				exit 1
+			fi			
+
+			# ngx_devel_kit download
+			echo -ne "       Downloading ngx_devel_kit      [..]\r"
+			cd /usr/local/src/nginx/modules									
+			wget https://github.com/simplresty/ngx_devel_kit/archive/v${NGINX_DEV_KIT}.tar.gz >> /tmp/nginx-autoinstall.log 2>&1		
+			tar xaf v${NGINX_DEV_KIT}.tar.gz
+			#cd ngx_devel_kit-${NGINX_DEV_KIT} Downloading ngx_devel_kit  [OK]     [..]
+			if [ $? -eq 0 ]; then
+				echo -ne "       Downloading ngx_devel_kit      [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Downloading ngx_devel_kit      [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/nginx-autoinstall.log"
+				echo ""
+				exit 1
+			fi
+
+			# lua-nginx-module download
+			echo -ne "       Downloading lua-nginx-module   [..]\r"
+			cd /usr/local/src/nginx/modules			
+			wget https://github.com/openresty/lua-nginx-module/archive/v${LUA_NGINX_VER}.tar.gz >> /tmp/nginx-autoinstall.log 2>&1		
+			tar xaf v${LUA_NGINX_VER}.tar.gz
+			#cd lua-nginx-module-${LUA_NGINX_VER}
+			if [ $? -eq 0 ]; then
+				echo -ne "       Downloading lua-nginx-module   [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Downloading lua-nginx-module   [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/nginx-autoinstall.log"
+				echo ""
+				exit 1
+			fi
+
+		fi
+
 		# Download and extract of Nginx source code
 		cd /usr/local/src/nginx/
 		echo -ne "       Downloading Nginx              [..]\r"
@@ -457,6 +619,12 @@ case $OPTION in
 			mkdir -p /etc/nginx
 			cd /etc/nginx
 			wget https://raw.githubusercontent.com/marirs/autoinstalls/master/conf/nginx.conf >> /tmp/nginx-install.log 2>&1
+            if [[ "$TLSPATCH" == "y" ]]; then
+                sed -i '/ssl_dyn_rec_enable/s/#//g' nginx.conf
+            fi
+            if [[ "$GEOIP" != 'y' ]]; then
+                sed -i '/geoip_/d' nginx.conf
+            fi
 		fi
 		cd /usr/local/src/nginx/nginx-${NGINX_VER}
 
@@ -531,7 +699,12 @@ case $OPTION in
 			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--add-module=/usr/local/src/nginx/modules/headers-more-nginx-module-${HEADERMOD_VER}")
 		fi
 
-		# GeoIP
+        # GeoIP 2
+        if [[ "$GEOIP2" = 'y' ]]; then			
+            NGINX_MODULES=$(echo "$NGINX_MODULES"; echo "--add-module=/usr/local/src/nginx/modules/ngx_http_geoip2_module")
+        fi
+
+    	# GeoIP Legacy
 		if [[ "$GEOIP" = 'y' ]]; then
 			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--with-http_geoip_module")
 		fi
@@ -546,11 +719,34 @@ case $OPTION in
 			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--add-module=/usr/local/src/nginx/modules/ngx_cache_purge")
 		fi
 
+		# Lua
+		if [[ "$LUA" = 'y' ]]; then
+			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--add-module=/usr/local/src/nginx/modules/ngx_devel_kit-${NGINX_DEV_KIT}")
+			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--add-module=/usr/local/src/nginx/modules/lua-nginx-module-${LUA_NGINX_VER}")
+		fi
+
+        # Http Redis 2
+        if [[ "$REDIS2" = 'y' ]]; then
+            NGINX_MODULES=$(echo $NGINX_MODULES; echo "--add-module=/usr/local/src/nginx/modules/redis2-nginx-module")
+        fi
+		
+		# Fancy index
+		if [[ "$FANCYINDEX" = 'y' ]]; then
+			git clone --quiet https://github.com/aperezdc/ngx-fancyindex.git /usr/local/src/nginx/modules/fancyindex >> /tmp/nginx-autoinstall.log 2>&1
+			NGINX_MODULES=$(echo $NGINX_MODULES; echo --add-module=/usr/local/src/nginx/modules/fancyindex)
+		fi
+
 		# Cloudflare's TLS Dynamic Record Resizing patch
-		if [[ "$TCP" = 'y' ]]; then
+		if [[ "$TLSPATCH" = 'y' ]]; then
 			echo -ne "       TLS Dynamic Records support    [..]\r"
-			wget https://raw.githubusercontent.com/cujanovic/nginx-dynamic-tls-records-patch/master/nginx__dynamic_tls_records_1.13.0%2B.patch >> /tmp/nginx-install.log 2>&1
-			patch -p1 < nginx__1.11.5_dynamic_tls_records.patch >> /tmp/nginx-install.log 2>&1
+            if [[ "$NGINX_VER" == *"1.11"* ]]; then
+                wget -O nginx.patch https://raw.githubusercontent.com/cujanovic/nginx-dynamic-tls-records-patch/master/nginx__dynamic_tls_records_1.11.5%2B.patch >> /tmp/nginx-install.log 2>&1
+            elif [[ "$NGINX_VER" == *"1.13"* ]]; then
+                wget -O nginx.patch https://raw.githubusercontent.com/cujanovic/nginx-dynamic-tls-records-patch/master/nginx__dynamic_tls_records_1.13.0%2B.patch >> /tmp/nginx-install.log 2>&1
+            elif [[ "$NGINX_VER" == *"1.15"* ]]; then
+                wget -O nginx.patch https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx-dynamic-tls-1.15.patch >> /tmp/nginx-install.log 2>&1
+            fi
+            patch -p1 < nginx.patch >> /tmp/nginx-install.log 2>&1
 		        
 			if [ $? -eq 0 ]; then
 				echo -ne "       TLS Dynamic Records support    [${CGREEN}OK${CEND}]\r"
@@ -641,6 +837,9 @@ case $OPTION in
 		if [[ ! -d /etc/nginx/sites-enabled ]]; then
 			mkdir -p /etc/nginx/sites-enabled
 		fi
+		if [[ ! -d /etc/nginx/ssl ]]; then
+			mkdir -p /etc/nginx/ssl
+		fi
 
 		# Restart Nginx
 		echo -ne "       Restarting Nginx               [..]\r"
@@ -655,6 +854,15 @@ case $OPTION in
 			echo "Please look at /tmp/nginx-install.log"
 			echo ""
 			exit 1
+		fi
+
+		if [[ $(lsb_release -si) == "Debian" ]] || [[ $(lsb_release -si) == "Ubuntu" ]]
+		then
+			echo -ne "       Blocking nginx from APT        [..]\r"
+			cd /etc/apt/preferences.d/
+			echo -e "Package: nginx*\nPin: release *\nPin-Priority: -1" > nginx-block
+			echo -ne "       Blocking nginx from APT        [${CGREEN}OK${CEND}]\r"
+			echo -ne "\n"
 		fi
 
 		# Removing temporary Nginx and modules files
