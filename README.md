@@ -73,7 +73,7 @@ Nginx is ready to be installed, press any key to continue...
        Compiling Nginx                [OK]
        Installing Nginx               [OK]
        Restarting Nginx               [OK]
-       Blocking nginx from APT        [OK]
+       Blocking Nginx from APT        [OK]
        Removing Nginx files           [OK]
 
        Installation successful !
