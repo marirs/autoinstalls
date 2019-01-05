@@ -101,6 +101,7 @@ Nginx is ready to be installed, press any key to continue...
 
 - [LDAP Authentication](https://github.com/kvspb/nginx-auth-ldap) Allow Nginx to authenticate via LDAP
 - [NAXSI WAF](https://github.com/nbs-system/naxsi) Web Application Firewall for Nginx
+- [Nginx Virtual Host Traffic Status](https://github.com/vozlt/nginx-module-vts)
 - [LibreSSL from source](http://www.libressl.org/) (ChaCha20 cipher, HTTP/2 + ALPN, Curve25519, P-521)
 - [OpenSSL from source](https://www.openssl.org/) (ChaCha20 cipher, HTTP/2 + ALPN, Curve25519, P-521)
 - [ngx_pagespeed](https://github.com/pagespeed/ngx_pagespeed) (Google performance module)
