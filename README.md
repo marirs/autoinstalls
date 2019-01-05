@@ -131,7 +131,7 @@ The update feature downloads the script from this repository, and overwrite the 
 
 ## Log file
 
-A log file is created when running the script. It is located at `/tmp/nginx-autoinstall.log`.
+A log file is created when running the script. It is located at `/tmp/nginx-install.log`.
 
 
 ## LICENSE
