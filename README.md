@@ -4,7 +4,69 @@ Repo of couple of scripts that does auto install for:
 
 - Compile and install Nginx from source with optionnal modules. Modified from [here](https://github.com/Angristan/nginx-autoinstall)
 
-![screenshot](https://user-images.githubusercontent.com/11699655/33800227-29565ef6-dd3c-11e7-9967-7232ecd36ee4.png)
+```bash
+   1) Stable 1.14.2
+   2) Mainline 1.15.8
+
+Select an option [1-2]: 2
+
+Please tell me which modules you want to install.
+If you select none, Nginx will be installed with its default modules.
+
+Modules to install :
+       PageSpeed 1.13.35.2 [y/n]: y
+       ngx_cache_purge [y/n]: y
+       Brotli [y/n]: y
+       Http Redis 2 [y/n]: y
+       LDAP Auth  [y/n]: y
+       NAXSI WAF (Does not play well with HTTP2)  [y/n]: y
+       Headers More 0.33 [y/n]: y
+       Fancy index [y/n]: y
+       GeoIP 2 [y/n]: y
+       Cloudflare's TLS Dynamic Record Resizing patch [y/n]: y
+       Http LUA module [y/n]: y
+
+Choose your OpenSSL implementation :
+   1) System's OpenSSL (1.1.0j)
+   2) OpenSSL 1.1.0h from source
+   3) LibreSSL 2.7.4 from source 
+
+Select an option [1-3]: 1
+
+Nginx is ready to be installed, press any key to continue...
+
+       Installing dependencies        [OK]
+       Downloading ngx_pagespeed      [OK]
+       Downloading libbrotli          [OK]
+       Configuring libbrotli          [OK]
+       Compiling libbrotli            [OK]
+       Installing libbrotli           [OK]
+       Downloading ngx_brotli         [OK]
+       Downloading LDAP Auth          [OK]
+       Downloading HTTP Redis 2       [OK]
+       Downloading NAXSI              [OK]
+       Downloading ngx_headers_more   [OK]
+       Downloading GeoIP 2 databases  [OK]
+       Downloading ngx_cache_purge    [OK]
+       Downloading OpenResty's LuaJIT [OK]
+       Configuring OpenResty's LuaJIT [OK]
+       Installing OpenResty's LuaJIT  [OK]
+       Downloading ngx_devel_kit      [OK]
+       Downloading lua-nginx-module   [OK]
+       Downloading Nginx              [OK]
+       TLS Dynamic Records support    [OK]
+       Configuring Nginx              [OK]
+       Compiling Nginx                [OK]
+       Installing Nginx               [OK]
+       Restarting Nginx               [OK]
+       Blocking nginx from APT        [OK]
+       Removing Nginx files           [OK]
+
+       Installation successful !
+
+       Installation log: /tmp/nginx-install.log
+       
+```
 
 ## Compatibility
 
@@ -30,9 +92,13 @@ Repo of couple of scripts that does auto install for:
 - [ngx_pagespeed](https://github.com/pagespeed/ngx_pagespeed) (Google performance module)
 - [ngx_brotli](https://github.com/google/ngx_brotli) (Brotli compression algorithm)
 - [ngx_headers_more](https://github.com/openresty/headers-more-nginx-module) (Custom HTTP headers)
+- [GeoIP 2](https://www.nginx.com/products/nginx/modules/geoip2/) (GeoIP module and databases)
 - [GeoIP](http://dev.maxmind.com/geoip/geoip2/geolite2/) (GeoIP module and databases)
-- [Cloudflare's TLS Dynamic Records Resizing patch](https://github.com/cloudflare/sslconfig/blob/master/patches/nginx__1.11.5_dynamic_tls_records.patch) (Optmize lantency and throughput for TLS exchanges)
+- Cloudflare's TLS Dynamic Records Resizing patch
 - [ngx_cache_purge](https://github.com/FRiCKLE/ngx_cache_purge) (Purge content from FastCGI, proxy, SCGI and uWSGI caches)
+- Fancy Index
+- [Http Redis 2] (https://www.nginx.com/resources/wiki/modules/redis/)
+- [Http Lua] (https://www.nginx.com/resources/wiki/modules/lua/)
 
 ## Install Nginx
 
