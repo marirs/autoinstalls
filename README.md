@@ -97,8 +97,8 @@ Nginx is ready to be installed, press any key to continue...
 - Cloudflare's TLS Dynamic Records Resizing patch
 - [ngx_cache_purge](https://github.com/FRiCKLE/ngx_cache_purge) (Purge content from FastCGI, proxy, SCGI and uWSGI caches)
 - Fancy Index
-- [Http Redis 2] (https://www.nginx.com/resources/wiki/modules/redis/)
-- [Http Lua] (https://www.nginx.com/resources/wiki/modules/lua/)
+- [Http Redis 2](https://www.nginx.com/resources/wiki/modules/redis/)
+- [Http Lua](https://www.nginx.com/resources/wiki/modules/lua/)
 
 ## Install Nginx
 
