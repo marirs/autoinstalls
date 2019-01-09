@@ -37,7 +37,6 @@ Modules to install :
        Nginx virtual host traffic status [y/n]: y
        GeoIP 2 [y/n]: y
        Cloudflare's TLS Dynamic Record Resizing patch [y/n]: y
-       Http LUA module [y/n]: y
 
 Choose your OpenSSL implementation :
    1) System's OpenSSL (1.1.0j)
