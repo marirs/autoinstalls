@@ -62,11 +62,6 @@ Nginx is ready to be installed, press any key to continue...
        Downloading ngx_headers_more   [OK]
        Downloading GeoIP 2 databases  [OK]
        Downloading ngx_cache_purge    [OK]
-       Downloading OpenResty's LuaJIT [OK]
-       Configuring OpenResty's LuaJIT [OK]
-       Installing OpenResty's LuaJIT  [OK]
-       Downloading ngx_devel_kit      [OK]
-       Downloading lua-nginx-module   [OK]
        Downloading Nginx              [OK]
        TLS Dynamic Records support    [OK]
        Configuring Nginx              [OK]
@@ -113,7 +108,6 @@ Nginx is ready to be installed, press any key to continue...
 - [ngx_cache_purge](https://github.com/FRiCKLE/ngx_cache_purge) (Purge content from FastCGI, proxy, SCGI and uWSGI caches)
 - Fancy Index
 - [Http Redis 2](https://www.nginx.com/resources/wiki/modules/redis/)
-- [Http Lua](https://www.nginx.com/resources/wiki/modules/lua/)
 
 ## Install Nginx
 
