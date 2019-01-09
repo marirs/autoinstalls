@@ -150,11 +150,14 @@ case $OPTION in
 		# Dependencies
 		echo -ne "       Installing dependencies      [..]\r"
 		apt-get update >> /tmp/nginx-install.log 2>&1
-		apt-get install build-essential ca-certificates wget curl libpcre3 libpcre3-dev libldap2-dev autoconf unzip automake libtool tar git libssl-dev zlib1g-dev uuid-dev -y >> /tmp/nginx-install.log 2>&1
+		INSTALL_PKGS="build-essential ca-certificates wget curl libpcre3 libpcre3-dev libldap2-dev autoconf unzip automake libtool tar git libssl-dev zlib1g-dev uuid-dev "
         if [[ "$LUA" = 'y' ]]; then
-            apt-get install liblualib50-dev libluajit-5.1-dev -y >> /tmp/nginx-install.log 2>&1
+            INSTALL_PKGS=$(echo $INSTALL_PKGS; echo "liblualib50-dev libluajit-5.1-dev")
         fi
 
+        for i in $INSTALL_PKGS; do
+            apt-get install -y $i  >> /tmp/nginx-install.log 2>&1
+        done
 		if [ $? -eq 0 ]; then
 			echo -ne "       Installing dependencies        [${CGREEN}OK${CEND}]\r"
 			echo -ne "\n"

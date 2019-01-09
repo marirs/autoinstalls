@@ -33,7 +33,11 @@ echo ""
 # Dependencies
 echo -ne "       Installing dependencies             [..]\r"
 apt-get update >> /tmp/nginx-install.log 2>&1
-apt-get install -y software-properties-common dirmngr build-essential checkinstall libreadline-gplv2-dev libncursesw5-dev libssl-dev libsqlite3-dev tk-dev libgdbm-dev libc6-dev libbz2-dev libffi-dev >> /tmp/libboost-install.log 2>&1
+INSTALL_PKGS="software-properties-common dirmngr build-essential checkinstall libreadline-gplv2-dev libncursesw5-dev libssl-dev libsqlite3-dev tk-dev libgdbm-dev libc6-dev libbz2-dev libffi-dev"
+for i in $INSTALL_PKGS; do
+    apt-get install -y $i  >> /tmp/libboost-install.log 2>&1
+done
+
 if [ $? -eq 0 ]; then
     echo -ne "       Installing dependencies             [${CGREEN}OK${CEND}]\r"
     echo -ne "\n"
