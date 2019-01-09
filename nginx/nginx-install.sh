@@ -157,16 +157,17 @@ case $OPTION in
 
         for i in $INSTALL_PKGS; do
             apt-get install -y $i  >> /tmp/nginx-install.log 2>&1
+            if [ $? -ne 0 ]; then
+                echo -e "        Installing dependencies      [${CRED}FAIL${CEND}]"
+                echo ""
+                echo "Please look at /tmp/nginx-install.log"
+                echo ""
+                exit 1
+            fi
         done
 		if [ $? -eq 0 ]; then
 			echo -ne "       Installing dependencies        [${CGREEN}OK${CEND}]\r"
 			echo -ne "\n"
-		else
-			echo -e "        Installing dependencies      [${CRED}FAIL${CEND}]"
-			echo ""
-			echo "Please look at /tmp/nginx-install.log"
-			echo ""
-			exit 1
 		fi
 
 		# PageSpeed
