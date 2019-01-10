@@ -4,6 +4,7 @@ Installs QEMU with seabios, Libvirt & Virt-Manager
 
 Tested on:
 - Debian 9
+- Ubuntu 16.04 and above
 
 ```bash
 
