@@ -16,10 +16,11 @@ fi
 QEMU_VER=3.1.0
 LIBVIRT_VER=4.10.0
 VIRTMANAGER_VER=1.5.0
+OS=$(lsb_release -ds 2>/dev/null | cut -d' ' -f1 || cat /etc/*release 2>/dev/null | head -n1 | cut -d'=' -f2 || uname -om)
+OS_VER=$(lsb_release -ds 2>/dev/null | cut -d' ' -f2 || cat /etc/*release 2>/dev/null | head -n2 | sed -n 2p | cut -d'=' -f2)
 PY2_VER=$(dpkg-query -f '${Package}-${Version}\n' -W | grep -iw ^python2 | head -1 | cut -d'-' -f 2 | cut -c1-3)
 PY3_VER=$(dpkg-query -f '${Package}-${Version}\n' -W | grep -iw ^python3 | head -1 | cut -d'-' -f 2 | cut -c1-3)
 is_numa=$(lscpu | grep -i numa | head -1 |cut -c14-26 | xargs)
-
 
 # Clear log file
 [ -f "//tmp/qemu-install.log" ] && rm -f /tmp/qemu-install.log
@@ -32,30 +33,36 @@ fi
 clear
 echo ""
 echo "Welcome to the qemu-install script."
-echo -e "${CGREEN}Installs QEMU ${QEMU_VER}, Libvirt ${LIBVIRT_VER} & Virt-Manager 1.x/2.x${CEND}"
+echo -e "${CGREEN}Installs QEMU ${QEMU_VER}, Libvirt & Virt-Manager${CEND}"
 echo ""
 
 
 # Dependencies
 function install_deps() {
-    echo -ne "       Installing dependencies             [..]\r"
+    echo -ne "       Installing dependencies: takes time [..]\r"
     apt-get update >> /tmp/qemu-install.log 2>&1
     INSTALL_PKGS="\
     libcurl4-gnutls-dev libnl-route-3-dev libsasl2-dev libattr1-dev libyajl2 libpciaccess-dev \
     software-properties-common libdevmapper-dev gir1.2-spice-client-glib-2.0 gobject-introspection \
     dconf-tools libsnappy-dev libcap-dev libasound2-dev unzip glusterfs-common libssh2-1-dev liblzo2-dev \
     libspice-server1 libibverbs-dev genisoimage libgoogle-perftools-dev libnl-route-3-200 xfslibs-dev \
-    libjpeg8-dev python-requests autopoint libosinfo-1.0 pkg-config libarchive-tools libpulse-dev xsltproc \
-    ibglib2.0-dev libvirt-glib-1.0 uuid-dev python-ipaddr iasl intltool libiscsi-dev automake g++ \
+    python-requests autopoint libosinfo-1.0 pkg-config libpulse-dev xsltproc libtool libcap-ng-dev \
+    ibglib2.0-dev uuid-dev python-ipaddr iasl intltool libiscsi-dev automake g++ libvte-2.91-dev \
     systemtap-sdt-dev gir1.2-spice-client-gtk-3.0 librbd-dev binfmt-support libicu-dev wget libvdeplug-dev \
     libpixman-1-dev valgrind libyajl-dev autotools-dev libusbredirhost-dev zlib1g-dev build-essential libaio-dev \
-    python3-libxml2 libfdt-dev python-lxml libguestfs-tools libbluetooth-dev git libpciaccess0 glib-2.0 \
+    python-lxml libfdt-dev python-lxml libguestfs-tools libbluetooth-dev git libpciaccess0 glib-2.0 \
     libspice-protocol-dev libbz2-dev libsdl2-dev xmlto libnuma-dev dirmngr gir1.2-gtk-vnc-2.0 python-libxml2 \
-    libncurses5-dev libseccomp-dev dconf-cli libxen-dev libxml2-dev libvde-dev python3-libvirt libgnutls28-dev \
+    libncurses5-dev libseccomp-dev dconf-cli libxen-dev libxml2-dev libvde-dev libgnutls28-dev \
     libbrlapi-dev devscripts libnl-3-dev autoconf libgtk-3-dev gir1.2-vte-2.91 curl python-dev gcc libosinfo-1.0-0 \
     libnfs-dev libsdl1.2-dev make libxml2-utils gettext dbus-x11 libspice-server-dev libusb-1.0-0-dev librbd1 \
-    libxslt-dev libvirt-glib-1.0-0 glusterfs-client librdmacm-dev libvte-dev python-gnutls checkinstall \
-    libjpeg62-turbo-dev libvte-2.91-dev libcap-ng-dev"
+    libxslt-dev glusterfs-client librdmacm-dev libvte-dev python-gnutls checkinstall python3-gi python-gi \
+    libvirt-glib-1.0 libvirt-glib-1.0-0 python-libvirt python3-libvirt"
+    if [[ "$OS" == *"Ubuntu"* ]]; then
+        INSTALL_PKGS=$(echo $INSTALL_PKGS; echo "libjpeg62-dev")
+        cd /tmp/ >> /tmp/qemu-install.log 2>&1
+    elif [[ "$OS" == *"Debian"* ]]; then
+        INSTALL_PKGS=$(echo $INSTALL_PKGS; echo "libjpeg62-turbo-dev python3-libxml2")
+    fi
     for i in $INSTALL_PKGS; do
         apt-get install -y $i  >> /tmp/qemu-install.log 2>&1
         if [ $? -ne 0 ]; then
@@ -70,12 +77,41 @@ function install_deps() {
         echo -ne "       Installing dependencies             [${CGREEN}OK${CEND}]\r"
         echo -ne "\n"
     fi
+
+    echo -ne "       python3-libxml2 dependency          [..]\r"
+    if [[ "$OS" == *"Ubuntu"* && "$OS_VER" == *"18"* ]]; then
+        apt-get install -y  python3-libxml2  >> /tmp/qemu-install.log 2>&1
+    elif [[ "$OS" == *"Ubuntu"* && $(dpkg --compare-versions "$OS_VER" "lt" "18" && echo True || echo False) ]]; then
+        if [[ ! -z "$PY3_VER" ]]; then
+            [ -e libxml2-2.9.9 ] && rm -rf libxml2-2.9.9  >> /tmp/qemu-install.log 2>&1
+            curl -fLs http://xmlsoft.org/sources/libxml2-2.9.9.tar.gz | tar xz -C /tmp   >> /tmp/qemu-install.log 2>&1
+            CONF_OPTS="--prefix=/usr --disable-static --with-history --with-threads --with-python=`which python3`"
+            apt-get install -y python3-dev  >> /tmp/qemu-install.log 2>&1
+            cd /tmp/libxml2-2.9.9  >> /tmp/qemu-install.log 2>&1
+            ./configure $CONF_OPTS >> /tmp/qemu-install.log 2>&1
+            make -j$cores >> /tmp/qemu-install.log 2>&1
+            make install >> /tmp/qemu-install.log 2>&1
+            if [ $? -ne 0 ]; then
+                echo -e "       python3-libxml2 dependency          [${CRED}FAIL${CEND}]"
+                echo ""
+                echo "Please look at /tmp/qemu-install.log"
+                echo ""
+                exit 1
+            fi
+        fi
+    fi
+    if [ $? -eq 0 ]; then
+        echo -ne "       python3-libxml2 dependency          [${CGREEN}OK${CEND}]\r"
+        echo -ne "\n"
+    fi
+
 }
 
 # spice support
 function install_spice_support() {
     cd /tmp
     echo -ne "       Spice protocol support              [..]\r"
+    [ -e spice-protocol ] && rm -rf spice-protocol  >> /tmp/qemu-install.log 2>&1
     git clone --quiet git://git.freedesktop.org/git/spice/spice-protocol   >> /tmp/qemu-install.log 2>&1
     cd spice-protocol
     ./autogen.sh   >> /tmp/qemu-install.log 2>&1
@@ -102,6 +138,7 @@ function numa_install() {
         echo -ne "       Installing NUMA requirements        [..]\r"
         apt-get -y install numactl libnuma-dev >> /tmp/qemu-install.log 2>&1
         cd /tmp
+        [ -e numad ] && rm -rf numad  >> /tmp/qemu-install.log 2>&1
         git clone --quiet https://github.com/K1773R/numad.git >> /tmp/qemu-install.log 2>&1
         cd numad
         make -j$cores >> /tmp/qemu-install.log 2>&1
@@ -125,8 +162,11 @@ function install_libvirt() {
     echo ""
     echo -ne "       Downloading Libvirt                 [..]\r"
     cd /tmp  >> /tmp/qemu-install.log 2>&1
-    curl -fLs https://libvirt.org/sources/libvirt-${LIBVIRT_VER}.tar.xz | tar xvJ -C /tmp/ >> /tmp/qemu-install.log 2>&1
-    cd /tmp/libvirt-${LIBVIRT_VER}
+
+#    curl -fLs https://libvirt.org/sources/libvirt-${LIBVIRT_VER}.tar.xz | tar xvJ -C /tmp/ >> /tmp/qemu-install.log 2>&1
+#    cd /tmp/libvirt-${LIBVIRT_VER}
+    [ -e libvirt ] && rm -rf libvirt  >> /tmp/qemu-install.log 2>&1
+    git clone --quiet https://github.com/libvirt/libvirt.git  >> /tmp/qemu-install.log 2>&1 && cd /tmp/libvirt
     if [ $? -eq 0 ]; then
         echo -ne "       Downloading Libvirt                 [${CGREEN}OK${CEND}]\r"
         echo -ne "\n"
@@ -177,6 +217,21 @@ function install_libvirt() {
         echo ""
         exit 1
     fi
+
+    add_user_to_group
+
+    # https://wiki.archlinux.org/index.php/Libvirt#Using_polkit
+    if [ -f /etc/libvirt/libvirtd.conf ]; then
+        LIBVIRTD_CONF="/etc/libvirt/libvirtd.conf"
+    elif [ -f /usr/local/etc/libvirt/libvirtd.conf ]; then
+        LIBVIRTD_CONF="/usr/local/etc/libvirt/libvirtd.conf"
+    fi
+    sed -i 's/#unix_sock_group/unix_sock_group/g' $LIBVIRTD_CONF  >> /tmp/qemu-install.log 2>&1
+    sed -i 's/#unix_sock_ro_perms = "0777"/unix_sock_ro_perms = "0770"/g' $LIBVIRTD_CONF  >> /tmp/qemu-install.log 2>&1
+    sed -i 's/#unix_sock_rw_perms = "0770"/unix_sock_rw_perms = "0770"/g' $LIBVIRTD_CONF  >> /tmp/qemu-install.log 2>&1
+    sed -i 's/#auth_unix_ro = "none"/auth_unix_ro = "none"/g' $LIBVIRTD_CONF  >> /tmp/qemu-install.log 2>&1
+    sed -i 's/#auth_unix_rw = "none"/auth_unix_rw = "none"/g' $LIBVIRTD_CONF  >> /tmp/qemu-install.log 2>&1
+
     echo -ne "       Starting Libvirt services           [..]\r"
     systemctl start libvirtd  >> /tmp/qemu-install.log 2>&1
     systemctl daemon-reload >> /tmp/qemu-install.log 2>&1
@@ -203,6 +258,7 @@ function install_virtmanager_15() {
     echo ""
     cd /tmp/  >> /tmp/qemu-install.log 2>&1
     echo -ne "       Cloning virt-manager 1.5            [..]\r"
+    [ -e virt-manager ] && rm -rf virt-manager  >> /tmp/qemu-install.log 2>&1
     git clone --quiet -b v1.5-maint https://github.com/virt-manager/virt-manager.git  >> /tmp/qemu-install.log 2>&1
     if [ $? -eq 0 ]; then
         echo -ne "       Cloning virt-manager 1.5            [${CGREEN}OK${CEND}]\r"
@@ -213,7 +269,7 @@ function install_virtmanager_15() {
         echo "Please look at /tmp/qemu-install.log"
         exit 1
     fi
-    cd "virt-manager" || return
+    cd virt-manager || return
 
     echo -ne "       Building virt-manager 1.5           [..]\r"
     python setup.py build   >> /tmp/qemu-install.log 2>&1
@@ -244,6 +300,7 @@ function install_virtmanager_2() {
     echo ""
     cd /tmp/  >> /tmp/qemu-install.log 2>&1
     echo -ne "       Cloning virt-manager 2.0            [..]\r"
+    [ -e virt-manager ] && rm -rf virt-manager  >> /tmp/qemu-install.log 2>&1
     git clone --quiet https://github.com/virt-manager/virt-manager.git  >> /tmp/qemu-install.log 2>&1
     if [ $? -eq 0 ]; then
         echo -ne "       Cloning virt-manager 2.0            [${CGREEN}OK${CEND}]\r"
@@ -254,7 +311,7 @@ function install_virtmanager_2() {
         echo "Please look at /tmp/qemu-install.log"
         exit 1
     fi
-    cd "virt-manager" || return
+    cd virt-manager || return
 
     echo -ne "       Building virt-manager 2.0           [..]\r"
     python3 setup.py build   >> /tmp/qemu-install.log 2>&1
@@ -286,6 +343,7 @@ function install_seabios() {
     echo ""
     cd /tmp/ >> /tmp/qemu-install.log 2>&1
     echo -ne "       Cloning seabios                     [..]\r"
+    [ -e seabios ] && rm -rf seabios  >> /tmp/qemu-install.log 2>&1
     git clone --quiet https://github.com/coreboot/seabios.git >> /tmp/qemu-install.log 2>&1
     cd /tmp/seabios
     if [ $? -eq 0 ]; then
@@ -417,6 +475,7 @@ function install_qemu() {
     #      "VBoxVBoxVBox"; /* VirtualBox */
     echo ""
     echo -ne "       Downloading Qemu                    [..]\r"
+    [ -e qemu-${QEMU_VER} ] && rm -rf qemu-${QEMU_VER}  >> /tmp/qemu-install.log 2>&1
     curl -fLs https://download.qemu.org/qemu-${QEMU_VER}.tar.xz | tar xvJ -C /tmp/  >> /tmp/qemu-install.log 2>&1
     cd /tmp/qemu-${QEMU_VER}
     if [ $? -eq 0 ]; then
@@ -540,20 +599,18 @@ function install_qemu() {
 }
 
 function add_user_to_group() {
-    if [[ $(getent group libvirt) || $(getent group libvirt) ]]; then
-        echo -ne "       Adding current user to libvirt group[..]\r"
-        getent group librit 2>&1 > /dev/null && usermod -a -G libvirt ${USER} >> /tmp/qemu-install.log 2>&1 || echo "libvirt group does not exist" >> /tmp/qemu-install.log 2>&1
-        getent group kvm 2>&1 > /dev/null && usermod -a -G kvm ${USER} >> /tmp/qemu-install.log 2>&1 || echo "kvm group does not exist" >> /tmp/qemu-install.log 2>&1
-        if [ $? -eq 0 ]; then
-            echo -ne "       Adding current user to libvirt group[${CGREEN}OK! ${USER} added${CEND}]\r"
-            echo -ne "\n"
-        else
-            echo -e "       Adding current user to libvirt group[${CRED}FAIL! ${USER} not added${CEND}]"
-            echo ""
-            echo "Please look at /tmp/qemu-install.log"
-            echo ""
-            exit 1
-        fi
+    echo -ne "       Adding current user to libvirt group[..]\r"
+    getent group libvrit 2>&1 > /dev/null && usermod -a -G libvirt ${USER} >> /tmp/qemu-install.log 2>&1 || (groupadd libvirt && usermod -a G libvirt ${USER}) >> /tmp/qemu-install.log 2>&1
+    getent group kvm 2>&1 > /dev/null && usermod -a -G kvm ${USER} >> /tmp/qemu-install.log 2>&1 || (groupadd kvm && usermod -a G kvm ${USER}) >> /tmp/qemu-install.log 2>&1
+    if [ $? -eq 0 ]; then
+        echo -ne "       Adding current user to libvirt group[${CGREEN}OK! ${USER} added${CEND}]\r"
+        echo -ne "\n"
+    else
+        echo -e "       Adding current user to libvirt group[${CRED}FAIL! ${USER} not added${CEND}]"
+        echo ""
+        echo "Please look at /tmp/qemu-install.log"
+        echo ""
+        exit 1
     fi
 }
 
@@ -621,7 +678,6 @@ fi
 # install libvirt
 if [[ "$OPTION" == "1" || "$OPTION" == "3"  ]]; then
     install_libvirt
-    add_user_to_group
 fi
 
 # install Virt-Manager
