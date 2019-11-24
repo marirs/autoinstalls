@@ -371,8 +371,8 @@ case $OPTION in
 			# Dependence
 			apt-get install libgeoip-dev -y >> /tmp/nginx-install.log 2>&1
             add-apt-repository ppa:maxmind/ppa -y >> /tmp/nginx-install.log 2>&1
-            apt update >> /tmp/nginx-install.log 2>&1
-            apt install libmaxminddb0 libmaxminddb-dev mmdb-bin >> /tmp/nginx-install.log 2>&1
+            apt-get -y update >> /tmp/nginx-install.log 2>&1
+            apt-get -y install libmaxminddb0 libmaxminddb-dev mmdb-bin >> /tmp/nginx-install.log 2>&1
 
 			cd /usr/local/src/nginx/modules || exit 1
             git clone --recursive https://github.com/leev/ngx_http_geoip2_module >> /tmp/nginx-install.log 2>&1
