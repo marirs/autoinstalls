@@ -15,8 +15,8 @@ fi
 # Variables
 NGINX_MAINLINE_VER=1.17.9
 NGINX_STABLE_VER=1.16.1
-LIBRESSL_VER=2.9.2
-OPENSSL_VER=1.1.1c
+LIBRESSL_VER=3.0.2
+OPENSSL_VER=1.1.1f
 NPS_VER=1.13.35.2
 HEADERMOD_VER=0.33
 LUA_JIT_VER=2.1-20181029
@@ -108,7 +108,7 @@ case $OPTION in
         else
             GEOIP="n"
         fi
-        if [[ "$NGINX_VER" == *"1.11"* ]] ||  [[ "$NGINX_VER" == *"1.13"* ]] || [[ "$NGINX_VER" == *"1.15"* ]]; then
+        if [[ "$NGINX_VER" == *"1.11"* ]] ||  [[ "$NGINX_VER" == *"1.13"* ]] || [[ "$NGINX_VER" == *"1.15"* ]] || [[ "$NGINX_VER" == *"1.17"* ]]; then
             while [[ $TLSPATCH != "y" && $TLSPATCH != "n" ]]; do
                 read -p "       Cloudflare's TLS Dynamic Record Resizing patch [y/n]: " -e TLSPATCH
             done
@@ -369,32 +369,37 @@ case $OPTION in
 		# GeoIP 2
 		if [[ "$GEOIP2" = 'y' ]]; then
 			# Dependence
-			apt-get install libgeoip-dev -y >> /tmp/nginx-install.log 2>&1
-            add-apt-repository ppa:maxmind/ppa -y >> /tmp/nginx-install.log 2>&1
-            apt-get -y update >> /tmp/nginx-install.log 2>&1
-            apt-get -y install libmaxminddb0 libmaxminddb-dev mmdb-bin >> /tmp/nginx-install.log 2>&1
+            apt-get -y install libgeoip-dev libmaxminddb0 libmaxminddb-dev mmdb-bin >> /tmp/nginx-install.log 2>&1
 
 			cd /usr/local/src/nginx/modules || exit 1
+			echo -ne "       Downloading GeoIP 2            [..]\r"
             git clone --recursive https://github.com/leev/ngx_http_geoip2_module >> /tmp/nginx-install.log 2>&1
+			if [ $? -eq 0 ]; then
+				echo -ne "       Downloading GeoIP 2            [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Downloading GeoIP 2            [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/nginx-install.log"
+				echo ""
+				exit 1
+			fi
 
 			mkdir -p /etc/nginx/geoip2/
 			echo -ne "       Downloading GeoIP 2 databases  [..]\r"
 			wget http://geolite.maxmind.com/download/geoip/database/GeoLite2-Country.tar.gz >> /tmp/nginx-install.log 2>&1
 			wget https://geolite.maxmind.com/download/geoip/database/GeoLite2-City.tar.gz >> /tmp/nginx-install.log 2>&1
-			tar xaf GeoLite2-Country.tar.gz  --strip 1
-			tar xaf GeoLite2-City.tar.gz --strip 1
-			mv GeoLite2-Country.mmdb /etc/nginx/geoip2/
-			mv GeoLite2-City.mmdb /etc/nginx/geoip2/
+			tar xaf GeoLite2-Country.tar.gz  --strip 1 >> /tmp/nginx-install.log 2>&1
+			tar xaf GeoLite2-City.tar.gz --strip 1 >> /tmp/nginx-install.log 2>&1
+			mv GeoLite2-Country.mmdb /etc/nginx/geoip2/ >> /tmp/nginx-install.log 2>&1
+			mv GeoLite2-City.mmdb /etc/nginx/geoip2/ >> /tmp/nginx-install.log 2>&1
 
 			if [ $? -eq 0 ]; then
 				echo -ne "       Downloading GeoIP 2 databases  [${CGREEN}OK${CEND}]\r"
 				echo -ne "\n"
 			else
-				echo -e "       Downloading GeoIP 2 databases  [${CRED}FAIL${CEND}]"
-				echo ""
-				echo "Please look at /tmp/nginx-install.log"
-				echo ""
-				exit 1
+				echo -ne "       Downloading GeoIP 2 databases  [${CRED}FAIL - You need to download manually & place in /etc/nginx/geoip2/${CEND}]"
+				echo -ne "\n"
 			fi
 		fi
 
@@ -409,20 +414,17 @@ case $OPTION in
 			echo -ne "       Downloading GeoIP databases    [..]\r"
 			wget http://geolite.maxmind.com/download/geoip/database/GeoLiteCountry/GeoIP.dat.gz >> /tmp/nginx-install.log 2>&1
 			wget http://geolite.maxmind.com/download/geoip/database/GeoLiteCity.dat.gz >> /tmp/nginx-install.log 2>&1
-			gunzip GeoIP.dat.gz
-			gunzip GeoLiteCity.dat.gz
-			mv GeoIP.dat /etc/nginx/geoip/GeoIP-Country.dat
-			mv GeoLiteCity.dat /etc/nginx/geoip/GeoIP-City.dat
+			gunzip GeoIP.dat.gz >> /tmp/nginx-install.log 2>&1
+			gunzip GeoLiteCity.dat.gz >> /tmp/nginx-install.log 2>&1
+			mv GeoIP.dat /etc/nginx/geoip/GeoIP-Country.dat >> /tmp/nginx-install.log 2>&1
+			mv GeoLiteCity.dat /etc/nginx/geoip/GeoIP-City.dat >> /tmp/nginx-install.log 2>&1
 
 			if [ $? -eq 0 ]; then
 				echo -ne "       Downloading GeoIP databases    [${CGREEN}OK${CEND}]\r"
 				echo -ne "\n"
 			else
-				echo -e "       Downloading GeoIP databases    [${CRED}FAIL${CEND}]"
-				echo ""
-				echo "Please look at /tmp/nginx-install.log"
-				echo ""
-				exit 1
+				echo -ne "       Downloading GeoIP databases    [${CRED}FAIL - You need to download manually & place in /etc/nginx/geoip/${CEND}]"
+				echo -ne "\n"
 			fi
 		fi
 
@@ -687,6 +689,8 @@ case $OPTION in
                 wget -O nginx.patch https://raw.githubusercontent.com/cujanovic/nginx-dynamic-tls-records-patch/master/nginx__dynamic_tls_records_1.13.0%2B.patch >> /tmp/nginx-install.log 2>&1
             elif [[ "$NGINX_VER" == *"1.15.8"* ]]; then
                 wget -O nginx.patch https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/nginx-dynamic-tls-1.15.8.patch >> /tmp/nginx-install.log 2>&1
+            elif [[ "$NGINX_VER" == *"1.17.9"* ]]; then
+                wget -O nginx.patch https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/nginx-dynamic-tls-1.17.9.patch >> /tmp/nginx-install.log 2>&1
             fi
             patch -p1 < nginx.patch >> /tmp/nginx-install.log 2>&1
 		        
