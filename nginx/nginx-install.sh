@@ -19,9 +19,9 @@ LIBRESSL_VER=3.0.2
 OPENSSL_VER=1.1.1f
 NPS_VER=1.13.35.2
 HEADERMOD_VER=0.33
-LUA_JIT_VER=2.1-20181029
-LUA_NGINX_VER=0.10.14rc2
-NGINX_DEV_KIT=0.3.0
+LIBMAXMINDDB_VER=1.4.2
+PCRE_NGINX_VER=8.44
+ZLIB_NGINX_VER=1.2.11
 
 cores=$(nproc)
 if [ $? -ne 0 ]; then
@@ -37,12 +37,13 @@ echo "Welcome to the nginx-autoinstall script."
 echo ""
 echo "What do you want to do?"
 echo "   1) Install or update Nginx"
-echo "   2) Uninstall Nginx"
-echo "   3) Update the script"
-echo "   4) Exit"
+echo "   2) Install Bad Bot Blocker for Nginx"
+echo "   3) Uninstall Nginx"
+echo "   4) Update the script"
+echo "   5) Exit"
 echo ""
-while [[ $OPTION !=  "1" && $OPTION != "2" && $OPTION != "3" && $OPTION != "4" ]]; do
-	read -p "Select an option [1-4]: " OPTION
+while [[ $OPTION !=  "1" && $OPTION != "2" && $OPTION != "3" && $OPTION != "4" && $OPTION != "5" ]]; do
+	read -p "Select an option [1-5]: " OPTION
 done
 case $OPTION in
 	1)
@@ -81,11 +82,20 @@ case $OPTION in
 		while [[ $REDIS2 != "y" && $REDIS2 != "n" ]]; do
 			read -p "       Http Redis 2 [y/n]: " -e REDIS2
 		done
+        while [[ $SRCACHE != "y" && $SRCACHE != "n" ]]; do
+            read -p "       SRCache (provides transparent caching layer) [y/n]: " -e SRCACHE
+        done
+        while [[ $MEMC_NGINX != "y" && $MEMC_NGINX != "n" ]]; do
+            read -p "       MEMC (Extended ver of standard Memcached) [y/n]: " -e MEMC_NGINX
+        done
+        while [[ $VTS != "y" && $VTS != "n" ]]; do
+            read -p "       Nginx virtual host traffic status [y/n]: " -e VTS
+        done
+		while [[ $GEOIP2 != "y" && $GEOIP2 != "n" ]]; do
+			read -p "       GeoIP 2 [y/n]: " -e GEOIP2
+		done
 		while [[ $LDAPAUTH != "y" && $LDAPAUTH != "n" ]]; do
 			read -p "       LDAP Auth $LDAPAUTH [y/n]: " -e LDAPAUTH
-		done
-		while [[ $NAXSI != "y" && $NAXSI != "n" ]]; do
-			read -p "       NAXSI WAF (Does not play well with HTTP2) $NAXSI [y/n]: " -e NAXSI
 		done
 		while [[ $HEADERMOD != "y" && $HEADERMOD != "n" ]]; do
 			read -p "       Headers More $HEADERMOD_VER [y/n]: " -e HEADERMOD
@@ -93,21 +103,16 @@ case $OPTION in
 		while [[ $FANCYINDEX != "y" && $FANCYINDEX != "n" ]]; do
 			read -p "       Fancy index [y/n]: " -e FANCYINDEX
 		done
-        while [[ $VTS != "y" && $VTS != "n" ]]; do
-            read -p "       Nginx virtual host traffic status [y/n]: " -e VTS
+        while [[ $SET_MISC != "y" && $SET_MISC != "n" ]]; do
+            read -p "       SET_MISC Content filtering [y/n]: " -e SET_MISC
         done
-		while [[ $GEOIP2 != "y" && $GEOIP2 != "n" ]]; do
-			read -p "       GeoIP 2 [y/n]: " -e GEOIP2
-		done
-        if [[ "$GEOIP2" != "y" ]]; then
-            # if GEOIP 2 is not selected, then give option of 
-            # Legacy GEOIP (just in case for some reason)
-            while [[ $GEOIP != "y" && $GEOIP != "n" ]]; do
-                read -p "       GeoIP (Legacy) [y/n]: " -e GEOIP
-            done
-        else
-            GEOIP="n"
-        fi
+        while [[ $PCRE_NGINX != "y" && $PCRE_NGINX != "n" ]]; do
+            read -p "       PCRE [y/n]: " -e PCRE_NGINX
+        done
+        while [[ $ZLIB_NGINX != "y" && $ZLIB_NGINX != "n" ]]; do
+            read -p "       ZLIB [y/n]: " -e ZLIB_NGINX
+        done
+
         if [[ "$NGINX_VER" == *"1.11"* ]] ||  [[ "$NGINX_VER" == *"1.13"* ]] || [[ "$NGINX_VER" == *"1.15"* ]] || [[ "$NGINX_VER" == *"1.17"* ]]; then
             while [[ $TLSPATCH != "y" && $TLSPATCH != "n" ]]; do
                 read -p "       Cloudflare's TLS Dynamic Record Resizing patch [y/n]: " -e TLSPATCH
@@ -115,6 +120,30 @@ case $OPTION in
         else
             TLSPATCH="n"
         fi
+
+		echo ""
+		echo "Choose your Web Application Firewall (WAF):"
+		echo "   1) ModSecurity (Preferred)"
+		echo "   2) NAXSI (Does not play well with HTTP2)"
+		echo "   3) None"
+		echo ""
+		while [[ $WAF != "1" && $WAF != "2" && $WAF != "3" ]]; do
+			read -p "Select an option [1-3]: " WAF
+		done
+		case $WAF in
+			1)
+                MODSEC=y            
+                read -p "      > Enable nginx ModSecurity? [y/n]: " -e MODSEC_ENABLE
+			;;
+			2)
+				NAXSI=y
+			;;
+			3)
+				MODSEC=n
+                NAXSI=n
+			;;
+		esac
+
 		echo ""
 		echo "Choose your OpenSSL implementation :"
 		echo "   1) System's OpenSSL ($(openssl version | cut -c9-14))"
@@ -139,29 +168,69 @@ case $OPTION in
 		read -n1 -r -p "Nginx is ready to be installed, press any key to continue..."
 		echo ""
 
-		# Cleanup
-		# The directory should be deleted at the end of the script, but in case it fails
-		rm -r /usr/local/src/nginx/ >> /tmp/nginx-install.log 2>&1
-		mkdir -p /usr/local/src/nginx/modules >> /tmp/nginx-install.log 2>&1
+        # Cleanup
+        # The directory should be deleted at the end of the script, but in case it fails
+        rm -r /usr/local/src/nginx/ >> /tmp/nginx-install.log 2>&1
+        mkdir -p /usr/local/src/nginx/modules >> /tmp/nginx-install.log 2>&1
 
-		# Dependencies
-		echo -ne "       Installing dependencies      [..]\r"
-		apt-get update >> /tmp/nginx-install.log 2>&1
-		INSTALL_PKGS="build-essential ca-certificates wget curl libpcre3 libpcre3-dev libldap2-dev autoconf unzip automake libtool tar git libssl-dev zlib1g-dev uuid-dev"
+        # Dependencies
+        echo -ne "       Installing dependencies        [..]\r"
+        apt-get update >> /tmp/nginx-install.log 2>&1
+        INSTALL_PKGS="build-essential ca-certificates wget curl libpcre3 libpcre3-dev libldap2-dev autoconf unzip automake libtool tar git libssl-dev zlib1g-dev uuid-dev"
+        if [[ "$MODSEC" = 'y' ]]; then
+            INSTALL_PKGS=$(echo $INSTALL_PKGS; echo apt-utils libcurl4-openssl-dev libgeoip-dev liblmdb-dev libpcre++-dev libyajl-dev pkgconf libmodsecurity3 libmodsecurity-dev)
+        fi
+        if [[ "$GEOIP2" = 'y' ]]; then
+            INSTALL_PKGS=$(echo $INSTALL_PKGS; echo libgeoip-dev libmaxminddb0 libmaxminddb-dev mmdb-bin)
+        fi
         for i in $INSTALL_PKGS; do
-            apt-get install -y $i  >> /tmp/nginx-install.log 2>&1
-            if [ $? -ne 0 ]; then
-                echo -e "        Installing dependencies      [${CRED}FAIL${CEND}]"
-                echo ""
-                echo "Please look at /tmp/nginx-install.log"
-                echo ""
-                exit 1
-            fi
+                apt-get install -y $i  >> /tmp/nginx-install.log 2>&1
+                if [ $? -ne 0 ]; then
+                    echo -e "       Installing dependencies        [${CRED}FAIL${CEND}]"
+                    echo ""
+                    echo "Please look at /tmp/nginx-install.log"
+                    echo ""
+                    exit 1
+                fi
         done
-		if [ $? -eq 0 ]; then
-			echo -ne "       Installing dependencies        [${CGREEN}OK${CEND}]\r"
-			echo -ne "\n"
-		fi
+        if [ $? -eq 0 ]; then
+            echo -ne "       Installing dependencies        [${CGREEN}OK${CEND}]\r"
+            echo -ne "\n"
+        fi
+
+        if [[ "$GEOIP2" = 'y' || "$MODSEC" = 'y' ]]; then
+            echo -ne "       Geoip/Modsec dependencies      [..]\r"
+            cd /usr/local/src/nginx/modules  >> /tmp/nginx-install.log 2>&1
+            wget https://github.com/maxmind/libmaxminddb/releases/download/${LIBMAXMINDDB_VER}/libmaxminddb-${LIBMAXMINDDB_VER}.tar.gz  >> /tmp/nginx-install.log 2>&1
+            tar xaf libmaxminddb-${LIBMAXMINDDB_VER}.tar.gz  >> /tmp/nginx-install.log 2>&1
+            cd libmaxminddb-${LIBMAXMINDDB_VER}/  >> /tmp/nginx-install.log 2>&1
+            ./configure  >> /tmp/nginx-install.log 2>&1
+            make -j $cores >> /tmp/nginx-install.log 2>&1
+			if [ $? -eq 0 ]; then
+			    echo -ne "       Geoip/Modsec dependencies      [..]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Geoip/Modsec dependencies      [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/nginx-install.log"
+				echo ""
+				exit 1
+			fi
+
+            echo -ne "       Geoip/Modsec deps Install      [..]\r"
+            make install  >> /tmp/nginx-install.log 2>&1
+			if [ $? -eq 0 ]; then
+			    echo -ne "       Geoip/Modsec deps Install      [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Geoip/Modsec deps Install      [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/nginx-install.log"
+				echo ""
+				exit 1
+			fi
+            ldconfig  >> /tmp/nginx-install.log 2>&1
+        fi
 
 		# PageSpeed
 		if [[ "$PAGESPEED" = 'y' ]]; then
@@ -327,6 +396,94 @@ case $OPTION in
 			fi
         fi
 
+		# ModSecurity
+		if [[ "$MODSEC" = 'y' ]]; then
+			cd /usr/local/src/nginx/modules || exit 1
+			echo -ne "       Downloading ModSecurity        [..]\r"
+			git clone --depth 1 -b v3/master --single-branch https://github.com/SpiderLabs/ModSecurity >> /tmp/nginx-install.log 2>&1
+			if [ $? -eq 0 ]; then
+				echo -ne "       Downloading ModSecurity        [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Downloading ModSecurity        [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/nginx-install.log"
+				echo ""
+				exit 1
+			fi
+			cd ModSecurity >> /tmp/nginx-install.log 2>&1
+			git submodule init >> /tmp/nginx-install.log 2>&1
+			git submodule update >> /tmp/nginx-install.log 2>&1
+
+			echo -ne "       Configuring ModSecurity        [..]\r"
+			./build.sh >> /tmp/nginx-install.log 2>&1
+			./configure >> /tmp/nginx-install.log 2>&1
+			if [ $? -eq 0 ]; then
+				echo -ne "       Configuring ModSecurity        [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Configuring ModSecurity        [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/nginx-install.log"
+				echo ""
+				exit 1
+			fi
+
+			echo -ne "       Compiling ModSecurity          [..] (Slow on low cores)\r"
+			make -j $cores >> /tmp/nginx-install.log 2>&1
+			if [ $? -eq 0 ]; then
+				echo -ne "       Compiling ModSecurity          [${CGREEN}OK${CEND}]                            \r"
+				echo -ne "\n"
+			else
+				echo -e "       Compiling ModSecurity          [${CRED}FAIL${CEND}]                            "
+				echo ""
+				echo "Please look at /tmp/nginx-install.log"
+				echo ""
+				exit 1
+			fi
+
+			echo -ne "       Installing ModSecurity         [..]\r"
+			make install >> /tmp/nginx-install.log 2>&1
+			if [ $? -eq 0 ]; then
+				echo -ne "       Installing ModSecurity         [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Installing ModSecurity         [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/nginx-install.log"
+				echo ""
+				exit 1
+			fi
+			mkdir /etc/nginx/modsec >> /tmp/nginx-install.log 2>&1
+			wget -O /etc/nginx/modsec/modsecurity.conf https://raw.githubusercontent.com/SpiderLabs/ModSecurity/v3/master/modsecurity.conf-recommended >> /tmp/nginx-install.log 2>&1
+
+			# Enable ModSecurity in Nginx
+			if [[ "$MODSEC_ENABLE" = 'y' ]]; then
+                echo -ne "       Enabling ModSecurity           [..]\r"
+				sed -i 's/SecRuleEngine DetectionOnly/SecRuleEngine On/' /etc/nginx/modsec/modsecurity.conf
+                if [ $? -eq 0 ]; then
+                    echo -ne "       Enabling ModSecurity           [${CGREEN}OK${CEND}]\r"
+                    echo -ne "\n"
+                else
+                    echo -ne "       Enabling ModSecurity           [${CRED}FAIL - Enable it manually after reviewing install log file!${CEND}]"
+                    echo -ne "\n"
+                fi
+			fi
+ 
+			echo -ne "       ModSecurity Nginx Module       [..]\r"
+            git clone --quiet https://github.com/SpiderLabs/ModSecurity-nginx.git /usr/local/src/nginx/modules/ModSecurity-nginx >> /tmp/nginx-install.log 2>&1
+			if [ $? -eq 0 ]; then
+				echo -ne "       ModSecurity Nginx Module       [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       ModSecurity Nginx Module       [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/nginx-install.log"
+				echo ""
+				exit 1
+			fi
+		fi
+
 		# NAXSI
 		if [[ "$NAXSI" = 'y' ]]; then
 			cd /usr/local/src/nginx/modules
@@ -366,11 +523,97 @@ case $OPTION in
 			fi
 		fi
 
-		# GeoIP 2
-		if [[ "$GEOIP2" = 'y' ]]; then
-			# Dependence
-            apt-get -y install libgeoip-dev libmaxminddb0 libmaxminddb-dev mmdb-bin >> /tmp/nginx-install.log 2>&1
+		# SET_MISC
+		if [[ "$SET_MISC" = 'y' ]]; then
+			echo -ne "       Downloading SET MISC           [..]\r"
+			cd /usr/local/src/nginx/modules >> /tmp/nginx-install.log 2>&1
+			git clone https://github.com/openresty/set-misc-nginx-module >> /tmp/nginx-install.log 2>&1
+			if [ $? -eq 0 ]; then
+				echo -ne "       Downloading SET MISC           [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Downloading SET MISC           [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/nginx-install.log"
+				echo ""
+				exit 1
+			fi
+		fi
 
+		# PCRE NGINX
+        if [[ "$PCRE_NGINX" = 'y' ]]; then
+			echo -ne "       Downloading PCRE Module        [..]\r"
+			cd /usr/local/src/nginx/modules >> /tmp/nginx-install.log 2>&1
+			wget https://ftp.pcre.org/pub/pcre/pcre-${PCRE_NGINX_VER}.tar.gz >> /tmp/nginx-install.log 2>&1
+			tar xaf pcre-${PCRE_NGINX_VER}.tar.gz >> /tmp/nginx-install.log 2>&1
+			cd pcre-${PCRE_NGINX_VER} >> /tmp/nginx-install.log 2>&1
+			if [ $? -eq 0 ]; then
+				echo -ne "       Downloading PCRE Module        [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Downloading PCRE Module        [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/nginx-install.log"
+				echo ""
+				exit 1
+			fi
+		fi
+
+        # ZLIB NGINX
+		if [[ "$ZLIB_NGINX" = 'y' ]]; then
+			echo -ne "       Downloading ZLIB Module        [..]\r"
+			cd /usr/local/src/nginx/modules >> /tmp/nginx-install.log 2>&1
+			wget http://zlib.net/zlib-${ZLIB_NGINX_VER}.tar.gz >> /tmp/nginx-install.log 2>&1
+			tar xaf zlib-${ZLIB_NGINX_VER}.tar.gz >> /tmp/nginx-install.log 2>&1
+			cd zlib-${ZLIB_NGINX_VER} >> /tmp/nginx-install.log 2>&1
+			if [ $? -eq 0 ]; then
+				echo -ne "       Downloading ZLIB Module        [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Downloading ZLIB Module        [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/nginx-install.log"
+				echo ""
+				exit 1
+			fi
+		fi
+
+		# SRCACHE
+		if [[ "$SRCACHE" = 'y' ]]; then
+			echo -ne "       Downloading SRCache            [..]\r"
+			cd /usr/local/src/nginx/modules >> /tmp/nginx-install.log 2>&1
+			git clone https://github.com/openresty/srcache-nginx-module >> /tmp/nginx-install.log 2>&1
+			if [ $? -eq 0 ]; then
+				echo -ne "       Downloading SRCache            [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Downloading SRCache            [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/nginx-install.log"
+				echo ""
+				exit 1
+			fi
+		fi
+
+        # MEMC
+		if [[ "$MEMC_NGINX" = 'y' ]]; then
+			echo -ne "       Downloading MEMC               [..]\r"
+            cd /usr/local/src/nginx/modules >> /tmp/nginx-install.log 2>&1
+			git clone https://github.com/openresty/memc-nginx-module.git >> /tmp/nginx-install.log 2>&1
+			if [ $? -eq 0 ]; then
+				echo -ne "       Downloading MEMC               [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Downloading MEMC               [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/nginx-install.log"
+				echo ""
+				exit 1
+			fi
+		fi
+
+    	# GeoIP 2
+		if [[ "$GEOIP2" = 'y' ]]; then
 			cd /usr/local/src/nginx/modules || exit 1
 			echo -ne "       Downloading GeoIP 2            [..]\r"
             git clone --recursive https://github.com/leev/ngx_http_geoip2_module >> /tmp/nginx-install.log 2>&1
@@ -399,31 +642,6 @@ case $OPTION in
 				echo -ne "\n"
 			else
 				echo -ne "       Downloading GeoIP 2 databases  [${CRED}FAIL - You need to download manually & place in /etc/nginx/geoip2/${CEND}]"
-				echo -ne "\n"
-			fi
-		fi
-
-		# GeoIP Legacy
-		if [[ "$GEOIP" = 'y' ]]; then
-			# Dependence
-			apt-get install libgeoip-dev -y >> /tmp/nginx-install.log 2>&1
-			cd /usr/local/src/nginx/modules
-			mkdir -p /etc/nginx/geoip
-			mkdir geoip-db
-			cd geoip-db
-			echo -ne "       Downloading GeoIP databases    [..]\r"
-			wget http://geolite.maxmind.com/download/geoip/database/GeoLiteCountry/GeoIP.dat.gz >> /tmp/nginx-install.log 2>&1
-			wget http://geolite.maxmind.com/download/geoip/database/GeoLiteCity.dat.gz >> /tmp/nginx-install.log 2>&1
-			gunzip GeoIP.dat.gz >> /tmp/nginx-install.log 2>&1
-			gunzip GeoLiteCity.dat.gz >> /tmp/nginx-install.log 2>&1
-			mv GeoIP.dat /etc/nginx/geoip/GeoIP-Country.dat >> /tmp/nginx-install.log 2>&1
-			mv GeoLiteCity.dat /etc/nginx/geoip/GeoIP-City.dat >> /tmp/nginx-install.log 2>&1
-
-			if [ $? -eq 0 ]; then
-				echo -ne "       Downloading GeoIP databases    [${CGREEN}OK${CEND}]\r"
-				echo -ne "\n"
-			else
-				echo -ne "       Downloading GeoIP databases    [${CRED}FAIL - You need to download manually & place in /etc/nginx/geoip/${CEND}]"
 				echo -ne "\n"
 			fi
 		fi
@@ -486,7 +704,7 @@ case $OPTION in
 
 			# LibreSSL install
 			echo -ne "       Installing LibreSSL            [..]\r"
-			make install-strip -j $(nproc) >> /tmp/nginx-install.log 2>&1
+			make install-strip -j $cores >> /tmp/nginx-install.log 2>&1
 
 			if [ $? -eq 0 ]; then
 				echo -ne "       Installing LibreSSL            [${CGREEN}OK${CEND}]\r"
@@ -567,6 +785,19 @@ case $OPTION in
 		fi
 		cd /usr/local/src/nginx/nginx-${NGINX_VER}
 
+		echo -ne "       Downloading Nginx Devel Kit    [..]\r"
+        git clone --quiet https://github.com/simplresty/ngx_devel_kit.git /usr/local/src/nginx/modules/ngx_devel_kit >> /tmp/nginx-install.log 2>&1
+		if [ $? -eq 0 ]; then
+			echo -ne "       Downloading Nginx Devel Kit    [${CGREEN}OK${CEND}]\r"
+			echo -ne "\n"
+		else
+			echo -e "       Downloading Nginx Devel Kit    [${CRED}FAIL${CEND}]"
+			echo ""
+			echo "Please look at /tmp/nginx-install.log"
+			echo ""
+			exit 1
+		fi
+
 		# Modules configuration
 		# Common configuration 
 		NGINX_OPTIONS="
@@ -581,14 +812,12 @@ case $OPTION in
 		--http-proxy-temp-path=/var/cache/nginx/proxy_temp \
 		--http-fastcgi-temp-path=/var/cache/nginx/fastcgi_temp \
 		--user=nginx \
-		--group=nginx"
+		--group=nginx \
+		--with-cc-opt=-Wno-deprecated-declarations \
+		--with-cc-opt=-Wno-ignored-qualifiers"
 
 		NGINX_MODULES="--without-http_ssi_module \
 		--without-http_scgi_module \
-		--without-http_uwsgi_module \
-		--without-http_geo_module \
-		--without-http_split_clients_module \
-		--without-http_memcached_module \
 		--without-http_empty_gif_module \
 		--without-http_browser_module \
 		--with-threads \
@@ -598,14 +827,20 @@ case $OPTION in
 		--with-http_v2_module \
 		--with-http_mp4_module \
 		--with-http_auth_request_module \
-		--with-http_realip_module \
+		--with-http_sub_module \
 		--with-http_secure_link_module \
 		--with-ipv6 \
 		--with-http_gunzip_module \
 		--with-http_gzip_static_module \
 		--with-http_slice_module \
 		--with-http_stub_status_module \
-		--with-http_realip_module"
+		--with-http_realip_module \
+        --with-stream_realip_module \
+		--with-stream_ssl_module \
+		--with-stream_ssl_preread_module \
+		--with-select_module \
+		--with-poll_module \
+        --add-module=/usr/local/src/nginx/modules/ngx_devel_kit"
 
 		# Optional modules
 		# LibreSSL 
@@ -633,6 +868,11 @@ case $OPTION in
 			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--add-module=/usr/local/src/nginx/modules/nginx-module-vts")
 		fi
 
+        # ModSecurity WAF
+		if [[ "$MODSEC" = 'y' ]]; then
+			NGINX_MODULES=$(echo "$NGINX_MODULES"; echo --add-module=/usr/local/src/nginx/modules/ModSecurity-nginx)
+		fi
+
 		# NAXSI WAF
 		if [[ "$NAXSI" = 'y' ]]; then
 			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--add-module=/usr/local/src/nginx/modules/naxsi-master/naxsi_src")
@@ -648,11 +888,6 @@ case $OPTION in
             NGINX_MODULES=$(echo "$NGINX_MODULES"; echo "--add-module=/usr/local/src/nginx/modules/ngx_http_geoip2_module")
         fi
 
-    	# GeoIP Legacy
-		if [[ "$GEOIP" = 'y' ]]; then
-			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--with-http_geoip_module")
-		fi
-
 		# OpenSSL
 		if [[ "$OPENSSL" = 'y' ]]; then
 			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--with-openssl=/usr/local/src/nginx/modules/openssl-${OPENSSL_VER}")
@@ -663,10 +898,10 @@ case $OPTION in
 			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--add-module=/usr/local/src/nginx/modules/ngx_cache_purge")
 		fi
 
-		# Lua
-		if [[ "$LUA" = 'y' ]]; then
-			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--add-module=/usr/local/src/nginx/modules/ngx_devel_kit-${NGINX_DEV_KIT}")
-			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--add-module=/usr/local/src/nginx/modules/lua-nginx-module-${LUA_NGINX_VER}")
+		# Fancy index
+		if [[ "$FANCYINDEX" = 'y' ]]; then
+			git clone --quiet https://github.com/aperezdc/ngx-fancyindex.git /usr/local/src/nginx/modules/fancyindex >> /tmp/nginx-install.log 2>&1
+			NGINX_MODULES=$(echo $NGINX_MODULES; echo --add-module=/usr/local/src/nginx/modules/fancyindex)
 		fi
 
         # Http Redis 2
@@ -674,10 +909,29 @@ case $OPTION in
             NGINX_MODULES=$(echo $NGINX_MODULES; echo "--add-module=/usr/local/src/nginx/modules/redis2-nginx-module")
         fi
 		
-		# Fancy index
-		if [[ "$FANCYINDEX" = 'y' ]]; then
-			git clone --quiet https://github.com/aperezdc/ngx-fancyindex.git /usr/local/src/nginx/modules/fancyindex >> /tmp/nginx-install.log 2>&1
-			NGINX_MODULES=$(echo $NGINX_MODULES; echo --add-module=/usr/local/src/nginx/modules/fancyindex)
+        # SET_MISC
+     	if [[ "$SET_MISC" = 'y' ]]; then
+			NGINX_MODULES=$(echo "$NGINX_MODULES"; echo "--add-module=/usr/local/src/nginx/modules/set-misc-nginx-module")
+		fi
+
+        # SRCache
+		if [[ "$SRCACHE" = 'y' ]]; then
+			NGINX_MODULES=$(echo "$NGINX_MODULES"; echo "--add-module=/usr/local/src/nginx/modules/srcache-nginx-module")
+		fi
+
+        # MEMC
+		if [[ "$MEMC_NGINX" = 'y' ]]; then
+			NGINX_MODULES=$(echo "$NGINX_MODULES"; echo "--add-module=/usr/local/src/nginx/modules/memc-nginx-module")
+		fi
+
+        # PCRE
+		if [[ "$PCRE_NGINX" = 'y' ]]; then
+			NGINX_MODULES=$(echo "$NGINX_MODULES"; echo "--with-pcre=/usr/local/src/nginx/modules/pcre-${PCRE_NGINX_VER}")
+		fi
+
+        # ZLIB
+		if [[ "$ZLIB_NGINX" = 'y' ]]; then
+			NGINX_MODULES=$(echo "$NGINX_MODULES"; echo "--with-zlib=/usr/local/src/nginx/modules/zlib-${ZLIB_NGINX_VER}")
 		fi
 
 		# Cloudflare's TLS Dynamic Record Resizing patch
@@ -708,7 +962,7 @@ case $OPTION in
 
 		# We configure Nginx
 		echo -ne "       Configuring Nginx              [..]\r"
-		CFLAGS="-Wno-stringop-truncation -Wno-stringop-overflow" ./configure $NGINX_OPTIONS $NGINX_MODULES >> /tmp/nginx-install.log 2>&1
+		CFLAGS="-Wno-stringop-truncation -Wno-stringop-overflow" ./configure $NGINX_OPTIONS --with-cc-opt='-g -O2 -fPIC -fstack-protector-strong -Wformat -Wno-error -Wdate-time -D_FORTIFY_SOURCE=2' --with-ld-opt='-Wl,-Bsymbolic-functions -fPIC -pie -Wl,-z,relro -Wl,-z,now' --with-pcre-opt='-g -Ofast -fPIC -m64 -march=native -fstack-protector-strong -D_FORTIFY_SOURCE=2' --with-zlib-opt='-g -Ofast -fPIC -m64 -march=native -fstack-protector-strong -D_FORTIFY_SOURCE=2' $NGINX_MODULES >> /tmp/nginx-install.log 2>&1
 
 		if [ $? -eq 0 ]; then
 			echo -ne "       Configuring Nginx              [${CGREEN}OK${CEND}]\r"
@@ -756,7 +1010,7 @@ case $OPTION in
 
         mkdir -p /etc/nginx/ssl >> /tmp/nginx-install.log 2>&1
         mkdir -p /etc/nginx/conf.d >> /tmp/nginx-install.log 2>&1
-        wget -O /etc/nginx/conf.d/ https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/conf/geo_fence.conf >> /tmp/nginx-install.log 2>&1
+        wget -O /etc/nginx/conf.d/geo_fence.conf.default https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/conf/geo_fence.conf >> /tmp/nginx-install.log 2>&1
 		# Nginx installation from source does not add an init script for systemd and logrotate
 		# Using the official systemd script and logrotate conf from nginx.org
 		if [[ ! -e /lib/systemd/system/nginx.service ]]; then
@@ -825,7 +1079,90 @@ case $OPTION in
 		echo ""
 	exit
 	;;
-	2) # Uninstall Nginx
+	2) # Install Bad Bot Blocker
+		echo ""
+		echo "This will install Nginx Bad Bot and User-Agent Blocker."
+		echo ""
+		echo "Download the install script."
+		echo ""
+		read -n1 -r -p " press any key to continue..."
+		echo ""
+
+		wget https://raw.githubusercontent.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker/master/install-ngxblocker -O /usr/local/sbin/install-ngxblocker
+		chmod +x /usr/local/sbin/install-ngxblocker
+
+		echo ""
+		echo "Run the install-ngxblocker script in DRY-MODE,"
+		echo "which will show you what changes it will make and what files it will download for you.."
+		echo "This is only a DRY-RUN so no changes are being made yet."
+		echo ""
+		read -n1 -r -p " press any key to continue..."
+		echo ""
+
+		cd /usr/local/sbin || exit 1
+		./install-ngxblocker
+
+		echo ""
+		echo "Run the install script with the -x parameter,"
+		echo "to download all the necessary files from the repository.."
+		echo ""
+		read -n1 -r -p " press any key to continue..."
+		echo ""
+
+		cd /usr/local/sbin/ || exit 1
+		./install-ngxblocker -x
+		chmod +x /usr/local/sbin/setup-ngxblocker
+		chmod +x /usr/local/sbin/update-ngxblocker
+
+		echo ""
+		echo "All the required files have now been downloaded to the correct folders,"
+		echo " on Nginx for you directly from the repository."
+		echo ""
+		echo "Run the setup-ngxblocker script in DRY-MODE,"
+		echo "which will show you what changes it will make and what files it will download for you."
+		echo "This is only a DRY-RUN so no changes are being made yet."
+		echo ""
+		read -n1 -r -p " press any key to continue..."
+		echo ""
+
+		cd /usr/local/sbin/ || exit 1
+		./setup-ngxblocker -e conf
+
+		echo ""
+		echo "Run the setup script with the -x parameter,"
+		echo "to make all the necessary changes to your nginx.conf (if required),"
+		echo "and also to add the required includes into all your vhost files."
+		echo ""
+		read -n1 -r -p " press any key to continue..."
+		echo ""
+
+		cd /usr/local/sbin/ || exit 1
+		./setup-ngxblocker -x -e conf
+
+		echo ""
+		echo "Test your nginx configuration"
+		echo ""
+		read -n1 -r -p " press any key to continue..."
+		echo ""
+
+		/usr/sbin/nginx -t
+
+		echo ""
+		echo "Restart Nginx,"
+		echo "and the Bot Blocker will immediately be active and protecting all your web sites."
+		echo ""
+		read -n1 -r -p " press any key to continue..."
+		echo ""
+
+		/usr/sbin/nginx -t && systemctl restart nginx
+
+		echo "That's it, the blocker is now active and protecting your sites from thousands of malicious bots and domains."
+		echo ""
+		echo "For more info, visit: https://github.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker"
+		echo ""
+		exit
+	;;    
+	3) # Uninstall Nginx
 		while [[ $CONF !=  "y" && $CONF != "n" ]]; do
 			read -p "       Remove configuration files ? [y/n]: " -e CONF
 		done
@@ -882,7 +1219,7 @@ case $OPTION in
 
 	exit
 	;;
-	3) # Update the script
+	4) # Update the script
 		wget https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/nginx-install.sh -O nginx-install.sh >> /tmp/nginx-install.log 2>&1
 		chmod +x nginx-install.sh
 		echo ""
@@ -891,7 +1228,7 @@ case $OPTION in
 		nginx-install.sh
 		exit
 	;;
-	4) # Exit
+	*) # Exit
 		exit
 	;;
 
