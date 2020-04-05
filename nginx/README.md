@@ -2,23 +2,24 @@
 
 - Compile and install Nginx from source with optionnal modules. Modified from [here](https://github.com/Angristan/nginx-autoinstall)
 
-```bash
+```
 
 Welcome to the nginx-autoinstall script.
 
 What do you want to do?
    1) Install or update Nginx
-   2) Uninstall Nginx
-   3) Update the script
-   4) Exit
+   2) Install Bad Bot Blocker for Nginx
+   3) Uninstall Nginx
+   4) Update the script
+   5) Exit
 
-Select an option [1-4]: 1
+Select an option [1-5]: 1
 
 This script will install Nginx with some optional modules.
 
 Do you want to install Nginx stable or mainline?
-   1) Stable 1.14.2
-   2) Mainline 1.15.8
+   1) Stable 1.16.1
+   2) Mainline 1.17.9
 
 Select an option [1-2]: 2
 
@@ -29,39 +30,64 @@ Modules to install :
        PageSpeed 1.13.35.2 [y/n]: y
        ngx_cache_purge [y/n]: y
        Brotli [y/n]: y
-       Http Redis 2 [y/n]: y
-       LDAP Auth  [y/n]: y
-       NAXSI WAF (Does not play well with HTTP2)  [y/n]: y
+       Http Redis 2 [y/n]: n
+       SRCache (provides transparent caching layer) [y/n]: y
+       MEMC (Extended ver of standard Memcached) [y/n]: y
+       Nginx virtual host traffic status [y/n]: n
+       GeoIP 2 [y/n]: y
+       LDAP Auth  [y/n]: n
        Headers More 0.33 [y/n]: y
        Fancy index [y/n]: y
-       Nginx virtual host traffic status [y/n]: y
-       GeoIP 2 [y/n]: y
+       SET_MISC Content filtering [y/n]: y
+       PCRE [y/n]: y
+       ZLIB [y/n]: y
        Cloudflare's TLS Dynamic Record Resizing patch [y/n]: y
 
-Choose your OpenSSL implementation :
-   1) System's OpenSSL (1.1.0j)
-   2) OpenSSL 1.1.0h from source
-   3) LibreSSL 2.7.4 from source 
+Choose your Web Application Firewall (WAF):
+   1) ModSecurity (Preferred)
+   2) NAXSI (Does not play well with HTTP2)
+   3) None
 
 Select an option [1-3]: 1
+      > Enable nginx ModSecurity? [y/n]: y
+
+Choose your OpenSSL implementation :
+   1) System's OpenSSL (1.1.1d)
+   2) OpenSSL 1.1.1f from source
+   3) LibreSSL 3.0.2 from source 
+
+Select an option [1-3]: 2
 
 Nginx is ready to be installed, press any key to continue...
 
        Installing dependencies        [OK]
+       Geoip/Modsec dependencies      [OK]
+       Geoip/Modsec deps Install      [OK]
        Downloading ngx_pagespeed      [OK]
        Downloading libbrotli          [OK]
        Configuring libbrotli          [OK]
        Compiling libbrotli            [OK]
        Installing libbrotli           [OK]
        Downloading ngx_brotli         [OK]
-       Downloading LDAP Auth          [OK]
-       Downloading Nginx VTS          [OK]
-       Downloading HTTP Redis 2       [OK]
-       Downloading NAXSI              [OK]
+       Downloading ModSecurity        [OK]
+       Configuring ModSecurity        [OK]
+       Compiling ModSecurity          [OK]
+       Installing ModSecurity         [OK]
+       Enabling ModSecurity           [OK]
+       ModSecurity Nginx Module       [OK]
        Downloading ngx_headers_more   [OK]
-       Downloading GeoIP 2 databases  [OK]
+       Downloading SET MISC           [OK]
+       Downloading PCRE Module        [OK]
+       Downloading ZLIB Module        [OK]
+       Downloading SRCache            [OK]
+       Downloading MEMC               [OK]
+       Downloading GeoIP 2            [OK]
+       Downloading GeoIP 2 databases  [FAIL - You need to download manually & place in /etc/nginx/geoip2/]
        Downloading ngx_cache_purge    [OK]
+       Downloading OpenSSL            [OK]
+       Configuring OpenSSL            [OK]
        Downloading Nginx              [OK]
+       Downloading Nginx Devel Kit    [OK]
        TLS Dynamic Records support    [OK]
        Configuring Nginx              [OK]
        Compiling Nginx                [OK]
@@ -72,8 +98,7 @@ Nginx is ready to be installed, press any key to continue...
 
        Installation successful !
 
-       Installation log: /tmp/nginx-install.log
-             
+       Installation log: /tmp/nginx-install.log         
 ```
 
 ## Compatibility
@@ -94,6 +119,7 @@ Nginx is ready to be installed, press any key to continue...
 ### Optional modules/features
 
 - [LDAP Authentication](https://github.com/kvspb/nginx-auth-ldap) Allow Nginx to authenticate via LDAP
+- [MODSecurity] (https://github.com/SpiderLabs/ModSecurity-nginx) ModSecurity WAF
 - [NAXSI WAF](https://github.com/nbs-system/naxsi) Web Application Firewall for Nginx
 - [Nginx Virtual Host Traffic Status](https://github.com/vozlt/nginx-module-vts)
 - [LibreSSL from source](http://www.libressl.org/) (ChaCha20 cipher, HTTP/2 + ALPN, Curve25519, P-521)
@@ -107,6 +133,10 @@ Nginx is ready to be installed, press any key to continue...
 - [ngx_cache_purge](https://github.com/FRiCKLE/ngx_cache_purge) (Purge content from FastCGI, proxy, SCGI and uWSGI caches)
 - Fancy Index
 - [Http Redis 2](https://www.nginx.com/resources/wiki/modules/redis/)
+- PCRE
+- ZLIB
+- SRCache
+- MEMC
 
 ## Install Nginx
 
