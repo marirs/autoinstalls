@@ -454,7 +454,7 @@ case $OPTION in
 				echo ""
 				exit 1
 			fi
-			mkdir /etc/nginx/modsec >> /tmp/nginx-install.log 2>&1
+			mkdir -p /etc/nginx/modsec >> /tmp/nginx-install.log 2>&1
 			wget -O /etc/nginx/modsec/modsecurity.conf https://raw.githubusercontent.com/SpiderLabs/ModSecurity/v3/master/modsecurity.conf-recommended >> /tmp/nginx-install.log 2>&1
 
 			# Enable ModSecurity in Nginx
