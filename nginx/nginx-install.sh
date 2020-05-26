@@ -113,7 +113,7 @@ case $OPTION in
             read -p "       ZLIB [y/n]: " -e ZLIB_NGINX
         done
 
-        if [[ "$NGINX_VER" == *"1.11"* ]] ||  [[ "$NGINX_VER" == *"1.13"* ]] || [[ "$NGINX_VER" == *"1.15"* ]] || [[ "$NGINX_VER" == *"1.17"* ]]; then
+        if [[ "$NGINX_VER" == *"1.11"* ]] ||  [[ "$NGINX_VER" == *"1.13"* ]] || [[ "$NGINX_VER" == *"1.15"* ]] || [[ "$NGINX_VER" == *"1.17"* ]] || [[ "$NGINX_VER" == *"1.18"* ]]; then
             while [[ $TLSPATCH != "y" && $TLSPATCH != "n" ]]; do
                 read -p "       Cloudflare's TLS Dynamic Record Resizing patch [y/n]: " -e TLSPATCH
             done
@@ -207,7 +207,7 @@ case $OPTION in
             ./configure  >> /tmp/nginx-install.log 2>&1
             make -j $cores >> /tmp/nginx-install.log 2>&1
 			if [ $? -eq 0 ]; then
-			    echo -ne "       Geoip/Modsec dependencies      [..]\r"
+			    echo -ne "       Geoip/Modsec dependencies      [OK]\r"
 				echo -ne "\n"
 			else
 				echo -e "       Geoip/Modsec dependencies      [${CRED}FAIL${CEND}]"
@@ -945,6 +945,10 @@ case $OPTION in
                 wget -O nginx.patch https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/nginx-dynamic-tls-1.15.8.patch >> /tmp/nginx-install.log 2>&1
             elif [[ "$NGINX_VER" == *"1.17.9"* ]]; then
                 wget -O nginx.patch https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/nginx-dynamic-tls-1.17.9.patch >> /tmp/nginx-install.log 2>&1
+            elif [[ "$NGINX_VER" == *"1.17.10"* ]]; then
+                wget -O nginx.patch https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/nginx-dynamic-tls-1.17.10.patch >> /tmp/nginx-install.log 2>&1
+            elif [[ "$NGINX_VER" == *"1.18.0"* ]]; then
+                wget -O nginx.patch https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/nginx-dynamic-tls-1.17.10.patch >> /tmp/nginx-install.log 2>&1
             fi
             patch -p1 < nginx.patch >> /tmp/nginx-install.log 2>&1
 		        
