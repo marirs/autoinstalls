@@ -207,7 +207,7 @@ case $OPTION in
             ./configure  >> /tmp/nginx-install.log 2>&1
             make -j $cores >> /tmp/nginx-install.log 2>&1
 			if [ $? -eq 0 ]; then
-			    echo -ne "       Geoip/Modsec dependencies      [OK]\r"
+			    echo -ne "       Geoip/Modsec dependencies      [${CGREEN}OK${CEND}]\r"
 				echo -ne "\n"
 			else
 				echo -e "       Geoip/Modsec dependencies      [${CRED}FAIL${CEND}]"
