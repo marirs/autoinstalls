@@ -113,7 +113,7 @@ case $OPTION in
             read -p "       ZLIB [y/n]: " -e ZLIB_NGINX
         done
 
-        if [[ "$NGINX_VER" == *"1.11"* ]] ||  [[ "$NGINX_VER" == *"1.13"* ]] || [[ "$NGINX_VER" == *"1.15"* ]] || [[ "$NGINX_VER" == *"1.17"* ]] || [[ "$NGINX_VER" == *"1.18"* ]]; then
+        if [[ "$NGINX_VER" == *"1.11"* ]] ||  [[ "$NGINX_VER" == *"1.13"* ]] || [[ "$NGINX_VER" == *"1.15"* ]] || [[ "$NGINX_VER" == *"1.17"* ]] || [[ "$NGINX_VER" == *"1.18"* ]]  || [[ "$NGINX_VER" == *"1.19"* ]]; then
             while [[ $TLSPATCH != "y" && $TLSPATCH != "n" ]]; do
                 read -p "       Cloudflare's TLS Dynamic Record Resizing patch [y/n]: " -e TLSPATCH
             done
@@ -949,6 +949,8 @@ case $OPTION in
                 wget -O nginx.patch https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/nginx-dynamic-tls-1.17.10.patch >> /tmp/nginx-install.log 2>&1
             elif [[ "$NGINX_VER" == *"1.18.0"* ]]; then
                 wget -O nginx.patch https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/nginx-dynamic-tls-1.17.10.patch >> /tmp/nginx-install.log 2>&1
+            elif [[ "$NGINX_VER" == *"1.19"* ]]; then
+                wget -O nginx.patch https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/nginx-dynamic-tls-1.19.1.patch >> /tmp/nginx-install.log 2>&1
             fi
             patch -p1 < nginx.patch >> /tmp/nginx-install.log 2>&1
 		        
