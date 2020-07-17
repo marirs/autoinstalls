@@ -13,8 +13,8 @@ if [[ "$EUID" -ne 0 ]]; then
 fi
 
 # Variables
-QEMU_VER=3.1.0
-LIBVIRT_VER=4.10.0
+QEMU_VER=5.0.0
+LIBVIRT_VER=6.4.0
 VIRTMANAGER_VER=1.5.0
 OS=$(lsb_release -ds 2>/dev/null | cut -d' ' -f1 || cat /etc/*release 2>/dev/null | head -n1 | cut -d'=' -f2 || uname -om)
 OS_VER=$(lsb_release -ds 2>/dev/null | cut -d' ' -f2 || cat /etc/*release 2>/dev/null | head -n2 | sed -n 2p | cut -d'=' -f2)
