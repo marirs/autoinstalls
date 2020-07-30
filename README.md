@@ -12,6 +12,8 @@ Auto script installs for the following:
 
 - Python 3
 
+![python3](python3/docs/py3.gif)
+
 - Qemu
 
 ![qemu](qemu/docs/inst-qemu.gif)
