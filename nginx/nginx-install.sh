@@ -1019,7 +1019,8 @@ case $OPTION in
         wget -O /etc/nginx/conf.d/geo_fence.conf.default https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/conf/geo_fence.conf >> /tmp/nginx-install.log 2>&1
 	if [[ "$GEOIP2" = 'y' ]]; then
 	    wget -O /etc/nginx/conf.d/geoip2.conf https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/conf/geoip2.conf >> /tmp/nginx-install.log 2>&1
-	fi
+	    wget -O /etc/nginx/conf.d/logformat.conf https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/conf/logformat.conf >> /tmp/nginx-install.log 2>&1
+fi
 		# Nginx installation from source does not add an init script for systemd and logrotate
 		# Using the official systemd script and logrotate conf from nginx.org
 		if [[ ! -e /lib/systemd/system/nginx.service ]]; then
