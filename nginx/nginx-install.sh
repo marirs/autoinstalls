@@ -937,21 +937,8 @@ case $OPTION in
 		# Cloudflare's TLS Dynamic Record Resizing patch
 		if [[ "$TLSPATCH" = 'y' ]]; then
 			echo -ne "       TLS Dynamic Records support    [..]\r"
-            if [[ "$NGINX_VER" == *"1.11"* ]]; then
-                wget -O nginx.patch https://raw.githubusercontent.com/cujanovic/nginx-dynamic-tls-records-patch/master/nginx__dynamic_tls_records_1.11.5%2B.patch >> /tmp/nginx-install.log 2>&1
-            elif [[ "$NGINX_VER" == *"1.13"* ]]; then
-                wget -O nginx.patch https://raw.githubusercontent.com/cujanovic/nginx-dynamic-tls-records-patch/master/nginx__dynamic_tls_records_1.13.0%2B.patch >> /tmp/nginx-install.log 2>&1
-            elif [[ "$NGINX_VER" == *"1.15.8"* ]]; then
-                wget -O nginx.patch https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/nginx-dynamic-tls-1.15.8.patch >> /tmp/nginx-install.log 2>&1
-            elif [[ "$NGINX_VER" == *"1.17.9"* ]]; then
-                wget -O nginx.patch https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/nginx-dynamic-tls-1.17.9.patch >> /tmp/nginx-install.log 2>&1
-            elif [[ "$NGINX_VER" == *"1.17.10"* ]]; then
-                wget -O nginx.patch https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/nginx-dynamic-tls-1.17.10.patch >> /tmp/nginx-install.log 2>&1
-            elif [[ "$NGINX_VER" == *"1.18.0"* ]]; then
-                wget -O nginx.patch https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/nginx-dynamic-tls-1.17.10.patch >> /tmp/nginx-install.log 2>&1
-            elif [[ "$NGINX_VER" == *"1.19"* ]]; then
-                wget -O nginx.patch https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/nginx-dynamic-tls-1.19.1.patch >> /tmp/nginx-install.log 2>&1
-            fi
+
+	    wget -O nginx.patch https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/nginx.patch >> /tmp/nginx-install.log 2>&1
             patch -p1 < nginx.patch >> /tmp/nginx-install.log 2>&1
 		        
 			if [ $? -eq 0 ]; then
