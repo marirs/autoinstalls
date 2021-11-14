@@ -36,7 +36,7 @@ fi
 [ -f "/tmp/qemu-install.log" ] && rm -f /tmp/qemu-install.log
 
 # Versions
-qemu_version=5.1.0
+qemu_version=6.1.0
 
 # gather system info
 vendor_id=$(cat /proc/cpuinfo | grep 'vendor_id' | head -1 | cut -d":" -f2 | xargs)
