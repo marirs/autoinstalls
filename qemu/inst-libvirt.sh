@@ -36,9 +36,9 @@ fi
 [ -f "/tmp/libvirt-install.log" ] && rm -f /tmp/libvirt-install.log
 
 # Versions
-libvirt_version=6.5.0
-virtmanager_version=2.2.1
-python_version=3.8
+libvirt_version=7.9.0
+virtmanager_version=3.2.0
+python_version=3.9
 
 # gather system info
 vendor_id=$(cat /proc/cpuinfo | grep 'vendor_id' | head -1 | cut -d":" -f2 | xargs)
