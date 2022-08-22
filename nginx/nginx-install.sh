@@ -13,15 +13,15 @@ if [[ "$EUID" -ne 0 ]]; then
 fi
 
 # Variables
-NGINX_MAINLINE_VER=1.21.1
-NGINX_STABLE_VER=1.20.1
-LIBRESSL_VER=3.0.2
-OPENSSL_VER=1.1.1k
+NGINX_MAINLINE_VER=1.23.1
+NGINX_STABLE_VER=1.22.0
+LIBRESSL_VER=3.5.3
+OPENSSL_VER=1.1.1q
 NPS_VER=1.13.35.2
 HEADERMOD_VER=0.33
 LIBMAXMINDDB_VER=1.4.2
-PCRE_NGINX_VER=8.44
-ZLIB_NGINX_VER=1.2.11
+PCRE_NGINX_VER=10.40
+ZLIB_NGINX_VER=1.2.12
 
 cores=$(nproc)
 if [ $? -ne 0 ]; then
@@ -113,7 +113,7 @@ case $OPTION in
             read -p "       ZLIB [y/n]: " -e ZLIB_NGINX
         done
 
-        if [[ "$NGINX_VER" == *"1.11"* ]] ||  [[ "$NGINX_VER" == *"1.13"* ]] || [[ "$NGINX_VER" == *"1.15"* ]] || [[ "$NGINX_VER" == *"1.17"* ]] || [[ "$NGINX_VER" == *"1.18"* ]]  || [[ "$NGINX_VER" == *"1.19"* ]]; then
+        if [[ "$NGINX_VER" == *"1.23"* ]] ||  [[ "$NGINX_VER" == *"1.13"* ]] || [[ "$NGINX_VER" == *"1.15"* ]] || [[ "$NGINX_VER" == *"1.17"* ]] || [[ "$NGINX_VER" == *"1.18"* ]]  || [[ "$NGINX_VER" == *"1.19"* ]]; then
             while [[ $TLSPATCH != "y" && $TLSPATCH != "n" ]]; do
                 read -p "       Cloudflare's TLS Dynamic Record Resizing patch [y/n]: " -e TLSPATCH
             done
@@ -544,9 +544,9 @@ case $OPTION in
         if [[ "$PCRE_NGINX" = 'y' ]]; then
 			echo -ne "       Downloading PCRE Module        [..]\r"
 			cd /usr/local/src/nginx/modules >> /tmp/nginx-install.log 2>&1
-			wget https://ftp.pcre.org/pub/pcre/pcre-${PCRE_NGINX_VER}.tar.gz >> /tmp/nginx-install.log 2>&1
-			tar xaf pcre-${PCRE_NGINX_VER}.tar.gz >> /tmp/nginx-install.log 2>&1
-			cd pcre-${PCRE_NGINX_VER} >> /tmp/nginx-install.log 2>&1
+			wget https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.40/pcre2-${PCRE_NGINX_VER}.tar.gz >> /tmp/nginx-install.log 2>&1
+			tar xaf pcre2-${PCRE_NGINX_VER}.tar.gz >> /tmp/nginx-install.log 2>&1
+			cd pcre2-${PCRE_NGINX_VER} >> /tmp/nginx-install.log 2>&1
 			if [ $? -eq 0 ]; then
 				echo -ne "       Downloading PCRE Module        [${CGREEN}OK${CEND}]\r"
 				echo -ne "\n"
@@ -938,7 +938,7 @@ case $OPTION in
 		if [[ "$TLSPATCH" = 'y' ]]; then
 			echo -ne "       TLS Dynamic Records support    [..]\r"
 
-	    wget -O nginx.patch https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/nginx.patch >> /tmp/nginx-install.log 2>&1
+	    wget -O nginx.patch https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/nginx_123.patch >> /tmp/nginx-install.log 2>&1
             patch -p1 < nginx.patch >> /tmp/nginx-install.log 2>&1
 		        
 			if [ $? -eq 0 ]; then
