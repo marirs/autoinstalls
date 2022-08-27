@@ -239,8 +239,8 @@ case $OPTION in
 			echo -ne "       Downloading ngx_pagespeed      [..]\r"
 			wget https://github.com/apache/incubator-pagespeed-ngx/archive/refs/tags/v${NPS_VER}.zip >> /tmp/nginx-install.log 2>&1
 			#wget https://github.com/pagespeed/ngx_pagespeed/archive/v${NPS_VER}-stable.zip >> /tmp/nginx-install.log 2>&1
-			unzip v${NPS_VER}-stable.zip >> /tmp/nginx-install.log 2>&1
-			cd incubator-pagespeed-ngx-${NPS_VER}-stable
+			unzip v${NPS_VER}.zip >> /tmp/nginx-install.log 2>&1
+			cd incubator-pagespeed-ngx-${NPS_VER}
 			psol_url=https://dl.google.com/dl/page-speed/psol/${NPS_VER}.tar.gz
 			[ -e scripts/format_binary_url.sh ] && psol_url=$(scripts/format_binary_url.sh PSOL_BINARY_URL)
 			wget ${psol_url} >> /tmp/nginx-install.log 2>&1
