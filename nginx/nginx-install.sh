@@ -926,7 +926,7 @@ case $OPTION in
 
         # PCRE
 		if [[ "$PCRE_NGINX" = 'y' ]]; then
-			NGINX_MODULES=$(echo "$NGINX_MODULES"; echo "--with-pcre=/usr/local/src/nginx/modules/pcre-${PCRE_NGINX_VER}")
+			NGINX_MODULES=$(echo "$NGINX_MODULES"; echo "--with-pcre=/usr/local/src/nginx/modules/pcre2-${PCRE_NGINX_VER}")
 		fi
 
         # ZLIB
