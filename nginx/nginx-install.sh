@@ -237,7 +237,8 @@ case $OPTION in
 			cd /usr/local/src/nginx/modules
 			# Download and extract of PageSpeed module
 			echo -ne "       Downloading ngx_pagespeed      [..]\r"
-			wget https://github.com/pagespeed/ngx_pagespeed/archive/v${NPS_VER}-stable.zip >> /tmp/nginx-install.log 2>&1
+			wget https://github.com/apache/incubator-pagespeed-ngx/archive/refs/tags/v${NPS_VER}.zip >> /tmp/nginx-install.log 2>&1
+			#wget https://github.com/pagespeed/ngx_pagespeed/archive/v${NPS_VER}-stable.zip >> /tmp/nginx-install.log 2>&1
 			unzip v${NPS_VER}-stable.zip >> /tmp/nginx-install.log 2>&1
 			cd incubator-pagespeed-ngx-${NPS_VER}-stable
 			psol_url=https://dl.google.com/dl/page-speed/psol/${NPS_VER}.tar.gz
