@@ -261,56 +261,10 @@ case $OPTION in
 		#Brotli
 		if [[ "$BROTLI" = 'y' ]]; then
 			cd /usr/local/src/nginx/modules
-			# libbrolti is needed for the ngx_brotli module
-			# libbrotli download
-			echo -ne "       Downloading libbrotli          [..]\r"
-			git clone https://github.com/bagder/libbrotli >> /tmp/nginx-install.log 2>&1
-
-			if [ $? -eq 0 ]; then
-				echo -ne "       Downloading libbrotli          [${CGREEN}OK${CEND}]\r"
-				echo -ne "\n"
-			else
-				echo -e "       Downloading libbrotli          [${CRED}FAIL${CEND}]"
-				echo ""
-				echo "Please look at /tmp/nginx-install.log"
-				echo ""
-				exit 1
-			fi
-
-			cd libbrotli
-			echo -ne "       Configuring libbrotli          [..]\r"
-			./autogen.sh >> /tmp/nginx-install.log 2>&1
-			./configure >> /tmp/nginx-install.log 2>&1
-
-			if [ $? -eq 0 ]; then
-				echo -ne "       Configuring libbrotli          [${CGREEN}OK${CEND}]\r"
-				echo -ne "\n"
-			else
-				echo -e "       Configuring libbrotli          [${CRED}FAIL${CEND}]"
-				echo ""
-				echo "Please look at /tmp/nginx-install.log"
-				echo ""
-				exit 1
-			fi
-
-			echo -ne "       Compiling libbrotli            [..]\r"
-			make -j $cores >> /tmp/nginx-install.log 2>&1
-
-			if [ $? -eq 0 ]; then
-				echo -ne "       Compiling libbrotli            [${CGREEN}OK${CEND}]\r"
-				echo -ne "\n"
-			else
-				echo -e "       Compiling libbrotli            [${CRED}FAIL${CEND}]"
-				echo ""
-				echo "Please look at /tmp/nginx-install.log"
-				echo ""
-				exit 1
-			fi
-
 			# libbrotli install
 			echo -ne "       Installing libbrotli           [..]\r"
 			make install >> /tmp/nginx-install.log 2>&1
-
+			apt -y install libbrotli1 >> /tmp/nginx-install.log 2>&1
 			if [ $? -eq 0 ]; then
 				echo -ne "       Installing libbrotli           [${CGREEN}OK${CEND}]\r"
 				echo -ne "\n"
