@@ -113,7 +113,7 @@ case $OPTION in
             read -p "       ZLIB [y/n]: " -e ZLIB_NGINX
         done
 
-        if [[ "$NGINX_VER" == *"1.23"* ]] ||  [[ "$NGINX_VER" == *"1.13"* ]] || [[ "$NGINX_VER" == *"1.15"* ]] || [[ "$NGINX_VER" == *"1.17"* ]] || [[ "$NGINX_VER" == *"1.18"* ]]  || [[ "$NGINX_VER" == *"1.19"* ]]; then
+        if [[ "$NGINX_VER" == *"1.25"* ]] ||   "$NGINX_VER" == *"1.23"* ]] ||  [[ "$NGINX_VER" == *"1.13"* ]] || [[ "$NGINX_VER" == *"1.15"* ]] || [[ "$NGINX_VER" == *"1.17"* ]] || [[ "$NGINX_VER" == *"1.18"* ]]  || [[ "$NGINX_VER" == *"1.19"* ]]; then
             while [[ $TLSPATCH != "y" && $TLSPATCH != "n" ]]; do
                 read -p "       Cloudflare's TLS Dynamic Record Resizing patch [y/n]: " -e TLSPATCH
             done
