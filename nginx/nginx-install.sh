@@ -13,10 +13,10 @@ if [[ "$EUID" -ne 0 ]]; then
 fi
 
 # Variables
-NGINX_MAINLINE_VER=1.23.1
-NGINX_STABLE_VER=1.22.0
+NGINX_MAINLINE_VER=1.25.2
+NGINX_STABLE_VER=1.24.0
 LIBRESSL_VER=3.5.3
-OPENSSL_VER=1.1.1q
+OPENSSL_VER=1.1.1w
 NPS_VER=1.14.33.1-RC1
 HEADERMOD_VER=0.34
 LIBMAXMINDDB_VER=1.6.0
@@ -893,7 +893,7 @@ case $OPTION in
 		if [[ "$TLSPATCH" = 'y' ]]; then
 			echo -ne "       TLS Dynamic Records support    [..]\r"
 
-	    wget -O nginx.patch https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/nginx_123.patch >> /tmp/nginx-install.log 2>&1
+	    wget -O nginx.patch https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/nginx-dynamic-tls-1.25.2.patch >> /tmp/nginx-install.log 2>&1
             patch -p1 < nginx.patch >> /tmp/nginx-install.log 2>&1
 		        
 			if [ $? -eq 0 ]; then
