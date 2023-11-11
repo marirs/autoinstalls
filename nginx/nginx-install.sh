@@ -13,7 +13,7 @@ if [[ "$EUID" -ne 0 ]]; then
 fi
 
 # Variables
-NGINX_MAINLINE_VER=1.25.2
+NGINX_MAINLINE_VER=1.25.3
 NGINX_STABLE_VER=1.24.0
 LIBRESSL_VER=3.5.3
 OPENSSL_VER=1.1.1w
@@ -780,17 +780,17 @@ case $OPTION in
 		--with-file-aio \
 		--with-http_ssl_module \
 		--with-http_v2_module \
+                --with-http_v3_module \
 		--with-http_mp4_module \
 		--with-http_auth_request_module \
 		--with-http_sub_module \
 		--with-http_secure_link_module \
-		--with-ipv6 \
 		--with-http_gunzip_module \
 		--with-http_gzip_static_module \
 		--with-http_slice_module \
 		--with-http_stub_status_module \
 		--with-http_realip_module \
-        --with-stream_realip_module \
+                --with-stream_realip_module \
 		--with-stream_ssl_module \
 		--with-stream_ssl_preread_module \
 		--with-select_module \
