@@ -813,11 +813,6 @@ case $OPTION in
 			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--add-module=/usr/local/src/nginx/modules/incubator-pagespeed-ngx-${NPS_VER}")
 		fi
 
-		# Brotli
-		if [[ "$BROTLI" = 'y' ]]; then
-			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--add-module=/usr/local/src/nginx/modules/ngx_brotli")
-		fi
-
 		# LDAP Auth
 		if [[ "$LDAPAUTH" = 'y' ]]; then
 			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--add-module=/usr/local/src/nginx/modules/nginx-auth-ldap-master")
@@ -911,6 +906,11 @@ case $OPTION in
 				echo ""
 				exit 1
 			fi
+		fi
+
+		# Brotli
+		if [[ "$BROTLI" = 'y' ]]; then
+			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--with-compat --add-dynamic-module=/usr/local/src/nginx/modules/ngx_brotli")
 		fi
 
 		# We configure Nginx
