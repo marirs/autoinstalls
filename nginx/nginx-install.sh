@@ -808,7 +808,9 @@ case $OPTION in
 		# Optional modules
 		# LibreSSL 
 		if [[ "$LIBRESSL" = 'y' ]]; then
-			NGINX_MODULES=$(echo $NGINX_MODULES; echo --with-openssl=/usr/local/src/nginx/modules/libressl-${LIBRESSL_VER})
+#			NGINX_MODULES=$(echo $NGINX_MODULES; echo --with-openssl=/usr/local/src/nginx/modules/libressl-${LIBRESSL_VER})
+			NGINX_MODULES=$(echo $NGINX_MODULES; echo --with-openssl=/usr/local/src/nginx/modules/libressl-${LIBRESSL_VER} --with-cc-opt="-I/usr/local/src/nginx/modules/libressl-${LIBRESSL_VER}/build/include" --with-ld-opt="-L/usr/local/src/nginx/modules/libressl-${LIBRESSL_VER}/build/lib")
+
 		fi
 
 		# PageSpeed
