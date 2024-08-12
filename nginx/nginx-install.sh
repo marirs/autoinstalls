@@ -504,7 +504,7 @@ case $OPTION in
         if [[ "$PCRE_NGINX" = 'y' ]]; then
 			echo -ne "       Downloading PCRE Module        [..]\r"
 			cd /usr/local/src/nginx/modules >> /tmp/nginx-install.log 2>&1
-			wget https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.${PCRE_NGINX_VER}/pcre2-${PCRE_NGINX_VER}.tar.gz >> /tmp/nginx-install.log 2>&1
+			wget https://github.com/PCRE2Project/pcre2/releases/download/pcre2-${PCRE_NGINX_VER}/pcre2-${PCRE_NGINX_VER}.tar.gz >> /tmp/nginx-install.log 2>&1
 			tar xaf pcre2-${PCRE_NGINX_VER}.tar.gz >> /tmp/nginx-install.log 2>&1
 			cd pcre2-${PCRE_NGINX_VER} >> /tmp/nginx-install.log 2>&1
 			if [ $? -eq 0 ]; then
