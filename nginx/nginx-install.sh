@@ -181,12 +181,15 @@ case $OPTION in
         # Dependencies
         echo -ne "       Installing dependencies        [..]\r"
         apt-get update >> /tmp/nginx-install.log 2>&1
-        INSTALL_PKGS="build-essential ca-certificates wget curl libpcre3 libpcre3-dev libldap2-dev autoconf unzip automake libtool tar git libssl-dev zlib1g-dev uuid-dev"
+        INSTALL_PKGS="build-essential ca-certificates wget curl apt-utils pkgconf libpcre3 libpcre3-dev libldap2-dev autoconf libcurl4-openssl-dev libgeoip-dev libpcre++-dev unzip automake libtool tar git libssl-dev zlib1g-dev uuid-dev"
         if [[ "$MODSEC" = 'y' ]]; then
-            INSTALL_PKGS=$(echo $INSTALL_PKGS; echo apt-utils libcurl4-openssl-dev libgeoip-dev liblmdb-dev libpcre++-dev libyajl-dev pkgconf libmodsecurity3 libmodsecurity-dev)
+            INSTALL_PKGS=$(echo $INSTALL_PKGS; echo liblmdb-dev libyajl-dev libmodsecurity3 libmodsecurity-dev)
         fi
         if [[ "$GEOIP2" = 'y' ]]; then
             INSTALL_PKGS=$(echo $INSTALL_PKGS; echo libgeoip-dev libmaxminddb0 libmaxminddb-dev mmdb-bin)
+        fi
+        if [[ "$BROTLI" = 'y' ]]; then
+          INSTALL_PKGS=$(echo $INSTALL_PKGS; echo brotli libbrotli-dev libbrotli1 libnginx-mod-http-brotli-filter libnginx-mod-http-brotli-static librust-brotli-decompressor-dev node-brotli-size)
         fi
         for i in $INSTALL_PKGS; do
                 apt-get install -y $i  >> /tmp/nginx-install.log 2>&1
@@ -813,6 +816,11 @@ case $OPTION in
 			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--add-module=/usr/local/src/nginx/modules/incubator-pagespeed-ngx-${NPS_VER}")
 		fi
 
+		# Brotli
+		if [[ "$BROTLI" = 'y' ]]; then
+			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--add-module=/usr/local/src/nginx/modules/ngx_brotli")
+		fi
+
 		# LDAP Auth
 		if [[ "$LDAPAUTH" = 'y' ]]; then
 			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--add-module=/usr/local/src/nginx/modules/nginx-auth-ldap-master")
@@ -906,11 +914,6 @@ case $OPTION in
 				echo ""
 				exit 1
 			fi
-		fi
-
-		# Brotli
-		if [[ "$BROTLI" = 'y' ]]; then
-			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--with-compat --add-dynamic-module=/usr/local/src/nginx/modules/ngx_brotli")
 		fi
 
 		# We configure Nginx
