@@ -189,7 +189,7 @@ case $OPTION in
             INSTALL_PKGS=$(echo $INSTALL_PKGS; echo libgeoip-dev libmaxminddb0 libmaxminddb-dev mmdb-bin)
         fi
         if [[ "$BROTLI" = 'y' ]]; then
-          INSTALL_PKGS=$(echo $INSTALL_PKGS; echo brotli libbrotli-dev libbrotli1 libnginx-mod-http-brotli-filter libnginx-mod-http-brotli-static librust-brotli-decompressor-dev node-brotli-size)
+          INSTALL_PKGS=$(echo $INSTALL_PKGS; echo brotli libbrotli-dev libbrotli1 node-brotli-size)
         fi
         for i in $INSTALL_PKGS; do
                 apt-get install -y $i  >> /tmp/nginx-install.log 2>&1
