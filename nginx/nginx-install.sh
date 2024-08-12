@@ -12,16 +12,21 @@ if [[ "$EUID" -ne 0 ]]; then
 	exit 1
 fi
 
-# Variables
-NGINX_MAINLINE_VER=1.27.0
-NGINX_STABLE_VER=1.26.1
-LIBRESSL_VER=3.5.3
-OPENSSL_VER=1.1.1w
+# Defined Variables
+# Get all the NGINX versions from the ngnix.org web page
+NGINX_VERSIONS=$(curl -s https://nginx.org/en/download.html | grep -oP 'nginx-\d+\.\d+\.\d+' | sort -V | uniq | tail -n2)
+NGINX_MAINLINE_VER=$(echo $NGINX_VERSIONS | cut -d' ' -f2 | cut -d'-' -f2)
+NGINX_STABLE_VER=$(echo $NGINX_VERSIONS | cut -d' ' -f1 | cut -d'-' -f2)
+# SSL
+LIBRESSL_VER=$(curl -s https://www.libressl.org/releases.html | grep -oP 'LibreSSL \d+\.\d+\.\d+' | sort -V | uniq | tail -n1 | cut -d' ' -f2)
+OPENSSL_VER=$(curl -s https://openssl-library.org/source/index.html | grep -oP 'openssl-\d+\.\d+\.\d+' | sort -V | uniq | tail -n1 | cut -d'-' -f2)
+# Google Pagespeed
 NPS_VER=1.14.33.1-RC1
-HEADERMOD_VER=0.34
-LIBMAXMINDDB_VER=1.6.0
-PCRE_NGINX_VER=10.40
-ZLIB_NGINX_VER=1.3
+# NGINX MOD's
+HEADERMOD_VER=0.37
+LIBMAXMINDDB_VER=1.10.0
+PCRE_NGINX_VER=10.44
+ZLIB_NGINX_VER=1.3.1
 
 cores=$(nproc)
 if [ $? -ne 0 ]; then
@@ -113,7 +118,7 @@ case $OPTION in
             read -p "       ZLIB [y/n]: " -e ZLIB_NGINX
         done
 
-        if [[ "$NGINX_VER" == *"1.25"* ]] ||   "$NGINX_VER" == *"1.23"* ]] ||  [[ "$NGINX_VER" == *"1.13"* ]] || [[ "$NGINX_VER" == *"1.15"* ]] || [[ "$NGINX_VER" == *"1.17"* ]] || [[ "$NGINX_VER" == *"1.18"* ]]  || [[ "$NGINX_VER" == *"1.19"* ]]; then
+        if [[ "$NGINX_VER" == *"1.25.1" ]] || [[ "$NGINX_VER" == *"1.26"* ]] ||  [[ "$NGINX_VER" == *"1.27"* ]]; then
             while [[ $TLSPATCH != "y" && $TLSPATCH != "n" ]]; do
                 read -p "       Cloudflare's TLS Dynamic Record Resizing patch [y/n]: " -e TLSPATCH
             done
@@ -281,9 +286,9 @@ case $OPTION in
 			# ngx_brotli module download
 			cd /usr/local/src/nginx/modules
 			echo -ne "       Downloading ngx_brotli         [..]\r"
-			git clone https://github.com/google/ngx_brotli >> /tmp/nginx-install.log 2>&1
-			cd ngx_brotli
-			git submodule update --init >> /tmp/nginx-install.log 2>&1
+			git clone --recurse-submodules https://github.com/google/ngx_brotli >> /tmp/nginx-install.log 2>&1
+			#cd ngx_brotli
+			#git submodule update --init >> /tmp/nginx-install.log 2>&1
 
 			if [ $? -eq 0 ]; then
 				echo -ne "       Downloading ngx_brotli         [${CGREEN}OK${CEND}]\r"
@@ -893,7 +898,7 @@ case $OPTION in
 		if [[ "$TLSPATCH" = 'y' ]]; then
 			echo -ne "       TLS Dynamic Records support    [..]\r"
 
-	    wget -O nginx.patch https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/nginx-dynamic-tls-1.25.2.patch >> /tmp/nginx-install.log 2>&1
+	    wget -O nginx.patch https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/nginx-dynamic-tls-1.27.patch >> /tmp/nginx-install.log 2>&1
             patch -p1 < nginx.patch >> /tmp/nginx-install.log 2>&1
 		        
 			if [ $? -eq 0 ]; then
