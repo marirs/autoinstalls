@@ -181,7 +181,7 @@ case $OPTION in
         # Dependencies
         echo -ne "       Installing dependencies        [..]\r"
         apt-get update >> /tmp/nginx-install.log 2>&1
-        INSTALL_PKGS="build-essential ca-certificates wget curl apt-utils pkgconf libpcre3 libpcre3-dev libldap2-dev autoconf libcurl4-openssl-dev libgeoip-dev libpcre++-dev unzip automake libtool tar git libssl-dev zlib1g-dev uuid-dev"
+        INSTALL_PKGS="build-essential ca-certificates wget curl apt-utils pkgconf libpcre3 libpcre3-dev libldap2-dev autoconf libcurl4-openssl-dev libgeoip-dev libpcre2-dev pcre2-utils pcregrep unzip automake libtool tar git libssl-dev zlib1g-dev uuid-dev"
         if [[ "$MODSEC" = 'y' ]]; then
             INSTALL_PKGS=$(echo $INSTALL_PKGS; echo liblmdb-dev libyajl-dev libmodsecurity3 libmodsecurity-dev)
         fi
