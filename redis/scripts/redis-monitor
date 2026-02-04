@@ -1,0 +1,502 @@
+# Redis Monitoring and Management Scripts
+# Localhost Redis deployment monitoring tools
+
+#!/bin/bash
+
+# Redis Monitoring Script
+# File: /usr/local/bin/redis-monitor
+
+# Colors
+CSI="\033["
+CEND="${CSI}0m"
+CRED="${CSI}1;31m"
+CGREEN="${CSI}1;32m"
+CBLUE="${CSI}1;34m"
+CMAGENTA="${CSI}1;35m"
+CCYAN="${CSI}1;36m"
+
+function show_header() {
+    echo -e "${CBLUE}========================================${CEND}"
+    echo -e "${CBLUE}    Redis Monitoring${CEND}"
+    echo -e "${CBLUE}========================================${CEND}"
+    echo ""
+}
+
+function get_redis_password() {
+    if [ -f "/etc/redis/redis.passwd" ]; then
+        cat "/etc/redis/redis.passwd"
+    else
+        echo ""
+    fi
+}
+
+function check_redis_status() {
+    echo -e "${CGREEN}Redis Service Status:${CEND}"
+    
+    if systemctl is-active --quiet redis; then
+        echo -e "  Redis Service: ${CGREEN}Running${CEND}"
+    else
+        echo -e "  Redis Service: ${CRED}Stopped${CEND}"
+    fi
+    
+    if systemctl is-enabled --quiet redis; then
+        echo -e "  Redis Service: ${CGREEN}Enabled${CEND}"
+    else
+        echo -e "  Redis Service: ${CRED}Disabled${CEND}"
+    fi
+    
+    echo ""
+}
+
+function show_redis_info() {
+    echo -e "${CGREEN}Redis Information:${CEND}"
+    
+    local password=$(get_redis_password)
+    local auth_cmd=""
+    if [ -n "$password" ]; then
+        auth_cmd="-a $password"
+    fi
+    
+    # Get Redis info
+    local redis_info=$(redis-cli $auth_cmd INFO 2>/dev/null)
+    
+    if [ $? -eq 0 ]; then
+        echo -e "  Redis Version: $(echo "$redis_info" | grep "redis_version:" | cut -d: -f2 | tr -d '\r')"
+        echo -e "  Redis Mode: $(echo "$redis_info" | grep "redis_mode:" | cut -d: -f2 | tr -d '\r')"
+        echo -e "  Uptime: $(echo "$redis_info" | grep "uptime_in_seconds:" | cut -d: -f2 | tr -d '\r') seconds"
+        echo -e "  Connected Clients: $(echo "$redis_info" | grep "connected_clients:" | cut -d: -f2 | tr -d '\r')"
+        echo -e "  Used Memory: $(echo "$redis_info" | grep "used_memory_human:" | cut -d: -f2 | tr -d '\r')"
+        echo -e "  Max Memory: $(echo "$redis_info" | grep "maxmemory_human:" | cut -d: -f2 | tr -d '\r')"
+        echo -e "  Total Commands: $(echo "$redis_info" | grep "total_commands_processed:" | cut -d: -f2 | tr -d '\r')"
+        echo -e "  Total Operations: $(echo "$redis_info" | grep "total_net_input_bytes:" | cut -d: -f2 | tr -d '\r')"
+    else
+        echo -e "  ${CRED}Cannot connect to Redis${CEND}"
+    fi
+    
+    echo ""
+}
+
+function show_redis_memory() {
+    echo -e "${CGREEN}Memory Usage:${CEND}"
+    
+    local password=$(get_redis_password)
+    local auth_cmd=""
+    if [ -n "$password" ]; then
+        auth_cmd="-a $password"
+    fi
+    
+    local redis_info=$(redis-cli $auth_cmd INFO memory 2>/dev/null)
+    
+    if [ $? -eq 0 ]; then
+        echo -e "  Used Memory: $(echo "$redis_info" | grep "used_memory_human:" | cut -d: -f2 | tr -d '\r')"
+        echo -e "  RSS Memory: $(echo "$redis_info" | grep "used_memory_rss_human:" | cut -d: -f2 | tr -d '\r')"
+        echo -e "  Peak Memory: $(echo "$redis_info" | grep "used_memory_peak_human:" | cut -d: -f2 | tr -d '\r')"
+        echo -e "  Memory Fragmentation: $(echo "$redis_info" | grep "mem_fragmentation_ratio:" | cut -d: -f2 | tr -d '\r')"
+        echo -e "  Memory Policy: $(echo "$redis_info" | grep "maxmemory_policy:" | cut -d: -f2 | tr -d '\r')"
+    else
+        echo -e "  ${CRED}Cannot connect to Redis${CEND}"
+    fi
+    
+    echo ""
+}
+
+function show_redis_stats() {
+    echo -e "${CGREEN}Performance Statistics:${CEND}"
+    
+    local password=$(get_redis_password)
+    local auth_cmd=""
+    if [ -n "$password" ]; then
+        auth_cmd="-a $password"
+    fi
+    
+    local redis_info=$(redis-cli $auth_cmd INFO stats 2>/dev/null)
+    
+    if [ $? -eq 0 ]; then
+        echo -e "  Total Connections: $(echo "$redis_info" | grep "total_connections_received:" | cut -d: -f2 | tr -d '\r')"
+        echo -e "  Total Commands: $(echo "$redis_info" | grep "total_commands_processed:" | cut -d: -f2 | tr -d '\r')"
+        echo -e "  Ops/sec: $(echo "$redis_info" | grep "instantaneous_ops_per_sec:" | cut -d: -f2 | tr -d '\r')"
+        local hits=$(echo "$redis_info" | grep "keyspace_hits:" | cut -d: -f2 | tr -d '\r')
+        local misses=$(echo "$redis_info" | grep "keyspace_misses:" | cut -d: -f2 | tr -d '\r')
+        echo -e "  Hit Rate: $hits hits / $misses misses"
+        echo -e "  Expired Keys: $(echo "$redis_info" | grep "expired_keys:" | cut -d: -f2 | tr -d '\r')"
+        echo -e "  Evicted Keys: $(echo "$redis_info" | grep "evicted_keys:" | cut -d: -f2 | tr -d '\r')"
+    else
+        echo -e "  ${CRED}Cannot connect to Redis${CEND}"
+    fi
+    
+    echo ""
+}
+
+function show_redis_keyspace() {
+    echo -e "${CGREEN}Keyspace Information:${CEND}"
+    
+    local password=$(get_redis_password)
+    local auth_cmd=""
+    if [ -n "$password" ]; then
+        auth_cmd="-a $password"
+    fi
+    
+    local redis_info=$(redis-cli $auth_cmd INFO keyspace 2>/dev/null)
+    
+    if [ $? -eq 0 ]; then
+        echo "$redis_info" | grep "^db" | while read -r line; do
+            echo -e "  $line"
+        done
+    else
+        echo -e "  ${CRED}Cannot connect to Redis${CEND}"
+    fi
+    
+    echo ""
+}
+
+function show_redis_clients() {
+    echo -e "${CGREEN}Connected Clients:${CEND}"
+    
+    local password=$(get_redis_password)
+    local auth_cmd=""
+    if [ -n "$password" ]; then
+        auth_cmd="-a $password"
+    fi
+    
+    local redis_info=$(redis-cli $auth_cmd INFO clients 2>/dev/null)
+    
+    if [ $? -eq 0 ]; then
+        echo -e "  Connected Clients: $(echo "$redis_info" | grep "connected_clients:" | cut -d: -f2 | tr -d '\r')"
+        echo -e "  Client Connections: $(echo "$redis_info" | grep "total_connections_received:" | cut -d: -f2 | tr -d '\r')"
+        echo -e "  Blocked Clients: $(echo "$redis_info" | grep "blocked_clients:" | cut -d: -f2 | tr -d '\r')"
+        echo -e "  Tracking Clients: $(echo "$redis_info" | grep "tracking_clients:" | cut -d: -f2 | tr -d '\r')"
+    else
+        echo -e "  ${CRED}Cannot connect to Redis${CEND}"
+    fi
+    
+    echo ""
+}
+
+function show_redis_persistence() {
+    echo -e "${CGREEN}Persistence Information:${CEND}"
+    
+    local password=$(get_redis_password)
+    local auth_cmd=""
+    if [ -n "$password" ]; then
+        auth_cmd="-a $password"
+    fi
+    
+    local redis_info=$(redis-cli $auth_cmd INFO persistence 2>/dev/null)
+    
+    if [ $? -eq 0 ]; then
+        echo -e "  Loading: $(echo "$redis_info" | grep "loading:" | cut -d: -f2 | tr -d '\r')"
+        echo -e "  RDB Changes Since Save: $(echo "$redis_info" | grep "rdb_changes_since_last_save:" | cut -d: -f2 | tr -d '\r')"
+        echo -e "  RDB Background Save: $(echo "$redis_info" | grep "rdb_bgsave_in_progress:" | cut -d: -f2 | tr -d '\r')"
+        echo -e "  RDB Last Save: $(echo "$redis_info" | grep "rdb_last_save_time:" | cut -d: -f2 | tr -d '\r')"
+        echo -e "  AOF Enabled: $(echo "$redis_info" | grep "aof_enabled:" | cut -d: -f2 | tr -d '\r')"
+        echo -e "  AOF Rewrite: $(echo "$redis_info" | grep "aof_rewrite_in_progress:" | cut -d: -f2 | tr -d '\r')"
+        echo -e "  AOF Buffer Length: $(echo "$redis_info" | grep "aof_buffer_length:" | cut -d: -f2 | tr -d '\r')"
+    else
+        echo -e "  ${CRED}Cannot connect to Redis${CEND}"
+    fi
+    
+    echo ""
+}
+
+function test_redis_connection() {
+    echo -e "${CGREEN}Testing Redis Connection...${CEND}"
+    
+    local password=$(get_redis_password)
+    local auth_cmd=""
+    if [ -n "$password" ]; then
+        auth_cmd="-a $password"
+    fi
+    
+    # Test basic connection
+    if redis-cli $auth_cmd ping >/dev/null 2>&1; then
+        echo -e "  ${CGREEN}Redis connection: OK${CEND}"
+        
+        # Test set/get operations
+        local test_key="redis_test_$(date +%s)"
+        local test_value="test_value_$(date +%s)"
+        
+        if redis-cli $auth_cmd set "$test_key" "$test_value" >/dev/null 2>&1; then
+            local retrieved_value=$(redis-cli $auth_cmd get "$test_key" 2>/dev/null)
+            if [ "$retrieved_value" = "$test_value" ]; then
+                echo -e "  ${CGREEN}Redis operations: OK${CEND}"
+                redis-cli $auth_cmd del "$test_key" >/dev/null 2>&1
+            else
+                echo -e "  ${CRED}Redis operations: FAILED${CEND}"
+            fi
+        else
+            echo -e "  ${CRED}Redis operations: FAILED${CEND}"
+        fi
+    else
+        echo -e "  ${CRED}Redis connection: FAILED${CEND}"
+    fi
+    
+    echo ""
+}
+
+function show_redis_security() {
+    echo -e "${CGREEN}Security Status:${CEND}"
+    
+    # Check Redis configuration
+    if [ -f "/etc/redis/redis.conf" ]; then
+        echo -e "  Configuration file: ${CGREEN}Found${CEND}"
+        
+        # Check bind configuration
+        if grep -q "bind 127.0.0.1" /etc/redis/redis.conf; then
+            echo -e "  Localhost binding: ${CGREEN}Enabled${CEND}"
+        else
+            echo -e "  Localhost binding: ${CRED}Disabled${CEND}"
+        fi
+        
+        # Check password protection
+        if grep -q "requirepass" /etc/redis/redis.conf; then
+            echo -e "  Password protection: ${CGREEN}Enabled${CEND}"
+        else
+            echo -e "  Password protection: ${CRED}Disabled${CEND}"
+        fi
+        
+        # Check dangerous commands
+        local dangerous_commands=("FLUSHDB" "FLUSHALL" "KEYS" "DEBUG" "EVAL")
+        for cmd in "${dangerous_commands[@]}"; do
+            if grep -q "rename-command $cmd" /etc/redis/redis.conf; then
+                echo -e "  Command $cmd: ${CGREEN}Disabled${CEND}"
+            else
+                echo -e "  Command $cmd: ${CRED}Enabled${CEND}"
+            fi
+        done
+    else
+        echo -e "  Configuration file: ${CRED}Not found${CEND}"
+    fi
+    
+    # Check firewall status
+    if command -v ufw >/dev/null 2>&1; then
+        echo -e "  Firewall status: $(ufw status | head -1)"
+        if ufw status | grep -q "6379"; then
+            echo -e "  Redis port 6379: ${CGREEN}Configured${CEND}"
+        else
+            echo -e "  Redis port 6379: ${CRED}Not configured${CEND}"
+        fi
+    else
+        echo -e "  Firewall: ${CYAN}UFW not installed${CEND}"
+    fi
+    
+    # Check password file
+    if [ -f "/etc/redis/redis.passwd" ]; then
+        local perms=$(stat -c "%a" /etc/redis/redis.passwd)
+        if [ "$perms" = "600" ]; then
+            echo -e "  Password file permissions: ${CGREEN}Secure (600)${CEND}"
+        else
+            echo -e "  Password file permissions: ${CRED}Insecure ($perms)${CEND}"
+        fi
+    else
+        echo -e "  Password file: ${CRED}Not found${CEND}"
+    fi
+    
+    echo ""
+}
+
+function show_redis_logs() {
+    echo -e "${CGREEN}Recent Redis Logs:${CEND}"
+    
+    if [ -f "/var/log/redis/redis-server.log" ]; then
+        echo -e "${CBLUE}Last 20 lines of Redis log:${CEND}"
+        tail -20 /var/log/redis/redis-server.log | sed 's/^/  /'
+    else
+        echo -e "  ${CYAN}Redis log file not found${CEND}"
+    fi
+    
+    echo ""
+    
+    echo -e "${CBLUE}Redis systemd journal (last 10 lines):${CEND}"
+    journalctl -u redis -n 10 --no-pager | sed 's/^/  /'
+    
+    echo ""
+}
+
+function show_redis_performance() {
+    echo -e "${CGREEN}Performance Metrics:${CEND}"
+    
+    local password=$(get_redis_password)
+    local auth_cmd=""
+    if [ -n "$password" ]; then
+        auth_cmd="-a $password"
+    fi
+    
+    local redis_info=$(redis-cli $auth_cmd INFO all 2>/dev/null)
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CBLUE}Command Statistics:${CEND}"
+        echo -e "  Total Commands: $(echo "$redis_info" | grep "total_commands_processed:" | cut -d: -f2 | tr -d '\r')"
+        echo -e "  Commands/sec: $(echo "$redis_info" | grep "instantaneous_ops_per_sec:" | cut -d: -f2 | tr -d '\r')"
+        
+        echo -e "${CBLUE}Memory Statistics:${CEND}"
+        echo -e "  Used Memory: $(echo "$redis_info" | grep "used_memory_human:" | cut -d: -f2 | tr -d '\r')"
+        echo -e "  Memory Fragmentation: $(echo "$redis_info" | grep "mem_fragmentation_ratio:" | cut -d: -f2 | tr -d '\r')"
+        
+        echo -e "${CBLUE}Network Statistics:${CEND}"
+        echo -e "  Total Connections: $(echo "$redis_info" | grep "total_connections_received:" | cut -d: -f2 | tr -d '\r')"
+        echo -e "  Connected Clients: $(echo "$redis_info" | grep "connected_clients:" | cut -d: -f2 | tr -d '\r')"
+        
+        echo -e "${CBLUE}Key Statistics:${CEND}"
+        echo -e "  Expired Keys: $(echo "$redis_info" | grep "expired_keys:" | cut -d: -f2 | tr -d '\r')"
+        echo -e "  Evicted Keys: $(echo "$redis_info" | grep "evicted_keys:" | cut -d: -f2 | tr -d '\r')"
+        
+        echo -e "${CBLUE}Slow Queries:${CEND}"
+        local slowlog=$(redis-cli $auth_cmd slowlog get 5 2>/dev/null)
+        if [ -n "$slowlog" ]; then
+            echo "$slowlog" | while read -r line; do
+                echo -e "  $line"
+            done
+        else
+            echo -e "  No slow queries recorded"
+        fi
+    else
+        echo -e "  ${CRED}Cannot connect to Redis${CEND}"
+    fi
+    
+    echo ""
+}
+
+function generate_report() {
+    local report_file="/tmp/redis-monitor-report-$(date +%Y%m%d_%H%M%S).txt"
+    
+    echo "Redis Monitoring Report" > "$report_file"
+    echo "Generated: $(date)" >> "$report_file"
+    echo "Hostname: $(hostname)" >> "$report_file"
+    echo "================================" >> "$report_file"
+    echo "" >> "$report_file"
+    
+    echo "=== Redis Service Status ===" >> "$report_file"
+    systemctl status redis --no-pager >> "$report_file" 2>&1
+    echo "" >> "$report_file"
+    
+    echo "=== Redis Information ===" >> "$report_file"
+    local password=$(get_redis_password)
+    local auth_cmd=""
+    if [ -n "$password" ]; then
+        auth_cmd="-a $password"
+    fi
+    redis-cli $auth_cmd INFO >> "$report_file" 2>&1
+    echo "" >> "$report_file"
+    
+    echo "=== Security Configuration ===" >> "$report_file"
+    if [ -f "/etc/redis/redis.conf" ]; then
+        grep -E "(bind|requirepass|rename-command)" /etc/redis/redis.conf >> "$report_file" 2>&1
+    fi
+    echo "" >> "$report_file"
+    
+    echo "=== Recent Logs ===" >> "$report_file"
+    if [ -f "/var/log/redis/redis-server.log" ]; then
+        tail -50 /var/log/redis/redis-server.log >> "$report_file" 2>&1
+    fi
+    echo "" >> "$report_file"
+    
+    echo -e "${CGREEN}Report saved to: $report_file${CEND}"
+}
+
+function show_help() {
+    echo -e "${CGREEN}Redis Monitoring Tool${CEND}"
+    echo ""
+    echo "Usage: $0 [option]"
+    echo ""
+    echo "Options:"
+    echo "  status      Show Redis service status"
+    echo "  info        Show Redis information"
+    echo "  memory      Show memory usage"
+    echo "  stats       Show performance statistics"
+    echo "  keyspace    Show keyspace information"
+    echo "  clients     Show connected clients"
+    echo "  persistence Show persistence information"
+    echo "  security    Show security status"
+    echo "  logs        Show recent logs"
+    echo "  performance Show performance metrics"
+    echo "  test        Test Redis connection"
+    echo "  report      Generate detailed report"
+    echo "  all         Show all information"
+    echo "  help        Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0 status    # Show Redis status"
+    echo "  $0 all       # Show complete overview"
+    echo "  $0 report    # Generate detailed report"
+}
+
+function main() {
+    case "${1:-all}" in
+        "status")
+            show_header
+            check_redis_status
+            ;;
+        "info")
+            show_header
+            show_redis_info
+            ;;
+        "memory")
+            show_header
+            show_redis_memory
+            ;;
+        "stats")
+            show_header
+            show_redis_stats
+            ;;
+        "keyspace")
+            show_header
+            show_redis_keyspace
+            ;;
+        "clients")
+            show_header
+            show_redis_clients
+            ;;
+        "persistence")
+            show_header
+            show_redis_persistence
+            ;;
+        "security")
+            show_header
+            show_redis_security
+            ;;
+        "logs")
+            show_header
+            show_redis_logs
+            ;;
+        "performance")
+            show_header
+            show_redis_performance
+            ;;
+        "test")
+            show_header
+            test_redis_connection
+            ;;
+        "report")
+            generate_report
+            ;;
+        "all")
+            show_header
+            check_redis_status
+            show_redis_info
+            show_redis_memory
+            show_redis_stats
+            show_redis_keyspace
+            show_redis_clients
+            show_redis_persistence
+            show_redis_security
+            test_redis_connection
+            ;;
+        "help"|"-h"|"--help")
+            show_help
+            ;;
+        *)
+            echo -e "${CRED}Unknown option: $1${CEND}"
+            show_help
+            exit 1
+            ;;
+    esac
+}
+
+# Check if Redis CLI is available
+if ! command -v redis-cli >/dev/null 2>&1; then
+    echo -e "${CRED}Redis CLI is not installed or not in PATH${CEND}"
+    exit 1
+fi
+
+# Run main function with all arguments
+main "$@"

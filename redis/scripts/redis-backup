@@ -1,0 +1,609 @@
+# Redis Backup and Restore Scripts
+# Localhost Redis deployment backup utilities
+
+#!/bin/bash
+
+# Redis Backup Script
+# File: /usr/local/bin/redis-backup
+
+# Colors
+CSI="\033["
+CEND="${CSI}0m"
+CRED="${CSI}1;31m"
+CGREEN="${CSI}1;32m"
+CBLUE="${CSI}1;34m"
+CMAGENTA="${CSI}1;35m"
+CCYAN="${CSI}1;36m"
+
+# Configuration
+REDIS_CLI="/usr/bin/redis-cli"
+REDIS_DATA_DIR="/var/lib/redis"
+BACKUP_DIR="/var/backups/redis"
+DATE=$(date +%Y%m%d_%H%M%S)
+REDIS_PASSWORD_FILE="/etc/redis/redis.passwd"
+RETENTION_DAYS=30
+
+# Create backup directory
+mkdir -p "$BACKUP_DIR"
+
+function show_header() {
+    echo -e "${CBLUE}========================================${CEND}"
+    echo -e "${CBLUE}    Redis Backup Tool${CEND}"
+    echo -e "${CBLUE}========================================${CEND}"
+    echo ""
+}
+
+function get_redis_password() {
+    if [ -f "$REDIS_PASSWORD_FILE" ]; then
+        cat "$REDIS_PASSWORD_FILE"
+    else
+        echo ""
+    fi
+}
+
+function create_backup() {
+    echo -e "${CGREEN}Creating Redis backup...${CEND}"
+    
+    local password=$(get_redis_password)
+    local auth_cmd=""
+    if [ -n "$password" ]; then
+        auth_cmd="-a $password"
+    fi
+    
+    # Check Redis connection
+    if ! $REDIS_CLI $auth_cmd ping >/dev/null 2>&1; then
+        echo -e "${CRED}Cannot connect to Redis${CEND}"
+        return 1
+    fi
+    
+    # Create backup directory
+    mkdir -p "$BACKUP_DIR"
+    
+    # Create RDB backup
+    echo -e "  Creating RDB backup..."
+    $REDIS_CLI $auth_cmd BGSAVE >> "$BACKUP_DIR/backup_$DATE.log" 2>&1
+    
+    if [ $? -ne 0 ]; then
+        echo -e "  ${CRED}Failed to initiate background save${CEND}"
+        return 1
+    fi
+    
+    # Wait for background save to complete
+    echo -e "  Waiting for background save to complete..."
+    local timeout=60
+    local elapsed=0
+    
+    while [ $elapsed -lt $timeout ]; do
+        local info=$($REDIS_CLI $auth_cmd INFO persistence 2>/dev/null)
+        local bgsave_in_progress=$(echo "$info" | grep "rdb_bgsave_in_progress:" | cut -d: -f2 | tr -d '\r')
+        
+        if [ "$bgsave_in_progress" = "0" ]; then
+            echo -e "  ${CGREEN}Background save completed${CEND}"
+            break
+        fi
+        
+        echo -e "    Background save in progress... (${elapsed}s elapsed)"
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+    
+    if [ $elapsed -ge $timeout ]; then
+        echo -e "  ${CRED}Background save timed out${CEND}"
+        return 1
+    fi
+    
+    # Copy RDB file
+    if [ -f "$REDIS_DATA_DIR/dump.rdb" ]; then
+        cp "$REDIS_DATA_DIR/dump.rdb" "$BACKUP_DIR/dump_$DATE.rdb"
+        gzip "$BACKUP_DIR/dump_$DATE.rdb"
+        echo -e "  ${CGREEN}RDB backup created: dump_$DATE.rdb.gz${CEND}"
+    else
+        echo -e "  ${CYAN}RDB file not found, skipping RDB backup${CEND}"
+    fi
+    
+    # Copy AOF file
+    if [ -f "$REDIS_DATA_DIR/appendonly.aof" ]; then
+        # Ensure AOF is in a consistent state
+        $REDIS_CLI $auth_cmd BGREWRITEAOF >> "$BACKUP_DIR/backup_$DATE.log" 2>&1
+        
+        # Wait for AOF rewrite to complete
+        echo -e "  Waiting for AOF rewrite to complete..."
+        local aof_timeout=60
+        local aof_elapsed=0
+        
+        while [ $aof_elapsed -lt $aof_timeout ]; do
+            local info=$($REDIS_CLI $auth_cmd INFO persistence 2>/dev/null)
+            local aof_rewrite_in_progress=$(echo "$info" | grep "aof_rewrite_in_progress:" | cut -d: -f2 | tr -d '\r')
+            
+            if [ "$aof_rewrite_in_progress" = "0" ]; then
+                echo -e "  ${CGREEN}AOF rewrite completed${CEND}"
+                break
+            fi
+            
+            echo -e "    AOF rewrite in progress... (${aof_elapsed}s elapsed)"
+            sleep 2
+            aof_elapsed=$((aof_elapsed + 2))
+        done
+        
+        cp "$REDIS_DATA_DIR/appendonly.aof" "$BACKUP_DIR/appendonly_$DATE.aof"
+        gzip "$BACKUP_DIR/appendonly_$DATE.aof"
+        echo -e "  ${CGREEN}AOF backup created: appendonly_$DATE.aof.gz${CEND}"
+    else
+        echo -e "  ${CYAN}AOF file not found, skipping AOF backup${CEND}"
+    fi
+    
+    # Backup configuration
+    if [ -f "/etc/redis/redis.conf" ]; then
+        cp "/etc/redis/redis.conf" "$BACKUP_DIR/redis_$DATE.conf"
+        echo -e "  ${CGREEN}Configuration backup created: redis_$DATE.conf${CEND}"
+    fi
+    
+    # Backup password file
+    if [ -f "$REDIS_PASSWORD_FILE" ]; then
+        cp "$REDIS_PASSWORD_FILE" "$BACKUP_DIR/redis_$DATE.passwd"
+        chmod 600 "$BACKUP_DIR/redis_$DATE.passwd"
+        echo -e "  ${CGREEN}Password backup created: redis_$DATE.passwd${CEND}"
+    fi
+    
+    # Create backup info
+    cat > "$BACKUP_DIR/backup_info_$DATE.txt" << EOF
+Redis Backup Information
+=======================
+Date: $(date)
+Hostname: $(hostname)
+Redis Version: $($REDIS_CLI $auth_cmd INFO server | grep "redis_version:" | cut -d: -f2 | tr -d '\r')
+Backup Type: Full Backup
+Files Created:
+- dump_$DATE.rdb.gz (RDB snapshot)
+- appendonly_$DATE.aof.gz (AOF log)
+- redis_$DATE.conf (Configuration)
+- redis_$DATE.passwd (Password)
+
+Redis Statistics:
+- Used Memory: $($REDIS_CLI $auth_cmd INFO memory | grep "used_memory_human:" | cut -d: -f2 | tr -d '\r')
+- Connected Clients: $($REDIS_CLI $auth_cmd INFO clients | grep "connected_clients:" | cut -d: -f2 | tr -d '\r')
+- Total Keys: $($REDIS_CLI $auth_cmd INFO keyspace | grep -c "^db")
+- Uptime: $($REDIS_CLI $auth_cmd INFO server | grep "uptime_in_seconds:" | cut -d: -f2 | tr -d '\r') seconds
+EOF
+    
+    echo -e "${CGREEN}Backup completed successfully${CEND}"
+    echo -e "${CCYAN}Backup location: $BACKUP_DIR${CEND}"
+    echo -e "${CCYAN}Backup info: $BACKUP_DIR/backup_info_$DATE.txt${CEND}"
+}
+
+function restore_backup() {
+    if [ -z "$1" ]; then
+        echo -e "${CRED}Usage: $0 restore <backup_date>${CEND}"
+        echo -e "${CCYAN}Available backups:${CEND}"
+        list_backups
+        return 1
+    fi
+    
+    local backup_date="$1"
+    echo -e "${CGREEN}Restoring Redis backup from $backup_date...${CEND}"
+    
+    # Check if backup files exist
+    local rdb_file="$BACKUP_DIR/dump_$backup_date.rdb.gz"
+    local aof_file="$BACKUP_DIR/appendonly_$backup_date.aof.gz"
+    local conf_file="$BACKUP_DIR/redis_$backup_date.conf"
+    local passwd_file="$BACKUP_DIR/redis_$backup_date.passwd"
+    
+    if [ ! -f "$rdb_file" ] && [ ! -f "$aof_file" ]; then
+        echo -e "${CRED}No backup files found for date: $backup_date${CEND}"
+        return 1
+    fi
+    
+    # Stop Redis service
+    echo -e "  Stopping Redis service..."
+    systemctl stop redis
+    
+    # Backup current data
+    echo -e "  Backing up current data..."
+    local current_date=$(date +%Y%m%d_%H%M%S)
+    
+    if [ -f "$REDIS_DATA_DIR/dump.rdb" ]; then
+        cp "$REDIS_DATA_DIR/dump.rdb" "$REDIS_DATA_DIR/dump.rdb.backup.$current_date"
+        echo -e "    Current RDB backed up"
+    fi
+    
+    if [ -f "$REDIS_DATA_DIR/appendonly.aof" ]; then
+        cp "$REDIS_DATA_DIR/appendonly.aof" "$REDIS_DATA_DIR/appendonly.aof.backup.$current_date"
+        echo -e "    Current AOF backed up"
+    fi
+    
+    if [ -f "/etc/redis/redis.conf" ]; then
+        cp "/etc/redis/redis.conf" "/etc/redis/redis.conf.backup.$current_date"
+        echo -e "    Current configuration backed up"
+    fi
+    
+    # Restore RDB file
+    if [ -f "$rdb_file" ]; then
+        echo -e "  Restoring RDB file..."
+        gunzip -c "$rdb_file" > "$REDIS_DATA_DIR/dump.rdb"
+        chown redis:redis "$REDIS_DATA_DIR/dump.rdb"
+        chmod 640 "$REDIS_DATA_DIR/dump.rdb"
+        echo -e "    RDB file restored"
+    fi
+    
+    # Restore AOF file
+    if [ -f "$aof_file" ]; then
+        echo -e "  Restoring AOF file..."
+        gunzip -c "$aof_file" > "$REDIS_DATA_DIR/appendonly.aof"
+        chown redis:redis "$REDIS_DATA_DIR/appendonly.aof"
+        chmod 640 "$REDIS_DATA_DIR/appendonly.aof"
+        echo -e "    AOF file restored"
+    fi
+    
+    # Restore configuration
+    if [ -f "$conf_file" ]; then
+        echo -e "  Restoring configuration..."
+        cp "$conf_file" "/etc/redis/redis.conf"
+        chown redis:redis "/etc/redis/redis.conf"
+        chmod 640 "/etc/redis/redis.conf"
+        echo -e "    Configuration restored"
+    fi
+    
+    # Restore password file
+    if [ -f "$passwd_file" ]; then
+        echo -e "  Restoring password file..."
+        cp "$passwd_file" "$REDIS_PASSWORD_FILE"
+        chmod 600 "$REDIS_PASSWORD_FILE"
+        chown redis:redis "$REDIS_PASSWORD_FILE"
+        echo -e "    Password file restored"
+    fi
+    
+    # Start Redis service
+    echo -e "  Starting Redis service..."
+    systemctl start redis
+    
+    # Wait for Redis to start
+    sleep 3
+    
+    # Verify restoration
+    local password=$(get_redis_password)
+    local auth_cmd=""
+    if [ -n "$password" ]; then
+        auth_cmd="-a $password"
+    fi
+    
+    if $REDIS_CLI $auth_cmd ping >/dev/null 2>&1; then
+        echo -e "  ${CGREEN}Redis service started successfully${CEND}"
+        
+        # Show restored data info
+        local info=$($REDIS_CLI $auth_cmd INFO keyspace 2>/dev/null)
+        if [ -n "$info" ]; then
+            echo -e "  ${CCYAN}Restored keyspace information:${CEND}"
+            echo "$info" | grep "^db" | sed 's/^/    /'
+        fi
+    else
+        echo -e "  ${CRED}Redis service failed to start${CEND}"
+        echo -e "  Check logs: journalctl -u redis -f"
+        return 1
+    fi
+    
+    echo -e "${CGREEN}Restore completed successfully${CEND}"
+    echo -e "${CCYAN}Current data backed up with suffix: .$current_date${CEND}"
+}
+
+function list_backups() {
+    echo -e "${CGREEN}Available Redis Backups:${CEND}"
+    echo ""
+    
+    if [ ! -d "$BACKUP_DIR" ]; then
+        echo -e "  ${CCYAN}No backups found${CEND}"
+        return
+    fi
+    
+    echo -e "${CBLUE}RDB Backups:${CEND}"
+    ls -lh "$BACKUP_DIR"/dump_*.rdb.gz 2>/dev/null | awk '{print $9, $5, $6, $7, $8}' | while read -r line; do
+        local date=$(echo "$line" | awk '{print $1}' | sed 's/.*dump_\(.*\)\.rdb\.gz/\1/')
+        local size=$(echo "$line" | awk '{print $2}')
+        local date_str=$(echo "$line" | awk '{print $3, $4, $5}')
+        echo -e "  $date: $size ($date_str)"
+    done
+    
+    if ! ls "$BACKUP_DIR"/dump_*.rdb.gz >/dev/null 2>&1; then
+        echo -e "  No RDB backups found"
+    fi
+    
+    echo ""
+    echo -e "${CBLUE}AOF Backups:${CEND}"
+    ls -lh "$BACKUP_DIR"/appendonly_*.aof.gz 2>/dev/null | awk '{print $9, $5, $6, $7, $8}' | while read -r line; do
+        local date=$(echo "$line" | awk '{print $1}' | sed 's/.*appendonly_\(.*\)\.aof\.gz/\1/')
+        local size=$(echo "$line" | awk '{print $2}')
+        local date_str=$(echo "$line" | awk '{print $3, $4, $5}')
+        echo -e "  $date: $size ($date_str)"
+    done
+    
+    if ! ls "$BACKUP_DIR"/appendonly_*.aof.gz >/dev/null 2>&1; then
+        echo -e "  No AOF backups found"
+    fi
+    
+    echo ""
+    echo -e "${CBLUE}Configuration Backups:${CEND}"
+    ls -lh "$BACKUP_DIR"/redis_*.conf 2>/dev/null | awk '{print $9, $5, $6, $7, $8}' | while read -r line; do
+        local date=$(echo "$line" | awk '{print $1}' | sed 's/.*redis_\(.*\)\.conf/\1/')
+        local size=$(echo "$line" | awk '{print $2}')
+        local date_str=$(echo "$line" | awk '{print $3, $4, $5}')
+        echo -e "  $date: $size ($date_str)"
+    done
+    
+    if ! ls "$BACKUP_DIR"/redis_*.conf >/dev/null 2>&1; then
+        echo -e "  No configuration backups found"
+    fi
+    
+    echo ""
+}
+
+function verify_backup() {
+    if [ -z "$1" ]; then
+        echo -e "${CRED}Usage: $0 verify <backup_date>${CEND}"
+        return 1
+    fi
+    
+    local backup_date="$1"
+    echo -e "${CGREEN}Verifying backup: $backup_date${CEND}"
+    
+    local rdb_file="$BACKUP_DIR/dump_$backup_date.rdb.gz"
+    local aof_file="$BACKUP_DIR/appendonly_$backup_date.aof.gz"
+    local conf_file="$BACKUP_DIR/redis_$backup_date.conf"
+    local info_file="$BACKUP_DIR/backup_info_$backup_date.txt"
+    
+    # Check file integrity
+    echo -e "${CBLUE}File Integrity:${CEND}"
+    
+    if [ -f "$rdb_file" ]; then
+        if gzip -t "$rdb_file" 2>/dev/null; then
+            echo -e "  RDB file: ${CGREEN}Valid${CEND}"
+        else
+            echo -e "  RDB file: ${CRED}Corrupted${CEND}"
+            return 1
+        fi
+    else
+        echo -e "  RDB file: ${CYAN}Not found${CEND}"
+    fi
+    
+    if [ -f "$aof_file" ]; then
+        if gzip -t "$aof_file" 2>/dev/null; then
+            echo -e "  AOF file: ${CGREEN}Valid${CEND}"
+        else
+            echo -e "  AOF file: ${CRED}Corrupted${CEND}"
+            return 1
+        fi
+    else
+        echo -e "  AOF file: ${CYAN}Not found${CEND}"
+    fi
+    
+    if [ -f "$conf_file" ]; then
+        echo -e "  Configuration file: ${CGREEN}Found${CEND}"
+    else
+        echo -e "  Configuration file: ${CYAN}Not found${CEND}"
+    fi
+    
+    # Show backup info if available
+    if [ -f "$info_file" ]; then
+        echo -e ""
+        echo -e "${CBLUE}Backup Information:${CEND}"
+        cat "$info_file" | sed 's/^/  /'
+    fi
+    
+    echo -e ""
+    echo -e "${CGREEN}Backup verification completed${CEND}"
+}
+
+function cleanup_old_backups() {
+    echo -e "${CGREEN}Cleaning up old backups (older than $RETENTION_DAYS days)...${CEND}"
+    
+    # Remove old backup files
+    local removed_files=0
+    
+    # Remove RDB backups
+    local rdb_count=$(find "$BACKUP_DIR" -name "dump_*.rdb.gz" -mtime +$RETENTION_DAYS | wc -l)
+    if [ $rdb_count -gt 0 ]; then
+        find "$BACKUP_DIR" -name "dump_*.rdb.gz" -mtime +$RETENTION_DAYS -delete
+        echo -e "  Removed $rdb_count old RDB backups"
+        removed_files=$((removed_files + rdb_count))
+    fi
+    
+    # Remove AOF backups
+    local aof_count=$(find "$BACKUP_DIR" -name "appendonly_*.aof.gz" -mtime +$RETENTION_DAYS | wc -l)
+    if [ $aof_count -gt 0 ]; then
+        find "$BACKUP_DIR" -name "appendonly_*.aof.gz" -mtime +$RETENTION_DAYS -delete
+        echo -e "  Removed $aof_count old AOF backups"
+        removed_files=$((removed_files + aof_count))
+    fi
+    
+    # Remove configuration backups
+    local conf_count=$(find "$BACKUP_DIR" -name "redis_*.conf" -mtime +$RETENTION_DAYS | wc -l)
+    if [ $conf_count -gt 0 ]; then
+        find "$BACKUP_DIR" -name "redis_*.conf" -mtime +$RETENTION_DAYS -delete
+        echo -e "  Removed $conf_count old configuration backups"
+        removed_files=$((removed_files + conf_count))
+    fi
+    
+    # Remove password backups
+    local passwd_count=$(find "$BACKUP_DIR" -name "redis_*.passwd" -mtime +$RETENTION_DAYS | wc -l)
+    if [ $passwd_count -gt 0 ]; then
+        find "$BACKUP_DIR" -name "redis_*.passwd" -mtime +$RETENTION_DAYS -delete
+        echo -e "  Removed $passwd_count old password backups"
+        removed_files=$((removed_files + passwd_count))
+    fi
+    
+    # Remove info files
+    local info_count=$(find "$BACKUP_DIR" -name "backup_info_*.txt" -mtime +$RETENTION_DAYS | wc -l)
+    if [ $info_count -gt 0 ]; then
+        find "$BACKUP_DIR" -name "backup_info_*.txt" -mtime +$RETENTION_DAYS -delete
+        echo -e "  Removed $info_count old info files"
+        removed_files=$((removed_files + info_count))
+    fi
+    
+    # Remove log files
+    local log_count=$(find "$BACKUP_DIR" -name "backup_*.log" -mtime +$RETENTION_DAYS | wc -l)
+    if [ $log_count -gt 0 ]; then
+        find "$BACKUP_DIR" -name "backup_*.log" -mtime +$RETENTION_DAYS -delete
+        echo -e "  Removed $log_count old log files"
+        removed_files=$((removed_files + log_count))
+    fi
+    
+    if [ $removed_files -gt 0 ]; then
+        echo -e "  ${CGREEN}Cleanup completed: $removed_files files removed${CEND}"
+    else
+        echo -e "  ${CYAN}No old files to remove${CEND}"
+    fi
+}
+
+function schedule_backup() {
+    echo -e "${CGREEN}Setting up automatic backup schedule...${CEND}"
+    
+    # Create cron job for daily backup
+    local cron_file="/etc/cron.d/redis-backup"
+    
+    cat > "$cron_file" << EOF
+# Redis automatic backup
+0 2 * * * root /usr/local/bin/redis-backup create >/dev/null 2>&1
+0 3 * * 0 root /usr/local/bin/redis-backup cleanup >/dev/null 2>&1
+EOF
+    
+    # Restart cron service
+    systemctl restart cron
+    
+    echo -e "  ${CGREEN}Automatic backup scheduled:${CEND}"
+    echo -e "    Daily backup at 2:00 AM"
+    echo -e "    Weekly cleanup on Sunday at 3:00 AM"
+    echo -e "    Cron file: $cron_file"
+}
+
+function unschedule_backup() {
+    echo -e "${CGREEN}Removing automatic backup schedule...${CEND}"
+    
+    local cron_file="/etc/cron.d/redis-backup"
+    
+    if [ -f "$cron_file" ]; then
+        rm "$cron_file"
+        systemctl restart cron
+        echo -e "  ${CGREEN}Automatic backup schedule removed${CEND}"
+    else
+        echo -e "  ${CYAN}No automatic backup schedule found${CEND}"
+    fi
+}
+
+function show_backup_status() {
+    echo -e "${CGREEN}Backup Status:${CEND}"
+    
+    # Check backup directory
+    if [ ! -d "$BACKUP_DIR" ]; then
+        echo -e "  ${CYAN}Backup directory not found${CEND}"
+        return
+    fi
+    
+    # Show backup statistics
+    local rdb_count=$(ls "$BACKUP_DIR"/dump_*.rdb.gz 2>/dev/null | wc -l)
+    local aof_count=$(ls "$BACKUP_DIR"/appendonly_*.aof.gz 2>/dev/null | wc -l)
+    local conf_count=$(ls "$BACKUP_DIR"/redis_*.conf 2>/dev/null | wc -l)
+    
+    echo -e "  RDB backups: $rdb_count"
+    echo -e "  AOF backups: $aof_count"
+    echo -e "  Configuration backups: $conf_count"
+    
+    # Show disk usage
+    local backup_size=$(du -sh "$BACKUP_DIR" 2>/dev/null | cut -f1)
+    echo -e "  Total backup size: $backup_size"
+    
+    # Show latest backup
+    local latest_rdb=$(ls -t "$BACKUP_DIR"/dump_*.rdb.gz 2>/dev/null | head -1)
+    if [ -n "$latest_rdb" ]; then
+        local latest_date=$(basename "$latest_rdb" | sed 's/dump_\(.*\)\.rdb\.gz/\1/')
+        echo -e "  Latest backup: $latest_date"
+    else
+        echo -e "  Latest backup: None"
+    fi
+    
+    # Check cron schedule
+    if [ -f "/etc/cron.d/redis-backup" ]; then
+        echo -e "  Automatic backup: ${CGREEN}Enabled${CEND}"
+    else
+        echo -e "  Automatic backup: ${CRED}Disabled${CEND}"
+    fi
+    
+    echo ""
+}
+
+function show_help() {
+    echo -e "${CGREEN}Redis Backup Tool${CEND}"
+    echo ""
+    echo "Usage: $0 [command] [options]"
+    echo ""
+    echo "Commands:"
+    echo "  create              Create full backup"
+    echo "  restore <date>      Restore backup from specified date"
+    echo "  list                List available backups"
+    echo "  verify <date>       Verify backup integrity"
+    echo "  cleanup             Remove old backups"
+    echo "  schedule            Set up automatic backup schedule"
+    echo "  unschedule          Remove automatic backup schedule"
+    echo "  status              Show backup status"
+    echo "  help                Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0 create           # Create backup"
+    echo "  $0 restore 20240204_120000  # Restore from backup"
+    echo "  $0 list             # List backups"
+    echo "  $0 verify 20240204_120000  # Verify backup"
+    echo "  $0 schedule         # Set up automatic backups"
+    echo ""
+    echo "Backup location: $BACKUP_DIR"
+    echo "Retention period: $RETENTION_DAYS days"
+}
+
+function main() {
+    case "${1}" in
+        "create")
+            show_header
+            create_backup
+            ;;
+        "restore")
+            show_header
+            restore_backup "$2"
+            ;;
+        "list")
+            list_backups
+            ;;
+        "verify")
+            show_header
+            verify_backup "$2"
+            ;;
+        "cleanup")
+            show_header
+            cleanup_old_backups
+            ;;
+        "schedule")
+            show_header
+            schedule_backup
+            ;;
+        "unschedule")
+            show_header
+            unschedule_backup
+            ;;
+        "status")
+            show_header
+            show_backup_status
+            ;;
+        "help"|"-h"|"--help")
+            show_help
+            ;;
+        *)
+            echo -e "${CRED}Unknown command: $1${CEND}"
+            show_help
+            exit 1
+            ;;
+    esac
+}
+
+# Check if Redis CLI is available
+if ! command -v redis-cli >/dev/null 2>&1; then
+    echo -e "${CRED}Redis CLI is not installed or not in PATH${CEND}"
+    exit 1
+fi
+
+# Run main function with all arguments
+main "$@"
