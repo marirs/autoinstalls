@@ -1,0 +1,39 @@
+# Cross-Compilation Configuration
+[target.x86_64-pc-windows-gnu]
+# Linker for Windows x64 target
+linker = "x86_64-w64-mingw32-gcc"
+ar = "x86_64-w64-mingw32-ar"
+
+[target.aarch64-unknown-linux-gnu]
+# Linker for ARM64 Linux target
+linker = "aarch64-linux-gnu-gcc"
+ar = "aarch64-linux-gnu-ar"
+
+[target.armv7-unknown-linux-gnueabihf]
+# Linker for ARM Linux target
+linker = "arm-linux-gnueabihf-gcc"
+ar = "arm-linux-gnueabihf-ar"
+
+[env]
+# Set environment variables for cross-compilation
+CC_x86_64-pc-windows-gnu = "x86_64-w64-mingw32-gcc"
+CXX_x86_64-pc-windows-gnu = "x86_64-w64-mingw32-g++"
+
+CC_aarch64-unknown-linux-gnu = "aarch64-linux-gnu-gcc"
+CXX_aarch64-unknown-linux-gnu = "aarch64-linux-gnu-g++"
+
+CC_armv7-unknown-linux-gnueabihf = "arm-linux-gnueabihf-gcc"
+CXX_armv7-unknown-linux-gnueabihf = "arm-linux-gnueabihf-g++"
+
+# Basic library paths for cross-compilation
+PKG_CONFIG_PATH_x86_64-unknown-linux-gnu = "/usr/lib/x86_64-linux-gnu/pkgconfig"
+PKG_CONFIG_PATH_aarch64-unknown-linux-gnu = "/usr/lib/aarch64-linux-gnu/pkgconfig"
+PKG_CONFIG_PATH_armv7-unknown-linux-gnueabihf = "/usr/lib/arm-linux-gnueabihf/pkgconfig"
+
+OPENSSL_ROOT_DIR_x86_64-unknown-linux-gnu = "/usr"
+OPENSSL_ROOT_DIR_aarch64-unknown-linux-gnu = "/usr"
+OPENSSL_ROOT_DIR_armv7-unknown-linux-gnueabihf = "/usr"
+
+OPENSSL_DIR_x86_64-unknown-linux-gnu = "/usr"
+OPENSSL_DIR_aarch64-unknown-linux-gnu = "/usr"
+OPENSSL_DIR_armv7-unknown-linux-gnueabihf = "/usr"

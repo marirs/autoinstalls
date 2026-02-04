@@ -1,0 +1,15 @@
+# MUSL Configuration for static linking
+[target.x86_64-unknown-linux-musl]
+# Linker for MUSL Linux target
+linker = "x86_64-linux-musl-gcc"
+ar = "x86_64-linux-musl-ar"
+
+[target.aarch64-unknown-linux-musl]
+# Linker for MUSL Linux ARM64 target
+linker = "aarch64-linux-musl-gcc"
+ar = "aarch64-linux-musl-ar"
+
+[target.armv7-unknown-linux-gnueabihf]
+# Linker for MUSL Linux ARM target
+linker = "arm-linux-gnueabihf-musl-gcc"
+ar = "arm-linux-gnueabihf-musl-ar"

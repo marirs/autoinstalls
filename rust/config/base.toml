@@ -1,0 +1,21 @@
+[build]
+# Enable parallel compilation
+jobs = 4
+
+[net]
+# Enable offline mode by default
+git-fetch-with-cli = true
+
+[registry]
+# Use sparse registry for faster downloads
+sparse-registry = true
+
+[term]
+# Enable colored output
+color = 'auto'
+
+[source.crates-io]
+replace-with = 'sparse+https://index.crates.io/'
+
+# Sparse registry configuration
+[sparse+https://index.crates.io/]

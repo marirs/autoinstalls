@@ -1,0 +1,33 @@
+# macOS Universal Binary Configuration
+[target.x86_64-apple-darwin]
+# Linker for Intel macOS
+linker = "gcc"
+ar = "ar"
+
+[target.aarch64-apple-darwin]
+# Linker for Apple Silicon macOS
+linker = "gcc"
+ar = "ar"
+
+[env]
+# macOS SDK paths for cross-compilation
+SDKROOT_x86_64-apple-darwin = "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk"
+SDKROOT_aarch64-apple-darwin = "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk"
+
+# macOS deployment targets
+MACOSX_DEPLOYMENT_TARGET_x86_64-apple-darwin = "10.15"
+MACOSX_DEPLOYMENT_TARGET_aarch64-apple-darwin = "11.0"
+
+# Homebrew paths for different architectures
+HOMEBREW_PREFIX_x86_64-apple-darwin = "/usr/local"
+HOMEBREW_PREFIX_aarch64-apple-darwin = "/opt/homebrew"
+
+# Library paths for Intel Homebrew (for cross-compilation on Silicon)
+PKG_CONFIG_PATH_x86_64-apple-darwin = "/usr/local/lib/pkgconfig:/usr/local/Homebrew/lib/pkgconfig"
+OPENSSL_ROOT_DIR_x86_64-apple-darwin = "/usr/local/opt/openssl"
+OPENSSL_DIR_x86_64-apple-darwin = "/usr/local/opt/openssl"
+
+# Library paths for ARM Homebrew (native on Silicon)
+PKG_CONFIG_PATH_aarch64-apple-darwin = "/opt/homebrew/lib/pkgconfig"
+OPENSSL_ROOT_DIR_aarch64-apple-darwin = "/opt/homebrew/opt/openssl"
+OPENSSL_DIR_aarch64-apple-darwin = "/opt/homebrew/opt/openssl"

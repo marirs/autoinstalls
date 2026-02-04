@@ -1,0 +1,80 @@
+# AI/ML Library Configuration for Cross-Compilation
+[target.x86_64-unknown-linux-gnu]
+# OpenBLAS configuration
+OPENBLAS_ROOT = "/usr"
+OPENBLAS_INCLUDE_DIR = "/usr/include/openblas"
+OPENBLAS_LIB = "/usr/lib/x86_64-linux-gnu/libopenblas.so"
+
+# HDF5 configuration
+HDF5_DIR = "/usr"
+HDF5_INCLUDE_DIR = "/usr/include/hdf5/serial"
+HDF5_LIB = "/usr/lib/x86_64-linux-gnu/libhdf5.so"
+
+# LightGBM configuration
+LIGHTGBM_DIR = "/usr"
+LIGHTGBM_INCLUDE_DIR = "/usr/include/LightGBM"
+LIGHTGBM_LIB = "/usr/lib/x86_64-linux-gnu/liblightgbm.so"
+
+# Protocol Buffers configuration
+PROTOBUF_ROOT = "/usr"
+PROTOBUF_INCLUDE_DIR = "/usr/include/google/protobuf"
+PROTOBUF_LIB = "/usr/lib/x86_64-linux-gnu/libprotobuf.so"
+
+[target.aarch64-unknown-linux-gnu]
+# OpenBLAS configuration for ARM64
+OPENBLAS_ROOT = "/usr"
+OPENBLAS_INCLUDE_DIR = "/usr/include/openblas"
+OPENBLAS_LIB = "/usr/lib/aarch64-linux-gnu/libopenblas.so"
+
+# HDF5 configuration for ARM64
+HDF5_DIR = "/usr"
+HDF5_INCLUDE_DIR = "/usr/include/hdf5/serial"
+HDF5_LIB = "/usr/lib/aarch64-linux-gnu/libhdf5.so"
+
+# LightGBM configuration for ARM64
+LIGHTGBM_DIR = "/usr"
+LIGHTGBM_INCLUDE_DIR = "/usr/include/LightGBM"
+LIGHTGBM_LIB = "/usr/lib/aarch64-linux-gnu/liblightgbm.so"
+
+# Protocol Buffers configuration for ARM64
+PROTOBUF_ROOT = "/usr"
+PROTOBUF_INCLUDE_DIR = "/usr/include/google/protobuf"
+PROTOBUF_LIB = "/usr/lib/aarch64-linux-gnu/libprotobuf.so"
+
+[target.armv7-unknown-linux-gnueabihf]
+# OpenBLAS configuration for ARM
+OPENBLAS_ROOT = "/usr"
+OPENBLAS_INCLUDE_DIR = "/usr/include/openblas"
+OPENBLAS_LIB = "/usr/lib/arm-linux-gnueabihf/libopenblas.so"
+
+# HDF5 configuration for ARM
+HDF5_DIR = "/usr"
+HDF5_INCLUDE_DIR = "/usr/include/hdf5/serial"
+HDF5_LIB = "/usr/lib/arm-linux-gnueabihf/libhdf5.so"
+
+# LightGBM configuration for ARM
+LIGHTGBM_DIR = "/usr"
+LIGHTGBM_INCLUDE_DIR = "/usr/include/LightGBM"
+LIGHTGBM_LIB = "/usr/lib/arm-linux-gnueabihf/liblightgbm.so"
+
+# Protocol Buffers configuration for ARM
+PROTOBUF_ROOT = "/usr"
+PROTOBUF_INCLUDE_DIR = "/usr/include/google/protobuf"
+PROTOBUF_LIB = "/usr/lib/arm-linux-gnueabihf/libprotobuf.so"
+
+# AI/ML Environment Variables
+OPENBLAS_ROOT_x86_64-unknown-linux-gnu = "/usr"
+OPENBLAS_ROOT_aarch64-unknown-linux-gnu = "/usr"
+OPENBLAS_ROOT_armv7-unknown-linux-gnueabihf = "/usr"
+
+HDF5_DIR_x86_64-unknown-linux-gnu = "/usr"
+HDF5_DIR_aarch64-unknown-linux-gnu = "/usr"
+HDF5_DIR_armv7-unknown-linux-gnueabihf = "/usr"
+
+LIGHTGBM_DIR_x86_64-unknown-linux-gnu = "/usr"
+LIGHTGBM_DIR_aarch64-unknown-linux-gnu = "/usr"
+LIGHTGBM_DIR_armv7-unknown-linux-gnueabihf = "/usr"
+
+PROTOBUF_ROOT_x86_64-unknown-linux-gnu = "/usr"
+PROTOBUF_ROOT_aarch64-unknown-linux-gnu = "/usr"
+PROTOBUF_ROOT_armv7-unknown-linux-gnueabihf = "/usr"

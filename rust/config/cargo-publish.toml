@@ -1,0 +1,39 @@
+# Cargo Publishing Configuration Template
+# This file contains additional publishing settings that will be added to ~/.cargo/config.toml
+
+[http]
+# HTTP settings for cargo registry
+timeout = 30
+check-revoke = false
+
+[net]
+# Network settings for publishing
+retry = 3
+git-fetch-with-cli = true
+
+[registry.crates-io]
+# crates.io registry configuration
+protocol = "https"
+registry = "https://github.com/rust-lang/crates.io-index"
+
+# Alternative private registry examples (commented out)
+# [registries.my-company]
+# index = "https://my-company.com/registry/index/"
+# token = "your-private-registry-token"
+
+# [registries.gitlab]
+# index = "https://gitlab.com/api/v4/projects/PROJECT_ID/packages/cargo/"
+# token = "your-gitlab-token"
+
+[publish]
+# Publishing behavior settings
+registry = "crates-io"
+allow-dirty = false
+verify = true
+no-verify = false
+
+# Workspace publishing settings (for monorepos)
+# [workspace]
+# members = ["member1", "member2"]
+# exclude = ["excluded-crate"]
+# publish = false  # Set to false to prevent workspace publishing
