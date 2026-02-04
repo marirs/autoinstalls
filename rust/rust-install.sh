@@ -890,34 +890,541 @@ function setup_linux_cross_env() {
 function install_debian_dependencies() {
     echo -e "${CCYAN}Installing Debian/Ubuntu dependencies...${CEND}"
     
+    # Detect OS version for package handling
+    local os=$(cat /etc/os-release | grep "^ID=" | cut -d"=" -f2 | xargs)
+    local os_ver=$(cat /etc/os-release | grep "_ID=" | cut -d"=" -f2 | xargs)
+    
+    echo -e "${CCYAN}Detected OS: $os $os_ver${CEND}"
+    
     # Update package list
     if command -v apt >/dev/null 2>&1; then
         sudo apt update >> "$LOG_FILE" 2>&1
     fi
     
-    # Basic dependencies for all installations
-    local packages="build-essential pkg-config libssl-dev"
+    # Base packages common to all versions
+    local base_packages=(
+        "pkg-config"
+        "libsqlite3-dev"
+        "sqlite3"
+        "libbz2-dev"
+        "liblzma-dev"
+        "liblz4-dev"
+        "libssh-dev"
+    )
     
-    # Add essential development libraries for all modes
-    packages="$packages cmake ninja-build"
-    packages="$packages libmagic-dev libmagic1"
-    packages="$packages libpcre3-dev libpcre3"
-    packages="$packages libxml2-dev libxml2-utils"
-    packages="$packages libsqlite3-dev sqlite3"
-    packages="$packages zlib1g-dev libbz2-dev"
-    packages="$packages liblzma-dev liblz4-dev"
-    packages="$packages libcurl4-openssl-dev"
-    packages="$packages libssh-dev"
-    packages="$packages libavcodec-dev libavformat-dev libavutil-dev"
-    packages="$packages libswscale-dev libavfilter-dev"
-    packages="$packages libgtk-3-dev"
-    packages="$packages libglib2.0-dev"
-    packages="$packages libfreetype6-dev"
-    packages="$packages libfontconfig1-dev"
-    packages="$packages libx11-dev libxext-dev libxrender-dev"
+    # Try different build tool packages
+    local build_packages=("build-essential" "build-base" "base-devel")
+    for build_pkg in "${build_packages[@]}"; do
+        if apt-cache show "$build_pkg" >/dev/null 2>&1; then
+            base_packages+=("$build_pkg")
+            echo -e "${CCYAN}Found $build_pkg for build tools${CEND}"
+            break
+        fi
+    done
     
-    # Add cross-compilation packages for advanced modes
-    if [ "$INSTALL_MODE" != "basic" ]; then
+    # Try different SSL library packages
+    local ssl_packages=("libssl-dev" "openssl-dev" "libssl3-dev")
+    for ssl_pkg in "${ssl_packages[@]}"; do
+        if apt-cache show "$ssl_pkg" >/dev/null 2>&1; then
+            base_packages+=("$ssl_pkg")
+            echo -e "${CCYAN}Found $ssl_pkg for SSL support${CEND}"
+            break
+        fi
+    done
+    
+    # Version-specific packages with comprehensive fallbacks
+    local version_packages=()
+    
+    case "$os" in
+        "debian")
+            case "$os_ver" in
+                "9"|"10"|"11")
+                    # Older Debian versions
+                    version_packages+=(
+                        "cmake"
+                        "ninja-build"
+                        "libmagic-dev"
+                        "libmagic1"
+                        "libpcre3-dev"
+                        "libpcre3"
+                        "libxml2-dev"
+                        "libxml2-utils"
+                        "zlib1g-dev"
+                        "libcurl4-openssl-dev"
+                    )
+                    ;;
+                "12")
+                    # Debian 12 Bookworm
+                    version_packages+=(
+                        "cmake"
+                        "ninja-build"
+                        "libmagic-dev"
+                        "libmagic1"
+                        "libpcre3-dev"
+                        "libpcre3"
+                        "libxml2-dev"
+                        "libxml2-utils"
+                        "zlib1g-dev"
+                        "libcurl4-openssl-dev"
+                    )
+                    ;;
+                "13")
+                    # Debian 13 Trixie - comprehensive package handling
+                    version_packages+=(
+                        "cmake"
+                        "ninja-build"
+                        "zlib1g-dev"
+                    )
+                    
+                    # Try multiple magic library variations
+                    local magic_packages=("libmagic-dev" "libmagic1-dev" "file-dev")
+                    for magic_pkg in "${magic_packages[@]}"; do
+                        if apt-cache show "$magic_pkg" >/dev/null 2>&1; then
+                            version_packages+=("$magic_pkg")
+                            echo -e "${CCYAN}Found $magic_pkg for file magic support${CEND}"
+                            break
+                        fi
+                    done
+                    
+                    # Try PCRE library variations
+                    local pcre_packages=("libpcre3-dev" "libpcre2-dev" "libpcre-dev")
+                    for pcre_pkg in "${pcre_packages[@]}"; do
+                        if apt-cache show "$pcre_pkg" >/dev/null 2>&1; then
+                            version_packages+=("$pcre_pkg")
+                            echo -e "${CCYAN}Found $pcre_pkg for regex support${CEND}"
+                            break
+                        fi
+                    done
+                    
+                    # Try XML library variations
+                    local xml_packages=("libxml2-dev" "libxml2-utils" "libxml-2.0-dev")
+                    for xml_pkg in "${xml_packages[@]}"; do
+                        if apt-cache show "$xml_pkg" >/dev/null 2>&1; then
+                            version_packages+=("$xml_pkg")
+                            echo -e "${CCYAN}Found $xml_pkg for XML support${CEND}"
+                            break
+                        fi
+                    done
+                    
+                    # Try curl library variations
+                    local curl_packages=("libcurl4-openssl-dev" "libcurl-dev" "libcurl4-gnutls-dev")
+                    for curl_pkg in "${curl_packages[@]}"; do
+                        if apt-cache show "$curl_pkg" >/dev/null 2>&1; then
+                            version_packages+=("$curl_pkg")
+                            echo -e "${CCYAN}Found $curl_pkg for HTTP support${CEND}"
+                            break
+                        fi
+                    done
+                    ;;
+                *)
+                    # Future Debian versions - try all variations
+                    version_packages+=(
+                        "cmake"
+                        "ninja-build"
+                        "zlib1g-dev"
+                    )
+                    
+                    # Try magic packages
+                    local magic_packages=("libmagic-dev" "libmagic1-dev" "file-dev")
+                    for magic_pkg in "${magic_packages[@]}"; do
+                        if apt-cache show "$magic_pkg" >/dev/null 2>&1; then
+                            version_packages+=("$magic_pkg")
+                            break
+                        fi
+                    done
+                    
+                    # Try PCRE packages
+                    local pcre_packages=("libpcre3-dev" "libpcre2-dev" "libpcre-dev")
+                    for pcre_pkg in "${pcre_packages[@]}"; do
+                        if apt-cache show "$pcre_pkg" >/dev/null 2>&1; then
+                            version_packages+=("$pcre_pkg")
+                            break
+                        fi
+                    done
+                    
+                    # Try XML packages
+                    local xml_packages=("libxml2-dev" "libxml2-utils" "libxml-2.0-dev")
+                    for xml_pkg in "${xml_packages[@]}"; do
+                        if apt-cache show "$xml_pkg" >/dev/null 2>&1; then
+                            version_packages+=("$xml_pkg")
+                            break
+                        fi
+                    done
+                    
+                    # Try curl packages
+                    local curl_packages=("libcurl4-openssl-dev" "libcurl-dev" "libcurl4-gnutls-dev")
+                    for curl_pkg in "${curl_packages[@]}"; do
+                        if apt-cache show "$curl_pkg" >/dev/null 2>&1; then
+                            version_packages+=("$curl_pkg")
+                            break
+                        fi
+                    done
+                    ;;
+            esac
+            ;;
+        "ubuntu")
+            case "$os_ver" in
+                "18.04"|"20.04")
+                    # Older Ubuntu versions
+                    version_packages+=(
+                        "cmake"
+                        "ninja-build"
+                        "libmagic-dev"
+                        "libmagic1"
+                        "libpcre3-dev"
+                        "libpcre3"
+                        "libxml2-dev"
+                        "libxml2-utils"
+                        "zlib1g-dev"
+                        "libcurl4-openssl-dev"
+                    )
+                    ;;
+                "22.04"|"24.04")
+                    # Modern Ubuntu versions
+                    version_packages+=(
+                        "cmake"
+                        "ninja-build"
+                        "libmagic-dev"
+                        "libmagic1"
+                        "libpcre3-dev"
+                        "libpcre3"
+                        "libxml2-dev"
+                        "libxml2-utils"
+                        "zlib1g-dev"
+                        "libcurl4-openssl-dev"
+                    )
+                    ;;
+                *)
+                    # Future Ubuntu versions - try all variations
+                    version_packages+=(
+                        "cmake"
+                        "ninja-build"
+                        "zlib1g-dev"
+                    )
+                    
+                    # Try magic packages
+                    local magic_packages=("libmagic-dev" "libmagic1-dev" "file-dev")
+                    for magic_pkg in "${magic_packages[@]}"; do
+                        if apt-cache show "$magic_pkg" >/dev/null 2>&1; then
+                            version_packages+=("$magic_pkg")
+                            break
+                        fi
+                    done
+                    
+                    # Try PCRE packages
+                    local pcre_packages=("libpcre3-dev" "libpcre2-dev" "libpcre-dev")
+                    for pcre_pkg in "${pcre_packages[@]}"; do
+                        if apt-cache show "$pcre_pkg" >/dev/null 2>&1; then
+                            version_packages+=("$pcre_pkg")
+                            break
+                        fi
+                    done
+                    
+                    # Try XML packages
+                    local xml_packages=("libxml2-dev" "libxml2-utils" "libxml-2.0-dev")
+                    for xml_pkg in "${xml_packages[@]}"; do
+                        if apt-cache show "$xml_pkg" >/dev/null 2>&1; then
+                            version_packages+=("$xml_pkg")
+                            break
+                        fi
+                    done
+                    
+                    # Try curl packages
+                    local curl_packages=("libcurl4-openssl-dev" "libcurl-dev" "libcurl4-gnutls-dev")
+                    for curl_pkg in "${curl_packages[@]}"; do
+                        if apt-cache show "$curl_pkg" >/dev/null 2>&1; then
+                            version_packages+=("$curl_pkg")
+                            break
+                        fi
+                    done
+                    ;;
+            esac
+            ;;
+    esac
+    
+    # Combine all packages
+    local all_packages=("${base_packages[@]}" "${version_packages[@]}")
+    
+    # Install packages with comprehensive error handling
+    local failed_packages=()
+    local successful_packages=()
+    
+    echo -e "${CGREEN}Installing ${#all_packages[@]} packages...${CEND}"
+    
+    for package in "${all_packages[@]}"; do
+        echo -e "${CCYAN}Installing $package...${CEND}"
+        if apt-cache show "$package" >/dev/null 2>&1; then
+            sudo apt install -y "$package" >> "$LOG_FILE" 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ $package installed${CEND}"
+                successful_packages+=("$package")
+            else
+                echo -e "${CRED}✗ $package failed to install${CEND}"
+                failed_packages+=("$package")
+                
+                # Try to find alternatives for common packages
+                case "$package" in
+                    "build-essential")
+                        local build_alternatives=("build-base" "base-devel")
+                        for alt_pkg in "${build_alternatives[@]}"; do
+                            if apt-cache show "$alt_pkg" >/dev/null 2>&1; then
+                                echo -e "${CCYAN}Trying alternative: $alt_pkg${CEND}"
+                                sudo apt install -y "$alt_pkg" >> "$LOG_FILE" 2>&1
+                                if [ $? -eq 0 ]; then
+                                    echo -e "${CGREEN}✓ $alt_pkg installed (alternative to $package)${CEND}"
+                                    successful_packages+=("$alt_pkg")
+                                    break
+                                fi
+                            fi
+                        done
+                        ;;
+                    "ninja-build")
+                        local ninja_alternatives=("ninja" "ninja-dev")
+                        for alt_pkg in "${ninja_alternatives[@]}"; do
+                            if apt-cache show "$alt_pkg" >/dev/null 2>&1; then
+                                echo -e "${CCYAN}Trying alternative: $alt_pkg${CEND}"
+                                sudo apt install -y "$alt_pkg" >> "$LOG_FILE" 2>&1
+                                if [ $? -eq 0 ]; then
+                                    echo -e "${CGREEN}✓ $alt_pkg installed (alternative to $package)${CEND}"
+                                    successful_packages+=("$alt_pkg")
+                                    break
+                                fi
+                            fi
+                        done
+                        ;;
+                esac
+            fi
+        else
+            echo -e "${CYAN}⚠ Package $package not found, skipping${CEND}"
+            failed_packages+=("$package")
+        fi
+    done
+    
+    # Comprehensive package validation
+    echo -e "${CCYAN}Package installation summary:${CEND}"
+    echo -e "${CGREEN}Successfully installed: ${successful_packages[*]}${CEND}"
+    if [ ${#failed_packages[@]} -gt 0 ]; then
+        echo -e "${CYAN}Failed to install: ${failed_packages[*]}${CEND}"
+    fi
+    
+    # Check if critical packages are available for Rust compilation
+    local critical_ok=true
+    if ! command -v gcc >/dev/null 2>&1; then
+        echo -e "${CRED}✗ gcc is missing - critical for Rust compilation${CEND}"
+        critical_ok=false
+    fi
+    
+    if ! command -v make >/dev/null 2>&1; then
+        echo -e "${CRED}✗ make is missing - critical for Rust compilation${CEND}"
+        critical_ok=false
+    fi
+    
+    if ! ldconfig -p | grep -q libssl; then
+        echo -e "${CRED}✗ SSL libraries are missing - critical for Rust networking${CEND}"
+        critical_ok=false
+    fi
+    
+    if [ "$critical_ok" = true ]; then
+        echo -e "${CGREEN}✓ Critical dependencies are available${CEND}"
+        echo -e "${CCYAN}Rust installation will continue...${CEND}"
+    else
+        echo -e "${CRED}✗ Critical dependencies missing. Cannot continue.${CEND}"
+        exit 1
+    fi
+}
+
+function install_redhat_dependencies() {
+    echo -e "${CCYAN}Installing Red Hat/Fedora dependencies...${CEND}"
+    
+    # Detect OS version for package handling
+    local os=$(cat /etc/os-release | grep "^ID=" | cut -d"=" -f2 | xargs)
+    local os_ver=$(cat /etc/os-release | grep "_ID=" | cut -d"=" -f2 | xargs)
+    
+    echo -e "${CCYAN}Detected OS: $os $os_ver${CEND}"
+    
+    # Base packages common to all RHEL-based systems
+    local base_packages=(
+        "gcc"
+        "gcc-c++"
+        "make"
+        "openssl-devel"
+        "pkgconfig"
+        "sqlite-devel"
+        "sqlite"
+        "bzip2-devel"
+        "xz-devel"
+        "lz4-devel"
+        "libssh-devel"
+    )
+    
+    # Try different build tool packages
+    local build_packages=("cmake" "cmake3")
+    for build_pkg in "${build_packages[@]}"; do
+        if command -v dnf >/dev/null 2>&1; then
+            if dnf info "$build_pkg" >/dev/null 2>&1; then
+                base_packages+=("$build_pkg")
+                echo -e "${CCYAN}Found $build_pkg for build system${CEND}"
+                break
+            fi
+        elif command -v yum >/dev/null 2>&1; then
+            if yum info "$build_pkg" >/dev/null 2>&1; then
+                base_packages+=("$build_pkg")
+                echo -e "${CCYAN}Found $build_pkg for build system${CEND}"
+                break
+            fi
+        fi
+    done
+    
+    # Try different ninja packages
+    local ninja_packages=("ninja-build" "ninja")
+    for ninja_pkg in "${ninja_packages[@]}"; do
+        if command -v dnf >/dev/null 2>&1; then
+            if dnf info "$ninja_pkg" >/dev/null 2>&1; then
+                base_packages+=("$ninja_pkg")
+                echo -e "${CCYAN}Found $ninja_pkg for build system${CEND}"
+                break
+            fi
+        elif command -v yum >/dev/null 2>&1; then
+            if yum info "$ninja_pkg" >/dev/null 2>&1; then
+                base_packages+=("$ninja_pkg")
+                echo -e "${CCYAN}Found $ninja_pkg for build system${CEND}"
+                break
+            fi
+        fi
+    done
+    
+    # Version-specific packages with comprehensive fallbacks
+    local version_packages=()
+    
+    case "$os" in
+        "centos"|"rhel"|"rocky"|"almalinux")
+            case "$os_ver" in
+                "7")
+                    # CentOS/RHEL 7 uses yum and older package names
+                    version_packages+=(
+                        "file-devel"
+                        "file-libs"
+                        "pcre-devel"
+                        "pcre"
+                        "libxml2-devel"
+                        "libxml2"
+                        "zlib-devel"
+                        "libcurl-devel"
+                    )
+                    ;;
+                "8"|"9")
+                    # RHEL 8+ uses dnf and updated package names
+                    version_packages+=(
+                        "file-devel"
+                        "file-libs"
+                        "pcre-devel"
+                        "pcre"
+                        "libxml2-devel"
+                        "libxml2"
+                        "zlib-devel"
+                        "libcurl-devel"
+                    )
+                    ;;
+            esac
+            ;;
+        "fedora")
+            # Fedora uses latest package names
+            version_packages+=(
+                "file-devel"
+                "file-libs"
+                "pcre-devel"
+                "pcre"
+                "libxml2-devel"
+                "libxml2"
+                "zlib-devel"
+                "libcurl-devel"
+            )
+            ;;
+    esac
+    
+    # Combine all packages
+    local all_packages=("${base_packages[@]}" "${version_packages[@]}")
+    
+    # Install packages with comprehensive error handling
+    local failed_packages=()
+    local successful_packages=()
+    
+    echo -e "${CGREEN}Installing ${#all_packages[@]} packages...${CEND}"
+    
+    # Version-specific package manager selection
+    case "$os_ver" in
+        "7")
+            # CentOS 7 uses yum
+            for package in "${all_packages[@]}"; do
+                echo -e "${CCYAN}Installing $package...${CEND}"
+                if yum info "$package" >/dev/null 2>&1; then
+                    sudo yum install -y "$package" >> "$LOG_FILE" 2>&1
+                    if [ $? -eq 0 ]; then
+                        echo -e "${CGREEN}✓ $package installed${CEND}"
+                        successful_packages+=("$package")
+                    else
+                        echo -e "${CRED}✗ $package failed to install${CEND}"
+                        failed_packages+=("$package")
+                    fi
+                else
+                    echo -e "${CYAN}⚠ Package $package not found, skipping${CEND}"
+                    failed_packages+=("$package")
+                fi
+            done
+            ;;
+        *)
+            # RHEL 8+, Fedora use dnf
+            for package in "${all_packages[@]}"; do
+                echo -e "${CCYAN}Installing $package...${CEND}"
+                if dnf info "$package" >/dev/null 2>&1; then
+                    sudo dnf install -y "$package" >> "$LOG_FILE" 2>&1
+                    if [ $? -eq 0 ]; then
+                        echo -e "${CGREEN}✓ $package installed${CEND}"
+                        successful_packages+=("$package")
+                    else
+                        echo -e "${CRED}✗ $package failed to install${CEND}"
+                        failed_packages+=("$package")
+                    fi
+                else
+                    echo -e "${CYAN}⚠ Package $package not found, skipping${CEND}"
+                    failed_packages+=("$package")
+                fi
+            done
+            ;;
+    esac
+    
+    # Comprehensive package validation
+    echo -e "${CCYAN}Package installation summary:${CEND}"
+    echo -e "${CGREEN}Successfully installed: ${successful_packages[*]}${CEND}"
+    if [ ${#failed_packages[@]} -gt 0 ]; then
+        echo -e "${CYAN}Failed to install: ${failed_packages[*]}${CEND}"
+    fi
+    
+    # Check if critical packages are available for Rust compilation
+    local critical_ok=true
+    if ! command -v gcc >/dev/null 2>&1; then
+        echo -e "${CRED}✗ gcc is missing - critical for Rust compilation${CEND}"
+        critical_ok=false
+    fi
+    
+    if ! command -v make >/dev/null 2>&1; then
+        echo -e "${CRED}✗ make is missing - critical for Rust compilation${CEND}"
+        critical_ok=false
+    fi
+    
+    if ! ldconfig -p | grep -q libssl; then
+        echo -e "${CRED}✗ SSL libraries are missing - critical for Rust networking${CEND}"
+        critical_ok=false
+    fi
+    
+    if [ "$critical_ok" = true ]; then
+        echo -e "${CGREEN}✓ Critical dependencies are available${CEND}"
+        echo -e "${CCYAN}Rust installation will continue...${CEND}"
+    else
+        echo -e "${CRED}✗ Critical dependencies missing. Cannot continue.${CEND}"
+        exit 1
+    fi
+}
         packages="$packages gcc-x86-64-linux-gnu gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf"
         packages="$packages g++-x86-64-linux-gnu g++-aarch64-linux-gnu g++-arm-linux-gnueabihf"
         packages="$packages mingw-w64"
