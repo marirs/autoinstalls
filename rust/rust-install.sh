@@ -21,6 +21,9 @@ RUSTUP_VERSION="latest"
 INSTALL_ALL_TARGETS=true
 INSTALL_CROSS_DEPS=true
 
+# Cross-compilation choice
+LINKING_TYPE="gnu"  # Default to GNU, will be set by user choice
+
 # System Detection
 OS=""
 ARCH=""
@@ -86,6 +89,29 @@ function detect_platform() {
     
     PLATFORM="${OS}-${ARCH}"
     echo -e "${CGREEN}Platform detected: ${PLATFORM}${CEND}"
+}
+
+function choose_linking_type() {
+    echo -e "${CGREEN}Choose cross-compilation linking type:${CEND}"
+    echo "1) GNU linking - Standard Linux compatibility, dynamic linking [DEFAULT]"
+    echo "2) MUSL linking - Static binaries, better for containers, smaller size"
+    read -p "Enter choice [1-2]: " -n 1 -r
+    echo
+    
+    case $REPLY in
+        1|"")
+            LINKING_TYPE="gnu"
+            echo -e "${CCYAN}Selected: GNU linking (standard Linux compatibility)${CEND}"
+            ;;
+        2)
+            LINKING_TYPE="musl"
+            echo -e "${CCYAN}Selected: MUSL linking (static binaries)${CEND}"
+            ;;
+        *)
+            echo -e "${CRED}Invalid choice. Using default: GNU linking${CEND}"
+            LINKING_TYPE="gnu"
+            ;;
+    esac
 }
 
 function check_existing_rust() {
@@ -180,8 +206,13 @@ function install_debian_dependencies() {
         packages="$packages gcc-x86-64-linux-gnu gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf"
         packages="$packages mingw-w64"
         
-        # Add musl tools for static linking
-        packages="$packages musl-tools musl-dev"
+        # Add MUSL tools if selected
+        if [ "$LINKING_TYPE" = "musl" ]; then
+            packages="$packages musl-tools musl-dev"
+            echo -e "${CCYAN}Including MUSL tools for static linking${CEND}"
+        else
+            echo -e "${CCYAN}Using GNU toolchain for standard Linux compatibility${CEND}"
+        fi
     fi
     
     echo -e "${CCYAN}Installing packages: $packages${CEND}"
@@ -342,13 +373,18 @@ function install_linux_targets() {
             "x86_64-pc-windows-gnu"      # Windows x64
             "x86_64-apple-darwin"        # macOS x64
             "aarch64-apple-darwin"       # macOS ARM64
-            "aarch64-unknown-linux-gnu"  # Linux ARM64
-            "armv7-unknown-linux-gnueabihf"  # Linux ARM
-            "x86_64-unknown-linux-musl"  # Linux MUSL
-            "aarch64-unknown-linux-musl" # Linux ARM64 MUSL
+            "aarch64-unknown-linux-gnu"  # Linux ARM64 (GNU)
+            "armv7-unknown-linux-gnueabihf"  # Linux ARM (GNU)
             "wasm32-unknown-unknown"     # WebAssembly
             "wasm32-wasi"                # WebAssembly System Interface
         )
+        
+        # Add MUSL targets if selected
+        if [ "$LINKING_TYPE" = "musl" ]; then
+            targets+=("x86_64-unknown-linux-musl")      # Linux x64 (MUSL)
+            targets+=("aarch64-unknown-linux-musl")     # Linux ARM64 (MUSL)
+            echo -e "${CCYAN}Including MUSL targets for static linking${CEND}"
+        fi
         
         for target in "${targets[@]}"; do
             echo -e "${CCYAN}Installing target: $target${CEND}"
@@ -409,10 +445,27 @@ ar = "aarch64-linux-gnu-ar"
 linker = "arm-linux-gnueabihf-gcc"
 ar = "arm-linux-gnueabihf-ar"
 
+EOF
+
+    # Add MUSL configuration if selected
+    if [ "$LINKING_TYPE" = "musl" ]; then
+        cat >> "$CARGO_HOME/config.toml" << EOF
+
 [target.x86_64-unknown-linux-musl]
 # Linker for MUSL Linux target
 linker = "x86_64-linux-musl-gcc"
 ar = "x86_64-linux-musl-ar"
+
+[target.aarch64-unknown-linux-musl]
+# Linker for MUSL Linux ARM64 target
+linker = "aarch64-linux-musl-gcc"
+ar = "aarch64-linux-musl-ar"
+
+EOF
+        echo -e "${CCYAN}Added MUSL configuration to Cargo${CEND}"
+    fi
+    
+    cat >> "$CARGO_HOME/config.toml" << EOF
 
 [env]
 # Set environment variables for cross-compilation
@@ -806,13 +859,22 @@ function show_success_message() {
         echo -e "  ✓ Native target ($PLATFORM)"
         echo -e "  ✓ Windows x64 (x86_64-pc-windows-gnu)"
         echo -e "  ✓ Linux x64 (x86_64-unknown-linux-gnu)"
-        echo -e "  ✓ Linux ARM64 (aarch64-unknown-linux-gnu)"
+        echo -e "  ✓ Linux ARM64 (aarch64-unknown-linux-gnu) - GNU"
+        echo -e "  ✓ Linux ARM (armv7-unknown-linux-gnueabihf) - GNU"
         echo -e "  ✓ macOS x64 (x86_64-apple-darwin)"
         echo -e "  ✓ macOS ARM64 (aarch64-apple-darwin)"
         echo -e "  ✓ WebAssembly (wasm32-unknown-unknown)"
+        
+        if [ "$LINKING_TYPE" = "musl" ]; then
+            echo -e "  ✓ Linux x64 MUSL (x86_64-unknown-linux-musl) - Static linking"
+            echo -e "  ✓ Linux ARM64 MUSL (aarch64-unknown-linux-musl) - Static linking"
+        fi
     else
         echo -e "  ✓ Native target ($PLATFORM)"
     fi
+    
+    echo ""
+    echo -e "${CCYAN}Linking Type: ${LINKING_TYPE^^}${CEND}"
     echo ""
     echo -e "${CCYAN}Management Commands:${CEND}"
     echo -e "  Check versions: rustc --version && cargo --version"
@@ -833,8 +895,14 @@ function show_success_message() {
     echo -e "${CCYAN}Cross-Compilation Examples:${CEND}"
     echo -e "  Build for Windows: cargo build --target x86_64-pc-windows-gnu"
     echo -e "  Build for Linux: cargo build --target x86_64-unknown-linux-gnu"
+    echo -e "  Build for Linux ARM64: cargo build --target aarch64-unknown-linux-gnu"
     echo -e "  Build for macOS: cargo build --target x86_64-apple-darwin"
     echo -e "  Build for WebAssembly: cargo build --target wasm32-unknown-unknown"
+    
+    if [ "$LINKING_TYPE" = "musl" ]; then
+        echo -e "  Build static Linux binary: cargo build --target x86_64-unknown-linux-musl --release"
+        echo -e "  Build static Linux ARM64: cargo build --target aarch64-unknown-linux-musl --release"
+    fi
     echo ""
     echo -e "${CMAGENTA}Important Notes:${CEND}"
     echo -e "  • Rust is installed for current user only"
@@ -858,6 +926,9 @@ function main() {
     show_header
     detect_platform
     check_existing_rust
+    
+    # Choose linking type
+    choose_linking_type
     
     # Install dependencies
     install_dependencies

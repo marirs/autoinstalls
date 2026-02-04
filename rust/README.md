@@ -18,8 +18,9 @@ cd rust/
 # Run the universal installation script
 ./rust-install.sh
 
-# For Linux systems with sudo requirements
-sudo ./rust-install.sh
+# Choose linking type when prompted:
+# 1) GNU linking - Standard Linux compatibility, dynamic linking [DEFAULT]
+# 2) MUSL linking - Static binaries, better for containers, smaller size
 
 # Source Rust environment (for new shells)
 source ~/.cargo/env
@@ -40,8 +41,25 @@ source ~/.cargo/env
 ### ✅ Cross-Compilation Targets
 - **Windows**: `x86_64-pc-windows-gnu`, `x86_64-pc-windows-msvc`
 - **Linux**: `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `armv7-unknown-linux-gnueabihf`
+- **Linux MUSL** (optional): `x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`
 - **macOS**: `x86_64-apple-darwin`, `aarch64-apple-darwin`
 - **WebAssembly**: `wasm32-unknown-unknown`, `wasm32-wasi`
+
+## 🔗 Linking Types
+
+### GNU Linking (Default)
+- **Compatibility**: Standard Linux distributions
+- **Linking**: Dynamic linking with system libraries
+- **Binary Size**: Larger, but shares system libraries
+- **Use Case**: Development, standard Linux applications
+- **Dependencies**: Requires system libraries at runtime
+
+### MUSL Linking (Optional)
+- **Compatibility**: Static binaries, container-friendly
+- **Linking**: Static linking, no runtime dependencies
+- **Binary Size**: Smaller, self-contained
+- **Use Case**: Containers, embedded systems, minimal environments
+- **Dependencies**: No external dependencies required
 
 ## 🛡️ Security Features
 
@@ -74,7 +92,7 @@ source ~/.cargo/env
 ```bash
 # Automatically installs via Homebrew
 - OpenSSL, readline, sqlite3, xz, zlib
-- Cross-compilation: musl-cross, mingw-w64
+- Cross-compilation: mingw-w64, GNU cross-compilers
 - Native target: x86_64-apple-darwin or aarch64-apple-darwin
 ```
 
@@ -84,6 +102,9 @@ source ~/.cargo/env
 sudo apt update
 sudo apt install build-essential pkg-config libssl-dev
 sudo apt install gcc-x86-64-linux-gnu gcc-aarch64-linux-gnu mingw-w64
+
+# Add MUSL tools if selected (optional)
+sudo apt install musl-tools musl-dev
 
 # Red Hat/Fedora
 sudo dnf install gcc gcc-c++ make openssl-devel pkg-config
@@ -162,10 +183,10 @@ cargo build --release
 # Build for Windows x64
 cargo build --target x86_64-pc-windows-gnu
 
-# Build for Linux x64
+# Build for Linux x64 (GNU)
 cargo build --target x86_64-unknown-linux-gnu
 
-# Build for Linux ARM64
+# Build for Linux ARM64 (GNU)
 cargo build --target aarch64-unknown-linux-gnu
 
 # Build for macOS x64
@@ -176,12 +197,18 @@ cargo build --target aarch64-apple-darwin
 
 # Build for WebAssembly
 cargo build --target wasm32-unknown-unknown
+
+# Build static Linux binary (MUSL - if selected during installation)
+cargo build --target x86_64-unknown-linux-musl --release
+
+# Build static Linux ARM64 (MUSL - if selected during installation)
+cargo build --target aarch64-unknown-linux-musl --release
 ```
 
 ### Advanced Cross-Compilation
 ```bash
-# Build static Linux binary
-cargo build --target x86_64-unknown-linux-musl --release
+# Build static Linux binary (GNU)
+cargo build --target x86_64-unknown-linux-gnu --release
 
 # Build with specific features
 cargo build --target x86_64-pc-windows-gnu --features "serde"
@@ -400,7 +427,8 @@ pacman -Q mingw-w64-x86_64-toolchain
 
 ### Cross-Compilation Performance
 - **Target-specific optimization**: Use appropriate linker flags
-- **Static linking**: Use MUSL targets for static binaries
+- **GNU linking**: Standard Linux binaries, dynamic linking
+- **MUSL linking**: Static binaries, no runtime dependencies
 - **Binary size**: Use `cargo bloat` to analyze binary size
 - **Compilation speed**: Use `cargo check` for fast validation
 
@@ -484,13 +512,29 @@ jobs:
 
 ### Docker Integration
 ```dockerfile
-# Dockerfile
+# Dockerfile (GNU linking)
 FROM rust:1.75 as builder
 
 WORKDIR /app
 COPY . .
 
 # Build for specific target
+RUN cargo build --target x86_64-unknown-linux-gnu --release
+
+FROM ubuntu:latest
+RUN apt-get update && apt-get install -y ca-certificates
+COPY --from=builder /app/target/x86_64-unknown-linux-gnu/release/myapp /usr/local/bin/myapp
+CMD ["myapp"]
+```
+
+```dockerfile
+# Dockerfile (MUSL linking - static binary)
+FROM rust:1.75 as builder
+
+WORKDIR /app
+COPY . .
+
+# Build static binary
 RUN cargo build --target x86_64-unknown-linux-musl --release
 
 FROM alpine:latest
