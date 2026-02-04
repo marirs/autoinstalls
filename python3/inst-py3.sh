@@ -37,7 +37,7 @@ fi
 [ -f "/tmp/py3-install.log" ] && rm -f /tmp/py3-install.log
 
 # Versions
-python_version=3.8.5
+python_version=3.11.8
 
 # system information
 os=$(cat /etc/os-release | grep "^ID=" | cut -d"=" -f2 | xargs)
@@ -46,20 +46,37 @@ cores=$(nproc)
 architecture=$(arch)
 
 # get current py3 version if exists
-curr_py3=$(which python3 2>/dev/null | tail -1 |  cut -d" " -f3 | xargs) >> /dev/null 2>&1
-curr_py3_version=$($curr_py3 -V 2>/dev/null | cut -d" " -f2 | sed 's/\(.*\)\..*/\1/' | xargs) >> /dev/null 2>&1
+curr_py3=$(which python3 2>/dev/null)
+if [[ -n "$curr_py3" ]]; then
+    curr_py3_version=$($curr_py3 -V 2>/dev/null | cut -d" " -f2)
+else
+    curr_py3_version="none"
+fi
 
-[[ "$architecture" != "x86_64"  ]] && echo "${CRED}$architecture not supported, cannot be installed. You need x86_64 system.${CEND}" && exit 1
+# Architecture support
+if [[ "$architecture" != "x86_64" && "$architecture" != "aarch64" && "$architecture" != "arm64" ]]; then
+    echo "${CRED}$architecture not supported, cannot be installed. You need x86_64 or ARM64 system.${CEND}"
+    exit 1
+fi
+
+# Display current system info
+echo -e "${CGREEN}System Information:${CEND}"
+echo -e "  OS: $os $os_ver"
+echo -e "  Architecture: $architecture"
+echo -e "  CPU Cores: $cores"
+echo -e "  Current Python3: $curr_py3_version"
+echo -e "  Target Python: $python_version"
+echo ""
 
 function install_deps() {
     echo -e "${CGREEN}Updating system...${CEND}"
     apt-get update -y >> /tmp/apt-packages.log 2>&1
     apt-get -y upgrade >> /tmp/apt-packages.log 2>&1
-    pkgs="git sudo pcregrep net-tools inxi software-properties-common libpq-dev devscripts build-essential zip unzip p7zip-full p7zip-rar \
-    libuv1 libre2-5 sysstat schedtool ca-certificates poppler-utils libffi-dev libssl-dev screen numactl libgdbm-compat-dev build-essential \
-    libssl-dev libffi-dev zlib1g zlib1g-dev screen libuv1 libuv1-dev libre2-5 libre2-dev build-essential zlib1g-dev libbz2-dev liblzma-dev \
-    libncurses5-dev libreadline-dev xclip xsel libsqlite3-dev libssl-dev libgdbm-dev liblzma-dev tk-dev lzma lzma-dev libgdbm-dev build-essential \
-    liblzma-dev libgdbm-dev libsqlite3-dev libbz2-dev tk-dev "
+    pkgs="git sudo pcregrep net-tools inxi software-properties-common libpq-dev devscripts build-essential \
+    zip unzip p7zip-full p7zip-rar libuv1 libre2-5 sysstat schedtool ca-certificates poppler-utils \
+    libffi-dev libssl-dev screen numactl libgdbm-compat-dev libuv1-dev libre2-dev zlib1g-dev \
+    libbz2-dev liblzma-dev libncurses5-dev libreadline-dev xclip xsel libsqlite3-dev \
+    tk-dev libgdbm-dev"
     if [[ "$os" == *"ubuntu"* ]]; then
         pkgs=$(echo $pkgs; echo "libncurses-dev libncurses5-dev libncursesw5-dev")
         cd /tmp/ || return
@@ -96,7 +113,11 @@ function install_py3() {
     cd /tmp
     [ -d Python-$python_version ] && rm -rf Python-* >> /tmp/py3-install.log 2>&1 
     echo -e "${CGREEN}Downloading Python-$python_version...${CEND}"
-    wget wget https://www.python.org/ftp/python/$python_version/Python-$python_version.tgz >> /tmp/py3-install.log 2>&1
+    wget https://www.python.org/ftp/python/$python_version/Python-$python_version.tgz >> /tmp/py3-install.log 2>&1
+    if [ $? -ne 0 ]; then
+        echo -e "    - ${CRED}failed to download Python-$python_version; see /tmp/py3-install.log for more info.${CEND}"
+        exit 1
+    fi
     echo -e "${CGREEN}Expanding Python-$python_version...${CEND}"
     tar xvf Python-$python_version.tgz >> /tmp/py3-install.log 2>&1
     if [ $? -ne 0 ]; then
@@ -123,7 +144,7 @@ function install_py3() {
         exit 1
     fi
     echo -e "${CGREEN}Upgrading pip3...${CEND}"
-    python3.8 -m pip install --upgrade pip >> /tmp/py3-install.log 2>&1
+    python${python_version%.*} -m pip install --upgrade pip >> /tmp/py3-install.log 2>&1
     if [ $? -ne 0 ]; then
         echo -e "    - ${CRED}failed to upgrade pip3; see /tmp/py3-install.log for more info.${CEND}"
         exit 1
@@ -131,8 +152,8 @@ function install_py3() {
 }
 
 function install_venv () {
-    echo -e "${CGREEN}Installing virtualenvwtapper pip3...${CEND}"
-    pip3 install virtualenvwrapper >> /tmp/py3-install.log 2>&1
+    echo -e "${CGREEN}Installing virtualenvwrapper...${CEND}"
+    python${python_version%.*} -m pip install virtualenvwrapper >> /tmp/py3-install.log 2>&1
     if [ $? -ne 0 ]; then
         echo -e "    - ${CRED}failed to install virtualenvwrapper; see /tmp/py3-install.log for more info.${CEND}"
         exit 1
@@ -142,7 +163,7 @@ function install_venv () {
         echo "" >> "$HOME/.bashrc"
         echo "# Virtualenv" >> "$HOME/.bashrc"
         echo "export WORKON_HOME=$HOME/.virtualenvs" >> "$HOME/.bashrc"
-        echo "export VIRTUALENVWRAPPER_PYTHON=/usr/bin/python3" >> "$HOME/.bashrc"
+        echo "export VIRTUALENVWRAPPER_PYTHON=/usr/bin/python${python_version%.*}" >> "$HOME/.bashrc"
         echo "source /usr/local/bin/virtualenvwrapper.sh" >> "$HOME/.bashrc"
     fi
 }
@@ -156,6 +177,23 @@ install_venv
 # clean-up the downloads, although not necessary
 clean_up
 
-echo " "
-echo -e "${CGREEN}>> Done.${CEND} ${CMAGENTA}If you reached here, seriously done!${CEND}"
+echo ""
+echo -e "${CGREEN}>> Python $python_version installation completed successfully!${CEND}"
+echo ""
+echo -e "${CCYAN}Installation Summary:${CEND}"
+echo -e "  Python Version: $python_version"
+echo -e "  Installation Path: /usr/bin/python${python_version%.*}"
+echo -e "  Pip Version: $(python${python_version%.*} -m pip --version | cut -d' ' -f2)"
+echo -e "  Virtualenvwrapper: Installed"
+echo ""
+echo -e "${CCYAN}Next Steps:${CEND}"
+echo -e "  1. Source your bashrc: source ~/.bashrc"
+echo -e "  2. Create virtual environment: mkvirtualenv myenv"
+echo -e "  3. Test installation: python${python_version%.*} --version"
+echo ""
+echo -e "${CCYAN}Logs:${CEND}"
+echo -e "  Dependencies: /tmp/apt-packages.log"
+echo -e "  Python Install: /tmp/py3-install.log"
+echo ""
+echo -e "${CMAGENTA}If you reached here, seriously done!${CEND}"
 # End of script
