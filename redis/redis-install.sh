@@ -24,6 +24,10 @@ REDIS_CONF_DIR="/etc/redis"
 REDIS_PORT="6379"
 REDIS_PASSWORD_FILE="/etc/redis/redis.passwd"
 
+# Installation options
+INSTALL_TYPE="source"  # Can be "source" or "repository"
+REDIS_REPO_VERSION="7.2"  # For repository installation
+
 # System Information
 ARCH=$(uname -m)
 os=$(cat /etc/os-release | grep "^ID=" | cut -d"=" -f2 | xargs)
@@ -48,6 +52,309 @@ function check_root() {
     if [ "$EUID" -ne 0 ]; then
         echo -e "${CRED}Please run as root or with sudo${CEND}"
         exit 1
+    fi
+}
+
+function show_installation_menu() {
+    echo ""
+    echo -e "${CCYAN}Choose Redis installation method:${CEND}"
+    echo "   1) Source installation (v$REDIS_VERSION) - Recommended for latest features"
+    echo "   2) Repository installation (v$REDIS_REPO_VERSION) - Easier maintenance"
+    echo ""
+    
+    while [[ $INSTALL_CHOICE != "1" && $INSTALL_CHOICE != "2" ]]; do
+        read -p "Select installation method [1-2]: " INSTALL_CHOICE
+    done
+    
+    case $INSTALL_CHOICE in
+        1)
+            INSTALL_TYPE="source"
+            echo -e "${CGREEN}Selected: Source installation v$REDIS_VERSION${CEND}"
+            ;;
+        2)
+            INSTALL_TYPE="repository"
+            echo -e "${CGREEN}Selected: Repository installation v$REDIS_REPO_VERSION${CEND}"
+            ;;
+    esac
+}
+
+# Function to add Redis repository with intelligent management
+function add_redis_repository_enhanced() {
+    echo -e "${CCYAN}Adding Redis repository for $os $os_ver...${CEND}" >> "$LOG_FILE"
+    
+    case "$os" in
+        "ubuntu")
+            add_ubuntu_redis_repo_enhanced
+            ;;
+        "debian")
+            add_debian_redis_repo_enhanced
+            ;;
+        "centos"|"rhel"|"rocky"|"almalinux")
+            add_rhel_redis_repo_enhanced
+            ;;
+        "fedora")
+            add_fedora_redis_repo_enhanced
+            ;;
+        *)
+            echo -e "${CRED}✗ Unsupported OS for Redis: $os${CEND}" >> "$LOG_FILE"
+            return 1
+            ;;
+    esac
+}
+
+function add_ubuntu_redis_repo_enhanced() {
+    echo -e "${CCYAN}Configuring Redis repository for Ubuntu...${CEND}" >> "$LOG_FILE"
+    
+    # Check Ubuntu version compatibility
+    case "$os_ver" in
+        "18.04"|"20.04"|"22.04"|"24.04")
+            echo -e "${CGREEN}✓ Ubuntu $os_ver is supported${CEND}" >> "$LOG_FILE"
+            ;;
+        *)
+            echo -e "${CYAN}⚠ Ubuntu $os_ver may not be fully supported${CEND}" >> "$LOG_FILE"
+            ;;
+    esac
+    
+    # Check if repository already exists
+    if [ -f "/etc/apt/sources.list.d/redis.list" ] || apt-cache policy | grep -q "redislabs" || apt-cache policy | grep -q "redis"; then
+        echo -e "${CYAN}⚠ Redis repository already exists or Redis packages available${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Install required packages
+    echo -e "${CCYAN}Installing required packages...${CEND}" >> "$LOG_FILE"
+    apt-get update >> "$LOG_FILE" 2>&1
+    
+    local required_packages=("curl" "gnupg" "software-properties-common")
+    for pkg in "${required_packages[@]}"; do
+        if ! dpkg -l | grep -q "$pkg"; then
+            echo -e "${CCYAN}Installing $pkg...${CEND}" >> "$LOG_FILE"
+            apt-get install -y "$pkg" >> "$LOG_FILE" 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ $pkg installed${CEND}" >> "$LOG_FILE"
+            else
+                echo -e "${CRED}✗ Failed to install $pkg${CEND}" >> "$LOG_FILE"
+                return 1
+            fi
+        fi
+    done
+    
+    # Try to add Redis PPA first
+    echo -e "${CCYAN}Adding Redis PPA...${CEND}" >> "$LOG_FILE"
+    if command -v add-apt-repository >/dev/null 2>&1; then
+        add-apt-repository -y ppa:redislabs/redis >> "$LOG_FILE" 2>&1
+        if [ $? -eq 0 ]; then
+            echo -e "${CGREEN}✓ Redis PPA added${CEND}" >> "$LOG_FILE"
+        else
+            echo -e "${CYAN}⚠ Redis PPA failed, will use default packages${CEND}" >> "$LOG_FILE"
+        fi
+    fi
+    
+    # Update package list
+    echo -e "${CCYAN}Updating package list...${CEND}" >> "$LOG_FILE"
+    apt-get update >> "$LOG_FILE" 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Package list updated${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to update package list${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Verify Redis packages are available
+    echo -e "${CCYAN}Verifying Redis package availability...${CEND}" >> "$LOG_FILE"
+    if apt-cache show "redis" >/dev/null 2>&1 || apt-cache show "redis-server" >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ Redis packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Redis packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+}
+
+function add_debian_redis_repo_enhanced() {
+    echo -e "${CCYAN}Configuring Redis repository for Debian...${CEND}" >> "$LOG_FILE"
+    
+    # Check Debian version compatibility
+    case "$os_ver" in
+        "9"|"10"|"11"|"12"|"13")
+            echo -e "${CGREEN}✓ Debian $os_ver is supported${CEND}" >> "$LOG_FILE"
+            ;;
+        *)
+            echo -e "${CYAN}⚠ Debian $os_ver may not be fully supported${CEND}" >> "$LOG_FILE"
+            ;;
+    esac
+    
+    # Check if repository already exists
+    if [ -f "/etc/apt/sources.list.d/redis.list" ] || apt-cache policy | grep -q "redislabs" || apt-cache policy | grep -q "redis"; then
+        echo -e "${CYAN}⚠ Redis repository already exists or Redis packages available${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Install required packages
+    echo -e "${CCYAN}Installing required packages...${CEND}" >> "$LOG_FILE"
+    apt-get update >> "$LOG_FILE" 2>&1
+    
+    local required_packages=("curl" "gnupg" "software-properties-common")
+    for pkg in "${required_packages[@]}"; do
+        if ! dpkg -l | grep -q "$pkg"; then
+            echo -e "${CCYAN}Installing $pkg...${CEND}" >> "$LOG_FILE"
+            apt-get install -y "$pkg" >> "$LOG_FILE" 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ $pkg installed${CEND}" >> "$LOG_FILE"
+            else
+                echo -e "${CRED}✗ Failed to install $pkg${CEND}" >> "$LOG_FILE"
+                return 1
+            fi
+        fi
+    done
+    
+    # Try to add Redis PPA first
+    echo -e "${CCYAN}Adding Redis PPA...${CEND}" >> "$LOG_FILE"
+    if command -v add-apt-repository >/dev/null 2>&1; then
+        add-apt-repository -y ppa:redislabs/redis >> "$LOG_FILE" 2>&1
+        if [ $? -eq 0 ]; then
+            echo -e "${CGREEN}✓ Redis PPA added${CEND}" >> "$LOG_FILE"
+        else
+            echo -e "${CYAN}⚠ Redis PPA failed, will use default packages${CEND}" >> "$LOG_FILE"
+        fi
+    fi
+    
+    # Update package list
+    echo -e "${CCYAN}Updating package list...${CEND}" >> "$LOG_FILE"
+    apt-get update >> "$LOG_FILE" 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Package list updated${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to update package list${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Verify Redis packages are available
+    echo -e "${CCYAN}Verifying Redis package availability...${CEND}" >> "$LOG_FILE"
+    if apt-cache show "redis" >/dev/null 2>&1 || apt-cache show "redis-server" >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ Redis packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Redis packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+}
+
+function add_rhel_redis_repo_enhanced() {
+    echo -e "${CCYAN}Configuring Redis repository for RHEL-based systems...${CEND}" >> "$LOG_FILE"
+    
+    # Check OS version compatibility
+    case "$os_ver" in
+        "7"|"8"|"9")
+            echo -e "${CGREEN}✓ RHEL/CentOS/Rocky/AlmaLinux $os_ver is supported${CEND}" >> "$LOG_FILE"
+            ;;
+        *)
+            echo -e "${CRED}✗ RHEL/CentOS version $os_ver not supported${CEND}" >> "$LOG_FILE"
+            return 1
+            ;;
+    esac
+    
+    # Determine package manager
+    local pkg_manager="dnf"
+    if ! command -v dnf >/dev/null 2>&1; then
+        pkg_manager="yum"
+    fi
+    
+    echo -e "${CCYAN}Using package manager: $pkg_manager${CEND}" >> "$LOG_FILE"
+    
+    # Enable EPEL repository for Redis
+    if ! rpm -q epel-release >/dev/null 2>&1; then
+        echo -e "${CCYAN}Installing EPEL repository...${CEND}" >> "$LOG_FILE"
+        $pkg_manager install -y epel-release >> "$LOG_FILE" 2>&1
+        if [ $? -eq 0 ]; then
+            echo -e "${CGREEN}✓ EPEL repository installed${CEND}" >> "$LOG_FILE"
+        else
+            echo -e "${CRED}✗ Failed to install EPEL repository${CEND}" >> "$LOG_FILE"
+            return 1
+        fi
+    else
+        echo -e "${CYAN}⚠ EPEL repository already installed${CEND}" >> "$LOG_FILE"
+    fi
+    
+    # For RHEL/CentOS 8/9, enable PowerTools/CRB repository
+    if [ "$os_ver" = "8" ] || [ "$os_ver" = "9" ]; then
+        echo -e "${CCYAN}Enabling PowerTools/CRB repository...${CEND}" >> "$LOG_FILE"
+        if [ "$os_ver" = "8" ]; then
+            $pkg_manager config-manager --enable powertools >> "$LOG_FILE" 2>&1
+        else
+            $pkg_manager config-manager --enable crb >> "$LOG_FILE" 2>&1
+        fi
+    fi
+    
+    # Clean package cache
+    echo -e "${CCYAN}Cleaning package cache...${CEND}" >> "$LOG_FILE"
+    $pkg_manager clean all >> "$LOG_FILE" 2>&1
+    
+    # Verify Redis packages are available
+    echo -e "${CCYAN}Verifying Redis package availability...${CEND}" >> "$LOG_FILE"
+    if $pkg_manager info redis >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ Redis packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Redis packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+}
+
+function add_fedora_redis_repo_enhanced() {
+    echo -e "${CCYAN}Configuring Redis repository for Fedora...${CEND}" >> "$LOG_FILE"
+    
+    # Check Fedora version
+    local fedora_major=$(echo "$os_ver" | cut -d. -f1)
+    echo -e "${CGREEN}✓ Fedora $os_ver detected${CEND}" >> "$LOG_FILE"
+    
+    # Determine package manager
+    local pkg_manager="dnf"
+    
+    # Update package list
+    echo -e "${CCYAN}Updating package list...${CEND}" >> "$LOG_FILE"
+    $pkg_manager makecache >> "$LOG_FILE" 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Package cache updated${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to update package cache${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Verify Redis packages are available
+    echo -e "${CCYAN}Verifying Redis package availability...${CEND}" >> "$LOG_FILE"
+    if $pkg_manager info redis >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ Redis packages available in Fedora repositories${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Redis packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+}
+
+function install_redis_from_repository() {
+    echo -e "${CGREEN}Installing Redis from repository...${CEND}"
+    
+    case "$os" in
+        "ubuntu"|"debian")
+            # Try Redis from PPA first, then default
+            if apt-cache show "redis" >/dev/null 2>&1; then
+                apt-get install -y redis >> "$LOG_FILE" 2>&1
+            else
+                apt-get install -y redis-server redis-tools >> "$LOG_FILE" 2>&1
+            fi
+            ;;
+        "centos"|"rhel"|"rocky"|"almalinux"|"fedora")
+            # Determine package manager
+            local pkg_manager="dnf"
+            if ! command -v dnf >/dev/null 2>&1; then
+                pkg_manager="yum"
+            fi
+            $pkg_manager install -y redis >> "$LOG_FILE" 2>&1
+            ;;
+    esac
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Redis installed from repository${CEND}"
+    else
+        echo -e "${CRED}✗ Failed to install Redis from repository${CEND}"
+        return 1
     fi
 }
 
@@ -556,22 +863,41 @@ function compile_redis() {
 function install_redis() {
     echo -e "${CGREEN}Installing Redis...${CEND}"
     
-    # Install Redis binaries
-    make install PREFIX=/usr/local >> "$LOG_FILE" 2>&1
-    
-    if [ $? -ne 0 ]; then
-        echo -e "${CRED}Failed to install Redis${CEND}"
-        exit 1
+    if [ "$INSTALL_TYPE" = "repository" ]; then
+        # Install from repository with intelligent management
+        echo -e "${CCYAN}Using repository installation method${CEND}"
+        
+        # Add repository with intelligent management
+        if add_redis_repository_enhanced; then
+            echo -e "${CGREEN}✓ Redis repository configured${CEND}"
+        else
+            echo -e "${CRED}✗ Failed to configure Redis repository${CEND}"
+            exit 1
+        fi
+        
+        # Install Redis from repository
+        install_redis_from_repository
+    else
+        # Original source installation
+        echo -e "${CCYAN}Using source installation method${CEND}"
+        
+        # Install Redis binaries
+        make install PREFIX=/usr/local >> "$LOG_FILE" 2>&1
+        
+        if [ $? -ne 0 ]; then
+            echo -e "${CRED}Failed to install Redis${CEND}"
+            exit 1
+        fi
+        
+        # Create symbolic links
+        ln -sf /usr/local/bin/redis-server /usr/bin/redis-server
+        ln -sf /usr/local/bin/redis-cli /usr/bin/redis-cli
+        ln -sf /usr/local/bin/redis-benchmark /usr/bin/redis-benchmark
+        ln -sf /usr/local/bin/redis-check-aof /usr/bin/redis-check-aof
+        ln -sf /usr/local/bin/redis-check-rdb /usr/bin/redis-check-rdb
+        
+        echo -e "${CGREEN}Redis installed from source${CEND}"
     fi
-    
-    # Create symbolic links
-    ln -sf /usr/local/bin/redis-server /usr/bin/redis-server
-    ln -sf /usr/local/bin/redis-cli /usr/bin/redis-cli
-    ln -sf /usr/local/bin/redis-benchmark /usr/bin/redis-benchmark
-    ln -sf /usr/local/bin/redis-check-aof /usr/bin/redis-check-aof
-    ln -sf /usr/local/bin/redis-check-rdb /usr/bin/redis-check-rdb
-    
-    echo -e "${CGREEN}Redis installed successfully${CEND}"
 }
 
 function configure_redis() {
@@ -1612,11 +1938,20 @@ function show_success_message() {
 show_header
 check_root
 check_architecture
+show_installation_menu
 install_dependencies
 create_redis_user
-download_redis
-compile_redis
-install_redis
+
+if [ "$INSTALL_TYPE" = "repository" ]; then
+    # Skip download and compile for repository installation
+    install_redis
+else
+    # Original source installation flow
+    download_redis
+    compile_redis
+    install_redis
+fi
+
 configure_redis
 create_systemd_service
 configure_firewall

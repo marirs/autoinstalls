@@ -315,6 +315,329 @@ function install_dependencies() {
     esac
 }
 
+# Function to add MongoDB repository with intelligent management
+function add_mongodb_repository_enhanced() {
+    echo -e "${CCYAN}Adding MongoDB repository for $os $os_ver...${CEND}" >> /tmp/mongodb-install.log
+    
+    case "$os" in
+        "ubuntu")
+            add_ubuntu_mongodb_repo_enhanced
+            ;;
+        "debian")
+            add_debian_mongodb_repo_enhanced
+            ;;
+        "centos"|"rhel"|"rocky"|"almalinux")
+            add_rhel_mongodb_repo_enhanced
+            ;;
+        "fedora")
+            add_fedora_mongodb_repo_enhanced
+            ;;
+        *)
+            echo -e "${CRED}✗ Unsupported OS for MongoDB: $os${CEND}" >> /tmp/mongodb-install.log
+            return 1
+            ;;
+    esac
+}
+
+function add_ubuntu_mongodb_repo_enhanced() {
+    echo -e "${CCYAN}Configuring MongoDB repository for Ubuntu...${CEND}" >> /tmp/mongodb-install.log
+    
+    # Check Ubuntu version compatibility
+    case "$os_ver" in
+        "18.04"|"20.04"|"22.04"|"24.04")
+            echo -e "${CGREEN}✓ Ubuntu $os_ver is supported${CEND}" >> /tmp/mongodb-install.log
+            ;;
+        *)
+            echo -e "${CYAN}⚠ Ubuntu $os_ver may not be fully supported${CEND}" >> /tmp/mongodb-install.log
+            ;;
+    esac
+    
+    # Check if repository already exists
+    if [ -f "/etc/apt/sources.list.d/mongodb-org-${MONGO_VER}.list" ] || apt-cache policy | grep -q "repo.mongodb.org"; then
+        echo -e "${CYAN}⚠ MongoDB repository already exists${CEND}" >> /tmp/mongodb-install.log
+        return 0
+    fi
+    
+    # Install required packages
+    echo -e "${CCYAN}Installing required packages...${CEND}" >> /tmp/mongodb-install.log
+    apt-get update >> /tmp/mongodb-install.log 2>&1
+    
+    local required_packages=("curl" "gnupg")
+    for pkg in "${required_packages[@]}"; do
+        if ! dpkg -l | grep -q "$pkg"; then
+            echo -e "${CCYAN}Installing $pkg...${CEND}" >> /tmp/mongodb-install.log
+            apt-get install -y "$pkg" >> /tmp/mongodb-install.log 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ $pkg installed${CEND}" >> /tmp/mongodb-install.log
+            else
+                echo -e "${CRED}✗ Failed to install $pkg${CEND}" >> /tmp/mongodb-install.log
+                return 1
+            fi
+        fi
+    done
+    
+    # Get Ubuntu codename dynamically
+    local ubuntu_codename=""
+    if command -v lsb_release >/dev/null 2>&1; then
+        ubuntu_codename=$(lsb_release -cs 2>/dev/null || echo "jammy")
+    else
+        # Fallback to version-based codename
+        case "$os_ver" in
+            "18.04") ubuntu_codename="bionic" ;;
+            "20.04") ubuntu_codename="focal" ;;
+            "22.04") ubuntu_codename="jammy" ;;
+            "24.04") ubuntu_codename="noble" ;;
+            *) ubuntu_codename="jammy" ;;
+        esac
+    fi
+    
+    echo -e "${CCYAN}Using Ubuntu codename: $ubuntu_codename${CEND}" >> /tmp/mongodb-install.log
+    
+    # Import MongoDB GPG key
+    echo -e "${CCYAN}Importing MongoDB GPG key...${CEND}" >> /tmp/mongodb-install.log
+    curl -fsSL "https://www.mongodb.org/static/pgp/server-${MONGO_VER}.asc" | gpg -o /usr/share/keyrings/mongodb-server-${MONGO_VER}.gpg >> /tmp/mongodb-install.log 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ MongoDB GPG key imported${CEND}" >> /tmp/mongodb-install.log
+    else
+        echo -e "${CRED}✗ Failed to import MongoDB GPG key${CEND}" >> /tmp/mongodb-install.log
+        return 1
+    fi
+    
+    # Add MongoDB repository
+    echo -e "${CCYAN}Adding MongoDB repository...${CEND}" >> /tmp/mongodb-install.log
+    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-${MONGO_VER}.gpg ] https://repo.mongodb.org/apt/ubuntu $ubuntu_codename/mongodb-org/${MONGO_VER} multiverse" | tee "/etc/apt/sources.list.d/mongodb-org-${MONGO_VER}.list" >> /tmp/mongodb-install.log 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ MongoDB repository added${CEND}" >> /tmp/mongodb-install.log
+    else
+        echo -e "${CRED}✗ Failed to add MongoDB repository${CEND}" >> /tmp/mongodb-install.log
+        return 1
+    fi
+    
+    # Update package list
+    echo -e "${CCYAN}Updating package list...${CEND}" >> /tmp/mongodb-install.log
+    apt-get update >> /tmp/mongodb-install.log 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Package list updated${CEND}" >> /tmp/mongodb-install.log
+    else
+        echo -e "${CRED}✗ Failed to update package list${CEND}" >> /tmp/mongodb-install.log
+        return 1
+    fi
+    
+    # Verify MongoDB packages are available
+    echo -e "${CCYAN}Verifying MongoDB package availability...${CEND}" >> /tmp/mongodb-install.log
+    if apt-cache show "mongodb-org" >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ MongoDB packages available${CEND}" >> /tmp/mongodb-install.log
+    else
+        echo -e "${CRED}✗ MongoDB packages not available${CEND}" >> /tmp/mongodb-install.log
+        return 1
+    fi
+}
+
+function add_debian_mongodb_repo_enhanced() {
+    echo -e "${CCYAN}Configuring MongoDB repository for Debian...${CEND}" >> /tmp/mongodb-install.log
+    
+    # Check Debian version compatibility
+    case "$os_ver" in
+        "9"|"10"|"11"|"12"|"13")
+            echo -e "${CGREEN}✓ Debian $os_ver is supported${CEND}" >> /tmp/mongodb-install.log
+            ;;
+        *)
+            echo -e "${CYAN}⚠ Debian $os_ver may not be fully supported${CEND}" >> /tmp/mongodb-install.log
+            ;;
+    esac
+    
+    # Check if repository already exists
+    if [ -f "/etc/apt/sources.list.d/mongodb-org-${MONGO_VER}.list" ] || apt-cache policy | grep -q "repo.mongodb.org"; then
+        echo -e "${CYAN}⚠ MongoDB repository already exists${CEND}" >> /tmp/mongodb-install.log
+        return 0
+    fi
+    
+    # Install required packages
+    echo -e "${CCYAN}Installing required packages...${CEND}" >> /tmp/mongodb-install.log
+    apt-get update >> /tmp/mongodb-install.log 2>&1
+    
+    local required_packages=("curl" "gnupg" "lsb-release")
+    for pkg in "${required_packages[@]}"; do
+        if ! dpkg -l | grep -q "$pkg"; then
+            echo -e "${CCYAN}Installing $pkg...${CEND}" >> /tmp/mongodb-install.log
+            apt-get install -y "$pkg" >> /tmp/mongodb-install.log 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ $pkg installed${CEND}" >> /tmp/mongodb-install.log
+            else
+                echo -e "${CRED}✗ Failed to install $pkg${CEND}" >> /tmp/mongodb-install.log
+                return 1
+            fi
+        fi
+    done
+    
+    # Get Debian codename dynamically
+    local debian_codename=""
+    if command -v lsb_release >/dev/null 2>&1; then
+        debian_codename=$(lsb_release -cs 2>/dev/null || echo "bookworm")
+    else
+        # Fallback to version-based codename
+        case "$os_ver" in
+            "9") debian_codename="stretch" ;;
+            "10") debian_codename="buster" ;;
+            "11") debian_codename="bullseye" ;;
+            "12") debian_codename="bookworm" ;;
+            "13") debian_codename="trixie" ;;
+            *) debian_codename="bookworm" ;;
+        esac
+    fi
+    
+    echo -e "${CCYAN}Using Debian codename: $debian_codename${CEND}" >> /tmp/mongodb-install.log
+    
+    # Import MongoDB GPG key
+    echo -e "${CCYAN}Importing MongoDB GPG key...${CEND}" >> /tmp/mongodb-install.log
+    curl -fsSL "https://www.mongodb.org/static/pgp/server-${MONGO_VER}.asc" | gpg -o /usr/share/keyrings/mongodb-server-${MONGO_VER}.gpg >> /tmp/mongodb-install.log 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ MongoDB GPG key imported${CEND}" >> /tmp/mongodb-install.log
+    else
+        echo -e "${CRED}✗ Failed to import MongoDB GPG key${CEND}" >> /tmp/mongodb-install.log
+        return 1
+    fi
+    
+    # Add MongoDB repository
+    echo -e "${CCYAN}Adding MongoDB repository...${CEND}" >> /tmp/mongodb-install.log
+    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-${MONGO_VER}.gpg ] https://repo.mongodb.org/apt/debian $debian_codename/mongodb-org/${MONGO_VER} main" | tee "/etc/apt/sources.list.d/mongodb-org-${MONGO_VER}.list" >> /tmp/mongodb-install.log 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ MongoDB repository added${CEND}" >> /tmp/mongodb-install.log
+    else
+        echo -e "${CRED}✗ Failed to add MongoDB repository${CEND}" >> /tmp/mongodb-install.log
+        return 1
+    fi
+    
+    # Update package list
+    echo -e "${CCYAN}Updating package list...${CEND}" >> /tmp/mongodb-install.log
+    apt-get update >> /tmp/mongodb-install.log 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Package list updated${CEND}" >> /tmp/mongodb-install.log
+    else
+        echo -e "${CRED}✗ Failed to update package list${CEND}" >> /tmp/mongodb-install.log
+        return 1
+    fi
+    
+    # Verify MongoDB packages are available
+    echo -e "${CCYAN}Verifying MongoDB package availability...${CEND}" >> /tmp/mongodb-install.log
+    if apt-cache show "mongodb-org" >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ MongoDB packages available${CEND}" >> /tmp/mongodb-install.log
+    else
+        echo -e "${CRED}✗ MongoDB packages not available${CEND}" >> /tmp/mongodb-install.log
+        return 1
+    fi
+}
+
+function add_rhel_mongodb_repo_enhanced() {
+    echo -e "${CCYAN}Configuring MongoDB repository for RHEL-based systems...${CEND}" >> /tmp/mongodb-install.log
+    
+    # Check OS version compatibility
+    case "$os_ver" in
+        "7"|"8"|"9")
+            echo -e "${CGREEN}✓ RHEL/CentOS/Rocky/AlmaLinux $os_ver is supported${CEND}" >> /tmp/mongodb-install.log
+            ;;
+        *)
+            echo -e "${CRED}✗ RHEL/CentOS version $os_ver not supported${CEND}" >> /tmp/mongodb-install.log
+            return 1
+            ;;
+    esac
+    
+    # Determine package manager
+    local pkg_manager="dnf"
+    if ! command -v dnf >/dev/null 2>&1; then
+        pkg_manager="yum"
+    fi
+    
+    echo -e "${CCYAN}Using package manager: $pkg_manager${CEND}" >> /tmp/mongodb-install.log
+    
+    # Check if repository already exists
+    if [ -f "/etc/yum.repos.d/mongodb-org-${MONGO_VER}.repo" ]; then
+        echo -e "${CYAN}⚠ MongoDB repository already exists${CEND}" >> /tmp/mongodb-install.log
+        return 0
+    fi
+    
+    # Create MongoDB repository file
+    echo -e "${CCYAN}Creating MongoDB repository file...${CEND}" >> /tmp/mongodb-install.log
+    cat > "/etc/yum.repos.d/mongodb-org-${MONGO_VER}.repo" << EOF
+[mongodb-org-${MONGO_VER}]
+name=MongoDB Repository
+baseurl=https://repo.mongodb.org/yum/redhat/\$releasever/mongodb-org/${MONGO_VER}/x86_64/
+gpgcheck=1
+enabled=1
+gpgkey=https://www.mongodb.org/static/pgp/server-${MONGO_VER}.asc
+EOF
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ MongoDB repository file created${CEND}" >> /tmp/mongodb-install.log
+    else
+        echo -e "${CRED}✗ Failed to create MongoDB repository file${CEND}" >> /tmp/mongodb-install.log
+        return 1
+    fi
+    
+    # Clean package cache
+    echo -e "${CCYAN}Cleaning package cache...${CEND}" >> /tmp/mongodb-install.log
+    $pkg_manager clean all >> /tmp/mongodb-install.log 2>&1
+    
+    # Verify MongoDB packages are available
+    echo -e "${CCYAN}Verifying MongoDB package availability...${CEND}" >> /tmp/mongodb-install.log
+    if $pkg_manager info mongodb-org >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ MongoDB packages available${CEND}" >> /tmp/mongodb-install.log
+    else
+        echo -e "${CRED}✗ MongoDB packages not available${CEND}" >> /tmp/mongodb-install.log
+        return 1
+    fi
+}
+
+function add_fedora_mongodb_repo_enhanced() {
+    echo -e "${CCYAN}Configuring MongoDB repository for Fedora...${CEND}" >> /tmp/mongodb-install.log
+    
+    # Check Fedora version
+    local fedora_major=$(echo "$os_ver" | cut -d. -f1)
+    echo -e "${CGREEN}✓ Fedora $os_ver detected${CEND}" >> /tmp/mongodb-install.log
+    
+    # Determine package manager
+    local pkg_manager="dnf"
+    
+    # Check if repository already exists
+    if [ -f "/etc/yum.repos.d/mongodb-org-${MONGO_VER}.repo" ]; then
+        echo -e "${CYAN}⚠ MongoDB repository already exists${CEND}" >> /tmp/mongodb-install.log
+        return 0
+    fi
+    
+    # Create MongoDB repository file
+    echo -e "${CCYAN}Creating MongoDB repository file...${CEND}" >> /tmp/mongodb-install.log
+    cat > "/etc/yum.repos.d/mongodb-org-${MONGO_VER}.repo" << EOF
+[mongodb-org-${MONGO_VER}]
+name=MongoDB Repository
+baseurl=https://repo.mongodb.org/yum/fedora/\$releasever/mongodb-org/${MONGO_VER}/x86_64/
+gpgcheck=1
+enabled=1
+gpgkey=https://www.mongodb.org/static/pgp/server-${MONGO_VER}.asc
+EOF
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ MongoDB repository file created${CEND}" >> /tmp/mongodb-install.log
+    else
+        echo -e "${CRED}✗ Failed to create MongoDB repository file${CEND}" >> /tmp/mongodb-install.log
+        return 1
+    fi
+    
+    # Clean package cache
+    echo -e "${CCYAN}Cleaning package cache...${CEND}" >> /tmp/mongodb-install.log
+    $pkg_manager clean all >> /tmp/mongodb-install.log 2>&1
+    
+    # Verify MongoDB packages are available
+    echo -e "${CCYAN}Verifying MongoDB package availability...${CEND}" >> /tmp/mongodb-install.log
+    if $pkg_manager info mongodb-org >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ MongoDB packages available${CEND}" >> /tmp/mongodb-install.log
+    else
+        echo -e "${CRED}✗ MongoDB packages not available${CEND}" >> /tmp/mongodb-install.log
+        return 1
+    fi
+}
+
 # Get MongoDB latest version
 MONGODB_VERSIONS=$(curl -s https://www.mongodb.org/download-center/community | grep -oP 'mongodb-\d+\.\d+\.\d+' | sort -V | uniq | tail -n2)
 MONGODB_LATEST_VER=$(echo $MONGODB_VERSIONS | cut -d' ' -f2 | cut -d'-' -f2)
@@ -397,12 +720,11 @@ case $OPTION in
 		# Dependencies
 		install_dependencies
 		
-		# Import MongoDB public key
+		# Import MongoDB public key with intelligent repository management
 		echo -ne "       Adding MongoDB repository       [..]\r"
-		curl -fsSL https://www.mongodb.org/static/pgp/server-${MONGO_VER}.asc | gpg -o /usr/share/keyrings/mongodb-server-${MONGO_VER}.gpg >> /tmp/mongodb-install.log 2>&1
-		echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-${MONGO_VER}.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/${MONGO_VER} multiverse" | tee /etc/apt/sources.list.d/mongodb-org-${MONGO_VER}.list >> /tmp/mongodb-install.log 2>&1
-		apt-get update >> /tmp/mongodb-install.log 2>&1
-		if [ $? -eq 0 ]; then
+		
+		# Enhanced repository management
+		if add_mongodb_repository_enhanced; then
 			echo -ne "       Adding MongoDB repository       [${CGREEN}OK${CEND}]\r"
 			echo -ne "\n"
 		else

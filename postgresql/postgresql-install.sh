@@ -221,6 +221,331 @@ function install_dependencies() {
     esac
 }
 
+# Function to add PostgreSQL repository with intelligent management
+function add_postgresql_repository() {
+    echo -e "${CCYAN}Adding PostgreSQL repository for $os $os_ver...${CEND}" >> /tmp/postgresql-install.log
+    
+    case "$os" in
+        "ubuntu")
+            add_ubuntu_postgresql_repo
+            ;;
+        "debian")
+            add_debian_postgresql_repo
+            ;;
+        "centos"|"rhel"|"rocky"|"almalinux")
+            add_rhel_postgresql_repo
+            ;;
+        "fedora")
+            add_fedora_postgresql_repo
+            ;;
+        *)
+            echo -e "${CRED}✗ Unsupported OS for PostgreSQL: $os${CEND}"
+            return 1
+            ;;
+    esac
+}
+
+function add_ubuntu_postgresql_repo() {
+    echo -e "${CCYAN}Configuring PostgreSQL repository for Ubuntu...${CEND}" >> /tmp/postgresql-install.log
+    
+    # Check Ubuntu version compatibility
+    case "$os_ver" in
+        "18.04"|"20.04"|"22.04"|"24.04")
+            echo -e "${CGREEN}✓ Ubuntu $os_ver is supported${CEND}" >> /tmp/postgresql-install.log
+            ;;
+        *)
+            echo -e "${CYAN}⚠ Ubuntu $os_ver may not be fully supported${CEND}" >> /tmp/postgresql-install.log
+            ;;
+    esac
+    
+    # Check if repository already exists
+    if [ -f "/etc/apt/sources.list.d/pgdg.list" ] || apt-cache policy | grep -q "apt.postgresql.org"; then
+        echo -e "${CYAN}⚠ PostgreSQL repository already exists${CEND}" >> /tmp/postgresql-install.log
+        return 0
+    fi
+    
+    # Install required packages
+    echo -e "${CCYAN}Installing required packages...${CEND}" >> /tmp/postgresql-install.log
+    apt-get update >> /tmp/postgresql-install.log 2>&1
+    
+    local required_packages=("curl" "gnupg" "software-properties-common")
+    for pkg in "${required_packages[@]}"; do
+        if ! dpkg -l | grep -q "$pkg"; then
+            echo -e "${CCYAN}Installing $pkg...${CEND}" >> /tmp/postgresql-install.log
+            apt-get install -y "$pkg" >> /tmp/postgresql-install.log 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ $pkg installed${CEND}" >> /tmp/postgresql-install.log
+            else
+                echo -e "${CRED}✗ Failed to install $pkg${CEND}" >> /tmp/postgresql-install.log
+                return 1
+            fi
+        fi
+    done
+    
+    # Get Ubuntu codename dynamically
+    local ubuntu_codename=""
+    if command -v lsb_release >/dev/null 2>&1; then
+        ubuntu_codename=$(lsb_release -cs 2>/dev/null || echo "jammy")
+    else
+        # Fallback to version-based codename
+        case "$os_ver" in
+            "18.04") ubuntu_codename="bionic" ;;
+            "20.04") ubuntu_codename="focal" ;;
+            "22.04") ubuntu_codename="jammy" ;;
+            "24.04") ubuntu_codename="noble" ;;
+            *) ubuntu_codename="jammy" ;;
+        esac
+    fi
+    
+    echo -e "${CCYAN}Using Ubuntu codename: $ubuntu_codename${CEND}" >> /tmp/postgresql-install.log
+    
+    # Import PostgreSQL GPG key
+    echo -e "${CCYAN}Importing PostgreSQL GPG key...${CEND}" >> /tmp/postgresql-install.log
+    wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor | tee /etc/apt/trusted.gpg.d/postgresql.gpg >/dev/null >> /tmp/postgresql-install.log 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ PostgreSQL GPG key imported${CEND}" >> /tmp/postgresql-install.log
+    else
+        echo -e "${CRED}✗ Failed to import PostgreSQL GPG key${CEND}" >> /tmp/postgresql-install.log
+        return 1
+    fi
+    
+    # Add PostgreSQL repository
+    echo -e "${CCYAN}Adding PostgreSQL repository...${CEND}" >> /tmp/postgresql-install.log
+    echo "deb http://apt.postgresql.org/pub/repos/apt $ubuntu_codename-pgdg main" > /etc/apt/sources.list.d/pgdg.list
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ PostgreSQL repository added${CEND}" >> /tmp/postgresql-install.log
+    else
+        echo -e "${CRED}✗ Failed to add PostgreSQL repository${CEND}" >> /tmp/postgresql-install.log
+        return 1
+    fi
+    
+    # Update package list
+    echo -e "${CCYAN}Updating package list...${CEND}" >> /tmp/postgresql-install.log
+    apt-get update >> /tmp/postgresql-install.log 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Package list updated${CEND}" >> /tmp/postgresql-install.log
+    else
+        echo -e "${CRED}✗ Failed to update package list${CEND}" >> /tmp/postgresql-install.log
+        return 1
+    fi
+    
+    # Verify PostgreSQL packages are available
+    echo -e "${CCYAN}Verifying PostgreSQL package availability...${CEND}" >> /tmp/postgresql-install.log
+    if apt-cache show "postgresql" >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ PostgreSQL packages available${CEND}" >> /tmp/postgresql-install.log
+    else
+        echo -e "${CRED}✗ PostgreSQL packages not available${CEND}" >> /tmp/postgresql-install.log
+        return 1
+    fi
+}
+
+function add_debian_postgresql_repo() {
+    echo -e "${CCYAN}Configuring PostgreSQL repository for Debian...${CEND}" >> /tmp/postgresql-install.log
+    
+    # Check Debian version compatibility
+    case "$os_ver" in
+        "9"|"10"|"11"|"12"|"13")
+            echo -e "${CGREEN}✓ Debian $os_ver is supported${CEND}" >> /tmp/postgresql-install.log
+            ;;
+        *)
+            echo -e "${CYAN}⚠ Debian $os_ver may not be fully supported${CEND}" >> /tmp/postgresql-install.log
+            ;;
+    esac
+    
+    # Check if repository already exists
+    if [ -f "/etc/apt/sources.list.d/pgdg.list" ] || apt-cache policy | grep -q "apt.postgresql.org"; then
+        echo -e "${CYAN}⚠ PostgreSQL repository already exists${CEND}" >> /tmp/postgresql-install.log
+        return 0
+    fi
+    
+    # Install required packages
+    echo -e "${CCYAN}Installing required packages...${CEND}" >> /tmp/postgresql-install.log
+    apt-get update >> /tmp/postgresql-install.log 2>&1
+    
+    local required_packages=("curl" "gnupg" "software-properties-common" "lsb-release")
+    for pkg in "${required_packages[@]}"; do
+        if ! dpkg -l | grep -q "$pkg"; then
+            echo -e "${CCYAN}Installing $pkg...${CEND}" >> /tmp/postgresql-install.log
+            apt-get install -y "$pkg" >> /tmp/postgresql-install.log 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ $pkg installed${CEND}" >> /tmp/postgresql-install.log
+            else
+                echo -e "${CRED}✗ Failed to install $pkg${CEND}" >> /tmp/postgresql-install.log
+                return 1
+            fi
+        fi
+    done
+    
+    # Get Debian codename dynamically
+    local debian_codename=""
+    if command -v lsb_release >/dev/null 2>&1; then
+        debian_codename=$(lsb_release -cs 2>/dev/null || echo "bookworm")
+    else
+        # Fallback to version-based codename
+        case "$os_ver" in
+            "9") debian_codename="stretch" ;;
+            "10") debian_codename="buster" ;;
+            "11") debian_codename="bullseye" ;;
+            "12") debian_codename="bookworm" ;;
+            "13") debian_codename="trixie" ;;
+            *) debian_codename="bookworm" ;;
+        esac
+    fi
+    
+    echo -e "${CCYAN}Using Debian codename: $debian_codename${CEND}" >> /tmp/postgresql-install.log
+    
+    # Import PostgreSQL GPG key
+    echo -e "${CCYAN}Importing PostgreSQL GPG key...${CEND}" >> /tmp/postgresql-install.log
+    wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor | tee /etc/apt/trusted.gpg.d/postgresql.gpg >/dev/null >> /tmp/postgresql-install.log 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ PostgreSQL GPG key imported${CEND}" >> /tmp/postgresql-install.log
+    else
+        echo -e "${CRED}✗ Failed to import PostgreSQL GPG key${CEND}" >> /tmp/postgresql-install.log
+        return 1
+    fi
+    
+    # Add PostgreSQL repository
+    echo -e "${CCYAN}Adding PostgreSQL repository...${CEND}" >> /tmp/postgresql-install.log
+    echo "deb http://apt.postgresql.org/pub/repos/apt $debian_codename-pgdg main" > /etc/apt/sources.list.d/pgdg.list
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ PostgreSQL repository added${CEND}" >> /tmp/postgresql-install.log
+    else
+        echo -e "${CRED}✗ Failed to add PostgreSQL repository${CEND}" >> /tmp/postgresql-install.log
+        return 1
+    fi
+    
+    # Update package list
+    echo -e "${CCYAN}Updating package list...${CEND}" >> /tmp/postgresql-install.log
+    apt-get update >> /tmp/postgresql-install.log 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Package list updated${CEND}" >> /tmp/postgresql-install.log
+    else
+        echo -e "${CRED}✗ Failed to update package list${CEND}" >> /tmp/postgresql-install.log
+        return 1
+    fi
+    
+    # Verify PostgreSQL packages are available
+    echo -e "${CCYAN}Verifying PostgreSQL package availability...${CEND}" >> /tmp/postgresql-install.log
+    if apt-cache show "postgresql" >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ PostgreSQL packages available${CEND}" >> /tmp/postgresql-install.log
+    else
+        echo -e "${CRED}✗ PostgreSQL packages not available${CEND}" >> /tmp/postgresql-install.log
+        return 1
+    fi
+}
+
+function add_rhel_postgresql_repo() {
+    echo -e "${CCYAN}Configuring PostgreSQL repository for RHEL-based systems...${CEND}" >> /tmp/postgresql-install.log
+    
+    # Check OS version compatibility
+    case "$os_ver" in
+        "7"|"8"|"9")
+            echo -e "${CGREEN}✓ RHEL/CentOS/Rocky/AlmaLinux $os_ver is supported${CEND}" >> /tmp/postgresql-install.log
+            ;;
+        *)
+            echo -e "${CRED}✗ RHEL/CentOS version $os_ver not supported${CEND}" >> /tmp/postgresql-install.log
+            return 1
+            ;;
+    esac
+    
+    # Determine package manager
+    local pkg_manager="dnf"
+    if ! command -v dnf >/dev/null 2>&1; then
+        pkg_manager="yum"
+    fi
+    
+    echo -e "${CCYAN}Using package manager: $pkg_manager${CEND}" >> /tmp/postgresql-install.log
+    
+    # Check if repository already exists
+    if [ -f "/etc/yum.repos.d/pgdg-redhat-all.repo" ]; then
+        echo -e "${CYAN}⚠ PostgreSQL repository already exists${CEND}" >> /tmp/postgresql-install.log
+        return 0
+    fi
+    
+    # Install PostgreSQL RPM repository
+    echo -e "${CCYAN}Installing PostgreSQL RPM repository...${CEND}" >> /tmp/postgresql-install.log
+    
+    local postgresql_rpm_url=""
+    case "$os_ver" in
+        "7")
+            postgresql_rpm_url="https://download.postgresql.org/pub/repos/yum/reporpms/EL-7-x86_64/pgdg-redhat-repo-latest.noarch.rpm"
+            ;;
+        "8")
+            postgresql_rpm_url="https://download.postgresql.org/pub/repos/yum/reporpms/EL-8-x86_64/pgdg-redhat-repo-latest.noarch.rpm"
+            ;;
+        "9")
+            postgresql_rpm_url="https://download.postgresql.org/pub/repos/yum/reporpms/EL-9-x86_64/pgdg-redhat-repo-latest.noarch.rpm"
+            ;;
+    esac
+    
+    $pkg_manager install -y "$postgresql_rpm_url" >> /tmp/postgresql-install.log 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ PostgreSQL RPM repository installed${CEND}" >> /tmp/postgresql-install.log
+    else
+        echo -e "${CRED}✗ Failed to install PostgreSQL RPM repository${CEND}" >> /tmp/postgresql-install.log
+        return 1
+    fi
+    
+    # Update package cache
+    echo -e "${CCYAN}Updating package cache...${CEND}" >> /tmp/postgresql-install.log
+    $pkg_manager makecache >> /tmp/postgresql-install.log 2>&1
+    
+    # Verify PostgreSQL packages are available
+    echo -e "${CCYAN}Verifying PostgreSQL package availability...${CEND}" >> /tmp/postgresql-install.log
+    if $pkg_manager info postgresql-server >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ PostgreSQL packages available${CEND}" >> /tmp/postgresql-install.log
+    else
+        echo -e "${CRED}✗ PostgreSQL packages not available${CEND}" >> /tmp/postgresql-install.log
+        return 1
+    fi
+}
+
+function add_fedora_postgresql_repo() {
+    echo -e "${CCYAN}Configuring PostgreSQL repository for Fedora...${CEND}" >> /tmp/postgresql-install.log
+    
+    # Check Fedora version
+    local fedora_major=$(echo "$os_ver" | cut -d. -f1)
+    echo -e "${CGREEN}✓ Fedora $os_ver detected${CEND}" >> /tmp/postgresql-install.log
+    
+    # Determine package manager
+    local pkg_manager="dnf"
+    
+    # Check if repository already exists
+    if [ -f "/etc/yum.repos.d/pgdg-fedora-all.repo" ]; then
+        echo -e "${CYAN}⚠ PostgreSQL repository already exists${CEND}" >> /tmp/postgresql-install.log
+        return 0
+    fi
+    
+    # Install PostgreSQL RPM repository
+    echo -e "${CCYAN}Installing PostgreSQL RPM repository...${CEND}" >> /tmp/postgresql-install.log
+    local postgresql_rpm_url="https://download.postgresql.org/pub/repos/yum/reporpms/F-$fedora_major-x86_64/pgdg-fedora-repo-latest.noarch.rpm"
+    
+    $pkg_manager install -y "$postgresql_rpm_url" >> /tmp/postgresql-install.log 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ PostgreSQL RPM repository installed${CEND}" >> /tmp/postgresql-install.log
+    else
+        echo -e "${CRED}✗ Failed to install PostgreSQL RPM repository${CEND}" >> /tmp/postgresql-install.log
+        return 1
+    fi
+    
+    # Update package cache
+    echo -e "${CCYAN}Updating package cache...${CEND}" >> /tmp/postgresql-install.log
+    $pkg_manager makecache >> /tmp/postgresql-install.log 2>&1
+    
+    # Verify PostgreSQL packages are available
+    echo -e "${CCYAN}Verifying PostgreSQL package availability...${CEND}" >> /tmp/postgresql-install.log
+    if $pkg_manager info postgresql-server >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ PostgreSQL packages available${CEND}" >> /tmp/postgresql-install.log
+    else
+        echo -e "${CRED}✗ PostgreSQL packages not available${CEND}" >> /tmp/postgresql-install.log
+        return 1
+    fi
+}
+
 # Get PostgreSQL latest version
 POSTGRESQL_VERSIONS=$(curl -s https://www.postgresql.org/source/ | grep -oP 'postgresql-\d+\.\d+\.\d+' | sort -V | uniq | tail -n2)
 POSTGRESQL_LATEST_VER=$(echo $POSTGRESQL_VERSIONS | cut -d' ' -f2 | cut -d'-' -f2)
@@ -319,12 +644,11 @@ case $OPTION in
 		install_dependencies
 		
 		if [[ "$INSTALL_TYPE" = "repository" ]]; then
-			# Install from PostgreSQL repository
+			# Install from PostgreSQL repository with intelligent management
 			echo -ne "       Adding PostgreSQL repository      [..]\r"
-			sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list' >> /tmp/postgresql-install.log 2>&1
-			wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor | tee /etc/apt/trusted.gpg.d/postgresql.gpg >/dev/null >> /tmp/postgresql-install.log 2>&1
-			apt-get update >> /tmp/postgresql-install.log 2>&1
-			if [ $? -eq 0 ]; then
+			
+			# Enhanced repository management
+			if add_postgresql_repository; then
 				echo -ne "       Adding PostgreSQL repository      [${CGREEN}OK${CEND}]\r"
 				echo -ne "\n"
 			else
@@ -333,7 +657,7 @@ case $OPTION in
 				echo "Please look at /tmp/postgresql-install.log"
 				echo ""
 				exit 1
-			fi
+		 fi
 			
 			# Install PostgreSQL packages
 			echo -ne "       Installing PostgreSQL packages   [..]\r"

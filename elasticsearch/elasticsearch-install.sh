@@ -118,28 +118,331 @@ function install_dependencies() {
 }
 
 function add_repository() {
-    echo -e "${CGREEN}Adding Elasticsearch repository...${CEND}"
+    echo -e "${CGREEN}Adding Elasticsearch repository with intelligent management...${CEND}"
+    
+    # Enhanced repository management
+    if add_elasticsearch_repository_enhanced; then
+        echo -e "${CGREEN}✓ Elasticsearch repository configured${CEND}"
+    else
+        echo -e "${CRED}✗ Failed to configure Elasticsearch repository${CEND}"
+        exit 1
+    fi
+}
+
+# Function to add Elasticsearch repository with intelligent management
+function add_elasticsearch_repository_enhanced() {
+    echo -e "${CCYAN}Adding Elasticsearch repository for $OS $OS_VERSION...${CEND}" >> "$LOG_FILE"
+    
+    case "$OS" in
+        "ubuntu")
+            add_ubuntu_elasticsearch_repo_enhanced
+            ;;
+        "debian")
+            add_debian_elasticsearch_repo_enhanced
+            ;;
+        "centos"|"rhel"|"rocky"|"almalinux")
+            add_rhel_elasticsearch_repo_enhanced
+            ;;
+        "fedora")
+            add_fedora_elasticsearch_repo_enhanced
+            ;;
+        *)
+            echo -e "${CRED}✗ Unsupported OS for Elasticsearch: $OS${CEND}" >> "$LOG_FILE"
+            return 1
+            ;;
+    esac
+}
+
+function add_ubuntu_elasticsearch_repo_enhanced() {
+    echo -e "${CCYAN}Configuring Elasticsearch repository for Ubuntu...${CEND}" >> "$LOG_FILE"
+    
+    # Check Ubuntu version compatibility
+    case "$OS_VERSION" in
+        "18.04"|"20.04"|"22.04"|"24.04")
+            echo -e "${CGREEN}✓ Ubuntu $OS_VERSION is supported${CEND}" >> "$LOG_FILE"
+            ;;
+        *)
+            echo -e "${CYAN}⚠ Ubuntu $OS_VERSION may not be fully supported${CEND}" >> "$LOG_FILE"
+            ;;
+    esac
+    
+    # Check if repository already exists
+    if [ -f "/etc/apt/sources.list.d/elastic-8.x.list" ] || apt-cache policy | grep -q "artifacts.elastic.co"; then
+        echo -e "${CYAN}⚠ Elasticsearch repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Install required packages
+    echo -e "${CCYAN}Installing required packages...${CEND}" >> "$LOG_FILE"
+    apt update >> "$LOG_FILE" 2>&1
+    
+    local required_packages=("curl" "wget" "gnupg" "ca-certificates" "apt-transport-https")
+    for pkg in "${required_packages[@]}"; do
+        if ! dpkg -l | grep -q "$pkg"; then
+            echo -e "${CCYAN}Installing $pkg...${CEND}" >> "$LOG_FILE"
+            apt install -y "$pkg" >> "$LOG_FILE" 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ $pkg installed${CEND}" >> "$LOG_FILE"
+            else
+                echo -e "${CRED}✗ Failed to install $pkg${CEND}" >> "$LOG_FILE"
+                return 1
+            fi
+        fi
+    done
     
     # Import Elasticsearch GPG key
+    echo -e "${CCYAN}Importing Elasticsearch GPG key...${CEND}" >> "$LOG_FILE"
     curl -fsSL https://artifacts.elastic.co/GPG-KEY-elasticsearch | gpg --dearmor -o /usr/share/keyrings/elasticsearch-keyring.gpg >> "$LOG_FILE" 2>&1
     
-    if [ $? -ne 0 ]; then
-        echo -e "${CRED}Failed to import Elasticsearch GPG key${CEND}"
-        exit 1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Elasticsearch GPG key imported${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to import Elasticsearch GPG key${CEND}" >> "$LOG_FILE"
+        return 1
     fi
     
     # Add Elasticsearch repository
+    echo -e "${CCYAN}Adding Elasticsearch repository...${CEND}" >> "$LOG_FILE"
     echo "deb [signed-by=/usr/share/keyrings/elasticsearch-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main" | tee /etc/apt/sources.list.d/elastic-8.x.list >> "$LOG_FILE" 2>&1
     
-    # Update package lists
-    apt update >> "$LOG_FILE" 2>&1
-    
-    if [ $? -ne 0 ]; then
-        echo -e "${CRED}Failed to add Elasticsearch repository${CEND}"
-        exit 1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Elasticsearch repository added${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to add Elasticsearch repository${CEND}" >> "$LOG_FILE"
+        return 1
     fi
     
-    echo -e "${CGREEN}Elasticsearch repository added successfully${CEND}"
+    # Update package list
+    echo -e "${CCYAN}Updating package list...${CEND}" >> "$LOG_FILE"
+    apt update >> "$LOG_FILE" 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Package list updated${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to update package list${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Verify Elasticsearch packages are available
+    echo -e "${CCYAN}Verifying Elasticsearch package availability...${CEND}" >> "$LOG_FILE"
+    if apt-cache show "elasticsearch" >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ Elasticsearch packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Elasticsearch packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+}
+
+function add_debian_elasticsearch_repo_enhanced() {
+    echo -e "${CCYAN}Configuring Elasticsearch repository for Debian...${CEND}" >> "$LOG_FILE"
+    
+    # Check Debian version compatibility
+    case "$OS_VERSION" in
+        "10"|"11"|"12"|"13")
+            echo -e "${CGREEN}✓ Debian $OS_VERSION is supported${CEND}" >> "$LOG_FILE"
+            ;;
+        *)
+            echo -e "${CYAN}⚠ Debian $OS_VERSION may not be fully supported${CEND}" >> "$LOG_FILE"
+            ;;
+    esac
+    
+    # Check if repository already exists
+    if [ -f "/etc/apt/sources.list.d/elastic-8.x.list" ] || apt-cache policy | grep -q "artifacts.elastic.co"; then
+        echo -e "${CYAN}⚠ Elasticsearch repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Install required packages
+    echo -e "${CCYAN}Installing required packages...${CEND}" >> "$LOG_FILE"
+    apt update >> "$LOG_FILE" 2>&1
+    
+    local required_packages=("curl" "wget" "gnupg" "ca-certificates" "apt-transport-https")
+    for pkg in "${required_packages[@]}"; do
+        if ! dpkg -l | grep -q "$pkg"; then
+            echo -e "${CCYAN}Installing $pkg...${CEND}" >> "$LOG_FILE"
+            apt install -y "$pkg" >> "$LOG_FILE" 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ $pkg installed${CEND}" >> "$LOG_FILE"
+            else
+                echo -e "${CRED}✗ Failed to install $pkg${CEND}" >> "$LOG_FILE"
+                return 1
+            fi
+        fi
+    done
+    
+    # Import Elasticsearch GPG key
+    echo -e "${CCYAN}Importing Elasticsearch GPG key...${CEND}" >> "$LOG_FILE"
+    curl -fsSL https://artifacts.elastic.co/GPG-KEY-elasticsearch | gpg --dearmor -o /usr/share/keyrings/elasticsearch-keyring.gpg >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Elasticsearch GPG key imported${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to import Elasticsearch GPG key${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Add Elasticsearch repository
+    echo -e "${CCYAN}Adding Elasticsearch repository...${CEND}" >> "$LOG_FILE"
+    echo "deb [signed-by=/usr/share/keyrings/elasticsearch-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main" | tee /etc/apt/sources.list.d/elastic-8.x.list >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Elasticsearch repository added${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to add Elasticsearch repository${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Update package list
+    echo -e "${CCYAN}Updating package list...${CEND}" >> "$LOG_FILE"
+    apt update >> "$LOG_FILE" 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Package list updated${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to update package list${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Verify Elasticsearch packages are available
+    echo -e "${CCYAN}Verifying Elasticsearch package availability...${CEND}" >> "$LOG_FILE"
+    if apt-cache show "elasticsearch" >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ Elasticsearch packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Elasticsearch packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+}
+
+function add_rhel_elasticsearch_repo_enhanced() {
+    echo -e "${CCYAN}Configuring Elasticsearch repository for RHEL-based systems...${CEND}" >> "$LOG_FILE"
+    
+    # Check OS version compatibility
+    case "$OS_VERSION" in
+        "7"|"8"|"9")
+            echo -e "${CGREEN}✓ RHEL/CentOS/Rocky/AlmaLinux $OS_VERSION is supported${CEND}" >> "$LOG_FILE"
+            ;;
+        *)
+            echo -e "${CRED}✗ RHEL/CentOS version $OS_VERSION not supported${CEND}" >> "$LOG_FILE"
+            return 1
+            ;;
+    esac
+    
+    # Determine package manager
+    local pkg_manager="dnf"
+    if ! command -v dnf >/dev/null 2>&1; then
+        pkg_manager="yum"
+    fi
+    
+    echo -e "${CCYAN}Using package manager: $pkg_manager${CEND}" >> "$LOG_FILE"
+    
+    # Check if repository already exists
+    if [ -f "/etc/yum.repos.d/elasticsearch.repo" ]; then
+        echo -e "${CYAN}⚠ Elasticsearch repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Import Elasticsearch GPG key
+    echo -e "${CCYAN}Importing Elasticsearch GPG key...${CEND}" >> "$LOG_FILE"
+    rpm --import https://artifacts.elastic.co/GPG-KEY-elasticsearch >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Elasticsearch GPG key imported${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to import Elasticsearch GPG key${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Create Elasticsearch repository file
+    echo -e "${CCYAN}Creating Elasticsearch repository file...${CEND}" >> "$LOG_FILE"
+    cat > /etc/yum.repos.d/elasticsearch.repo << EOF
+[elasticsearch]
+name=Elasticsearch repository for 8.x packages
+baseurl=https://artifacts.elastic.co/packages/8.x/yum
+gpgcheck=1
+gpgkey=https://artifacts.elastic.co/GPG-KEY-elasticsearch
+enabled=1
+autorefresh=1
+type=rpm-md
+EOF
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Elasticsearch repository file created${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to create Elasticsearch repository file${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Clean package cache
+    echo -e "${CCYAN}Cleaning package cache...${CEND}" >> "$LOG_FILE"
+    $pkg_manager clean all >> "$LOG_FILE" 2>&1
+    
+    # Verify Elasticsearch packages are available
+    echo -e "${CCYAN}Verifying Elasticsearch package availability...${CEND}" >> "$LOG_FILE"
+    if $pkg_manager info elasticsearch >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ Elasticsearch packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Elasticsearch packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+}
+
+function add_fedora_elasticsearch_repo_enhanced() {
+    echo -e "${CCYAN}Configuring Elasticsearch repository for Fedora...${CEND}" >> "$LOG_FILE"
+    
+    # Check Fedora version
+    local fedora_major=$(echo "$OS_VERSION" | cut -d. -f1)
+    echo -e "${CGREEN}✓ Fedora $OS_VERSION detected${CEND}" >> "$LOG_FILE"
+    
+    # Determine package manager
+    local pkg_manager="dnf"
+    
+    # Check if repository already exists
+    if [ -f "/etc/yum.repos.d/elasticsearch.repo" ]; then
+        echo -e "${CYAN}⚠ Elasticsearch repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Import Elasticsearch GPG key
+    echo -e "${CCYAN}Importing Elasticsearch GPG key...${CEND}" >> "$LOG_FILE"
+    rpm --import https://artifacts.elastic.co/GPG-KEY-elasticsearch >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Elasticsearch GPG key imported${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to import Elasticsearch GPG key${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Create Elasticsearch repository file
+    echo -e "${CCYAN}Creating Elasticsearch repository file...${CEND}" >> "$LOG_FILE"
+    cat > /etc/yum.repos.d/elasticsearch.repo << EOF
+[elasticsearch]
+name=Elasticsearch repository for 8.x packages
+baseurl=https://artifacts.elastic.co/packages/8.x/yum
+gpgcheck=1
+gpgkey=https://artifacts.elastic.co/GPG-KEY-elasticsearch
+enabled=1
+autorefresh=1
+type=rpm-md
+EOF
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Elasticsearch repository file created${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to create Elasticsearch repository file${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Clean package cache
+    echo -e "${CCYAN}Cleaning package cache...${CEND}" >> "$LOG_FILE"
+    $pkg_manager clean all >> "$LOG_FILE" 2>&1
+    
+    # Verify Elasticsearch packages are available
+    echo -e "${CCYAN}Verifying Elasticsearch package availability...${CEND}" >> "$LOG_FILE"
+    if $pkg_manager info elasticsearch >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ Elasticsearch packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Elasticsearch packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
 }
 
 function install_elasticsearch() {

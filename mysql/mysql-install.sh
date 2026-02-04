@@ -306,20 +306,497 @@ function install_dependencies() {
 }
 
 function add_repository() {
-    echo -e "${CGREEN}Adding ${DB_TYPE} repository...${CEND}"
+    echo -e "${CGREEN}Adding ${DB_TYPE} repository with intelligent management...${CEND}"
     
     if [ "$DB_TYPE" = "mysql" ]; then
-        # Add MySQL APT repository
-        wget https://dev.mysql.com/get/mysql-apt-config_0.8.24-1_all.deb >> "$LOG_FILE" 2>&1
-        echo "mysql-apt-config mysql-apt-config/select-server select mysql-8.0" | debconf-set-selections
-        DEBIAN_FRONTEND=noninteractive dpkg -i mysql-apt-config_0.8.24-1_all.deb >> "$LOG_FILE" 2>&1
-        apt update >> "$LOG_FILE" 2>&1
+        # Enhanced MySQL repository management
+        if add_mysql_repository_enhanced; then
+            echo -e "${CGREEN}✓ MySQL repository configured${CEND}"
+        else
+            echo -e "${CRED}✗ Failed to configure MySQL repository${CEND}"
+            exit 1
+        fi
         
     elif [ "$DB_TYPE" = "mariadb" ]; then
-        # Add MariaDB repository
-        curl -LsS https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | bash -s -- --mariadb-server-version="$MARIADB_VERSION" >> "$LOG_FILE" 2>&1
-        apt update >> "$LOG_FILE" 2>&1
+        # Enhanced MariaDB repository management
+        if add_mariadb_repository_enhanced; then
+            echo -e "${CGREEN}✓ MariaDB repository configured${CEND}"
+        else
+            echo -e "${CRED}✗ Failed to configure MariaDB repository${CEND}"
+            exit 1
+        fi
     fi
+}
+
+function add_mysql_repository_enhanced() {
+    echo -e "${CCYAN}Configuring MySQL repository for $os $os_ver...${CEND}" >> "$LOG_FILE"
+    
+    case "$os" in
+        "ubuntu")
+            add_ubuntu_mysql_repo_enhanced
+            ;;
+        "debian")
+            add_debian_mysql_repo_enhanced
+            ;;
+        "centos"|"rhel"|"rocky"|"almalinux")
+            add_rhel_mysql_repo_enhanced
+            ;;
+        "fedora")
+            add_fedora_mysql_repo_enhanced
+            ;;
+        *)
+            echo -e "${CRED}✗ Unsupported OS for MySQL: $os${CEND}" >> "$LOG_FILE"
+            return 1
+            ;;
+    esac
+}
+
+function add_ubuntu_mysql_repo_enhanced() {
+    echo -e "${CCYAN}Configuring MySQL repository for Ubuntu...${CEND}" >> "$LOG_FILE"
+    
+    # Check Ubuntu version compatibility
+    case "$os_ver" in
+        "18.04"|"20.04"|"22.04"|"24.04")
+            echo -e "${CGREEN}✓ Ubuntu $os_ver is supported${CEND}" >> "$LOG_FILE"
+            ;;
+        *)
+            echo -e "${CYAN}⚠ Ubuntu $os_ver may not be fully supported${CEND}" >> "$LOG_FILE"
+            ;;
+    esac
+    
+    # Check if repository already exists
+    if [ -f "/etc/apt/sources.list.d/mysql.list" ] || apt-cache policy | grep -q "repo.mysql.com"; then
+        echo -e "${CYAN}⚠ MySQL repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Install required packages
+    echo -e "${CCYAN}Installing required packages...${CEND}" >> "$LOG_FILE"
+    apt update >> "$LOG_FILE" 2>&1
+    
+    local required_packages=("curl" "gnupg" "software-properties-common")
+    for pkg in "${required_packages[@]}"; do
+        if ! dpkg -l | grep -q "$pkg"; then
+            echo -e "${CCYAN}Installing $pkg...${CEND}" >> "$LOG_FILE"
+            apt install -y "$pkg" >> "$LOG_FILE" 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ $pkg installed${CEND}" >> "$LOG_FILE"
+            else
+                echo -e "${CRED}✗ Failed to install $pkg${CEND}" >> "$LOG_FILE"
+                return 1
+            fi
+        fi
+    done
+    
+    # Download MySQL APT repository package
+    echo -e "${CCYAN}Downloading MySQL APT repository package...${CEND}" >> "$LOG_FILE"
+    local mysql_apt_repo="mysql-apt-config_0.8.24-1_all.deb"
+    wget -q "https://dev.mysql.com/get/$mysql_apt_repo" -O "/tmp/$mysql_apt_repo" >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ MySQL APT repository package downloaded${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to download MySQL APT repository package${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Install MySQL APT repository package
+    echo -e "${CCYAN}Installing MySQL APT repository package...${CEND}" >> "$LOG_FILE"
+    echo "mysql-apt-config mysql-apt-config/select-server select mysql-8.0" | debconf-set-selections >> "$LOG_FILE" 2>&1
+    DEBIAN_FRONTEND=noninteractive apt install -y "/tmp/$mysql_apt_repo" >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ MySQL APT repository package installed${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to install MySQL APT repository package${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Update package list
+    echo -e "${CCYAN}Updating package list...${CEND}" >> "$LOG_FILE"
+    apt update >> "$LOG_FILE" 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Package list updated${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to update package list${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Verify MySQL packages are available
+    echo -e "${CCYAN}Verifying MySQL package availability...${CEND}" >> "$LOG_FILE"
+    if apt-cache show "mysql-server" >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ MySQL packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ MySQL packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Clean up
+    rm -f "/tmp/$mysql_apt_repo"
+}
+
+function add_debian_mysql_repo_enhanced() {
+    echo -e "${CCYAN}Configuring MySQL repository for Debian...${CEND}" >> "$LOG_FILE"
+    
+    # Check Debian version compatibility
+    case "$os_ver" in
+        "10"|"11"|"12"|"13")
+            echo -e "${CGREEN}✓ Debian $os_ver is supported${CEND}" >> "$LOG_FILE"
+            ;;
+        *)
+            echo -e "${CYAN}⚠ Debian $os_ver may not be fully supported${CEND}" >> "$LOG_FILE"
+            ;;
+    esac
+    
+    # Check if repository already exists
+    if [ -f "/etc/apt/sources.list.d/mysql.list" ] || apt-cache policy | grep -q "repo.mysql.com"; then
+        echo -e "${CYAN}⚠ MySQL repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Install required packages
+    echo -e "${CCYAN}Installing required packages...${CEND}" >> "$LOG_FILE"
+    apt update >> "$LOG_FILE" 2>&1
+    
+    local required_packages=("curl" "gnupg" "software-properties-common")
+    for pkg in "${required_packages[@]}"; do
+        if ! dpkg -l | grep -q "$pkg"; then
+            echo -e "${CCYAN}Installing $pkg...${CEND}" >> "$LOG_FILE"
+            apt install -y "$pkg" >> "$LOG_FILE" 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ $pkg installed${CEND}" >> "$LOG_FILE"
+            else
+                echo -e "${CRED}✗ Failed to install $pkg${CEND}" >> "$LOG_FILE"
+                return 1
+            fi
+        fi
+    done
+    
+    # Download MySQL APT repository package
+    echo -e "${CCYAN}Downloading MySQL APT repository package...${CEND}" >> "$LOG_FILE"
+    local mysql_apt_repo="mysql-apt-config_0.8.24-1_all.deb"
+    wget -q "https://dev.mysql.com/get/$mysql_apt_repo" -O "/tmp/$mysql_apt_repo" >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ MySQL APT repository package downloaded${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to download MySQL APT repository package${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Install MySQL APT repository package
+    echo -e "${CCYAN}Installing MySQL APT repository package...${CEND}" >> "$LOG_FILE"
+    echo "mysql-apt-config mysql-apt-config/select-server select mysql-8.0" | debconf-set-selections >> "$LOG_FILE" 2>&1
+    DEBIAN_FRONTEND=noninteractive apt install -y "/tmp/$mysql_apt_repo" >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ MySQL APT repository package installed${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to install MySQL APT repository package${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Update package list
+    echo -e "${CCYAN}Updating package list...${CEND}" >> "$LOG_FILE"
+    apt update >> "$LOG_FILE" 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Package list updated${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to update package list${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Verify MySQL packages are available
+    echo -e "${CCYAN}Verifying MySQL package availability...${CEND}" >> "$LOG_FILE"
+    if apt-cache show "mysql-server" >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ MySQL packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ MySQL packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Clean up
+    rm -f "/tmp/$mysql_apt_repo"
+}
+
+function add_rhel_mysql_repo_enhanced() {
+    echo -e "${CCYAN}Configuring MySQL repository for RHEL-based systems...${CEND}" >> "$LOG_FILE"
+    
+    # Check OS version compatibility
+    case "$os_ver" in
+        "7"|"8"|"9")
+            echo -e "${CGREEN}✓ RHEL/CentOS/Rocky/AlmaLinux $os_ver is supported${CEND}" >> "$LOG_FILE"
+            ;;
+        *)
+            echo -e "${CRED}✗ RHEL/CentOS version $os_ver not supported${CEND}" >> "$LOG_FILE"
+            return 1
+            ;;
+    esac
+    
+    # Determine package manager
+    local pkg_manager="dnf"
+    if ! command -v dnf >/dev/null 2>&1; then
+        pkg_manager="yum"
+    fi
+    
+    echo -e "${CCYAN}Using package manager: $pkg_manager${CEND}" >> "$LOG_FILE"
+    
+    # Check if repository already exists
+    if [ -f "/etc/yum.repos.d/mysql-community.repo" ]; then
+        echo -e "${CYAN}⚠ MySQL repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Install MySQL Yum repository
+    echo -e "${CCYAN}Installing MySQL Yum repository...${CEND}" >> "$LOG_FILE"
+    
+    local mysql_repo_url=""
+    case "$os_ver" in
+        "7")
+            mysql_repo_url="https://dev.mysql.com/get/mysql80-community-release-el7-7.noarch.rpm"
+            ;;
+        "8")
+            mysql_repo_url="https://dev.mysql.com/get/mysql80-community-release-el8-1.noarch.rpm"
+            ;;
+        "9")
+            mysql_repo_url="https://dev.mysql.com/get/mysql80-community-release-el9-1.noarch.rpm"
+            ;;
+    esac
+    
+    $pkg_manager install -y "$mysql_repo_url" >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ MySQL Yum repository installed${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to install MySQL Yum repository${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Clean package cache
+    echo -e "${CCYAN}Cleaning package cache...${CEND}" >> "$LOG_FILE"
+    $pkg_manager clean all >> "$LOG_FILE" 2>&1
+    
+    # Verify MySQL packages are available
+    echo -e "${CCYAN}Verifying MySQL package availability...${CEND}" >> "$LOG_FILE"
+    if $pkg_manager info mysql-community-server >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ MySQL packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ MySQL packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+}
+
+function add_fedora_mysql_repo_enhanced() {
+    echo -e "${CCYAN}Configuring MySQL repository for Fedora...${CEND}" >> "$LOG_FILE"
+    
+    # Check Fedora version
+    local fedora_major=$(echo "$os_ver" | cut -d. -f1)
+    echo -e "${CGREEN}✓ Fedora $os_ver detected${CEND}" >> "$LOG_FILE"
+    
+    # Determine package manager
+    local pkg_manager="dnf"
+    
+    # Check if repository already exists
+    if [ -f "/etc/yum.repos.d/mysql-community.repo" ]; then
+        echo -e "${CYAN}⚠ MySQL repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Install MySQL Yum repository
+    echo -e "${CCYAN}Installing MySQL Yum repository...${CEND}" >> "$LOG_FILE"
+    local mysql_repo_url="https://dev.mysql.com/get/mysql80-community-release-fc${fedora_major}-1.noarch.rpm"
+    
+    $pkg_manager install -y "$mysql_repo_url" >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ MySQL Yum repository installed${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to install MySQL Yum repository${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Clean package cache
+    echo -e "${CCYAN}Cleaning package cache...${CEND}" >> "$LOG_FILE"
+    $pkg_manager clean all >> "$LOG_FILE" 2>&1
+    
+    # Verify MySQL packages are available
+    echo -e "${CCYAN}Verifying MySQL package availability...${CEND}" >> "$LOG_FILE"
+    if $pkg_manager info mysql-community-server >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ MySQL packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ MySQL packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+}
+
+function add_mariadb_repository_enhanced() {
+    echo -e "${CCYAN}Configuring MariaDB repository for $os $os_ver...${CEND}" >> "$LOG_FILE"
+    
+    case "$os" in
+        "ubuntu"|"debian")
+            add_ubuntu_mariadb_repo_enhanced
+            ;;
+        "centos"|"rhel"|"rocky"|"almalinux")
+            add_rhel_mariadb_repo_enhanced
+            ;;
+        "fedora")
+            add_fedora_mariadb_repo_enhanced
+            ;;
+        *)
+            echo -e "${CRED}✗ Unsupported OS for MariaDB: $os${CEND}" >> "$LOG_FILE"
+            return 1
+            ;;
+    esac
+}
+
+function add_ubuntu_mariadb_repo_enhanced() {
+    echo -e "${CCYAN}Configuring MariaDB repository for Ubuntu/Debian...${CEND}" >> "$LOG_FILE"
+    
+    # Check if repository already exists
+    if [ -f "/etc/apt/sources.list.d/mariadb.list" ] || apt-cache policy | grep -q "downloads.mariadb.com"; then
+        echo -e "${CYAN}⚠ MariaDB repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Install required packages
+    echo -e "${CCYAN}Installing required packages...${CEND}" >> "$LOG_FILE"
+    apt update >> "$LOG_FILE" 2>&1
+    
+    local required_packages=("curl" "gnupg")
+    for pkg in "${required_packages[@]}"; do
+        if ! dpkg -l | grep -q "$pkg"; then
+            echo -e "${CCYAN}Installing $pkg...${CEND}" >> "$LOG_FILE"
+            apt install -y "$pkg" >> "$LOG_FILE" 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ $pkg installed${CEND}" >> "$LOG_FILE"
+            else
+                echo -e "${CRED}✗ Failed to install $pkg${CEND}" >> "$LOG_FILE"
+                return 1
+            fi
+        fi
+    done
+    
+    # Add MariaDB repository using official script
+    echo -e "${CCYAN}Adding MariaDB repository...${CEND}" >> "$LOG_FILE"
+    curl -LsS https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | bash -s -- --mariadb-server-version="$MARIADB_VERSION" >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ MariaDB repository added${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to add MariaDB repository${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Update package list
+    echo -e "${CCYAN}Updating package list...${CEND}" >> "$LOG_FILE"
+    apt update >> "$LOG_FILE" 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Package list updated${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to update package list${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Verify MariaDB packages are available
+    echo -e "${CCYAN}Verifying MariaDB package availability...${CEND}" >> "$LOG_FILE"
+    if apt-cache show "mariadb-server" >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ MariaDB packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ MariaDB packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+}
+
+function add_rhel_mariadb_repo_enhanced() {
+    echo -e "${CCYAN}Configuring MariaDB repository for RHEL-based systems...${CEND}" >> "$LOG_FILE"
+    
+    # Determine package manager
+    local pkg_manager="dnf"
+    if ! command -v dnf >/dev/null 2>&1; then
+        pkg_manager="yum"
+    fi
+    
+    echo -e "${CCYAN}Using package manager: $pkg_manager${CEND}" >> "$LOG_FILE"
+    
+    # Check if repository already exists
+    if [ -f "/etc/yum.repos.d/mariadb.repo" ]; then
+        echo -e "${CYAN}⚠ MariaDB repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Add MariaDB repository
+    echo -e "${CCYAN}Adding MariaDB repository...${CEND}" >> "$LOG_FILE"
+    cat > "/etc/yum.repos.d/mariadb.repo" << EOF
+[mariadb]
+name = MariaDB
+baseurl = https://downloads.mariadb.com/MariaDB/yum/10.11/rhel\$releasever-amd64
+gpgkey = https://downloads.mariadb.com/MariaDB/MariaDB-Server-GPG-KEY
+gpgcheck = 1
+EOF
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ MariaDB repository file created${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to create MariaDB repository file${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Clean package cache
+    echo -e "${CCYAN}Cleaning package cache...${CEND}" >> "$LOG_FILE"
+    $pkg_manager clean all >> "$LOG_FILE" 2>&1
+    
+    # Verify MariaDB packages are available
+    echo -e "${CCYAN}Verifying MariaDB package availability...${CEND}" >> "$LOG_FILE"
+    if $pkg_manager info MariaDB-server >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ MariaDB packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ MariaDB packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+}
+
+function add_fedora_mariadb_repo_enhanced() {
+    echo -e "${CCYAN}Configuring MariaDB repository for Fedora...${CEND}" >> "$LOG_FILE"
+    
+    # Determine package manager
+    local pkg_manager="dnf"
+    
+    # Check if repository already exists
+    if [ -f "/etc/yum.repos.d/mariadb.repo" ]; then
+        echo -e "${CYAN}⚠ MariaDB repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Add MariaDB repository
+    echo -e "${CCYAN}Adding MariaDB repository...${CEND}" >> "$LOG_FILE"
+    cat > "/etc/yum.repos.d/mariadb.repo" << EOF
+[mariadb]
+name = MariaDB
+baseurl = https://downloads.mariadb.com/MariaDB/yum/10.11/fedora\$releasever-amd64
+gpgkey = https://downloads.mariadb.com/MariaDB/MariaDB-Server-GPG-KEY
+gpgcheck = 1
+EOF
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ MariaDB repository file created${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to create MariaDB repository file${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Clean package cache
+    echo -e "${CCYAN}Cleaning package cache...${CEND}" >> "$LOG_FILE"
+    $pkg_manager clean all >> "$LOG_FILE" 2>&1
+    
+    # Verify MariaDB packages are available
+    echo -e "${CCYAN}Verifying MariaDB package availability...${CEND}" >> "$LOG_FILE"
+    if $pkg_manager info MariaDB-server >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ MariaDB packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ MariaDB packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+}
     
     if [ $? -ne 0 ]; then
         echo -e "${CRED}Failed to add repository${CEND}"

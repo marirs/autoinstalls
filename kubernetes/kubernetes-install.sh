@@ -173,19 +173,18 @@ EOF
 }
 
 function install_containerd() {
-    echo -e "${CGREEN}Installing containerd...${CEND}"
+    echo -e "${CGREEN}Installing containerd with intelligent repository management...${CEND}"
     
-    # Remove old Docker/containerd installations
+    # Enhanced repository management
+    if add_docker_repository_enhanced; then
+        echo -e "${CGREEN}✓ Docker repository configured${CEND}"
+    else
+        echo -e "${CRED}✗ Failed to configure Docker repository${CEND}"
+        exit 1
+    fi
+    
+    # Remove old Docker versions
     apt remove -y docker docker-engine docker.io containerd runc 2>/dev/null || true
-    
-    # Add Docker GPG key
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg >> "$LOG_FILE" 2>&1
-    
-    # Add Docker repository
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-    
-    # Update package lists
-    apt update >> "$LOG_FILE" 2>&1
     
     # Install containerd
     apt install -y containerd.io=${CONTAINERD_VERSION} >> "$LOG_FILE" 2>&1
@@ -199,34 +198,628 @@ function install_containerd() {
     mkdir -p /etc/containerd
     containerd config default | tee /etc/containerd/config.toml >> "$LOG_FILE" 2>&1
     
-    # Configure containerd to use systemd cgroup
+    # Configure systemd cgroup driver
     sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
     
-    # Restart and enable containerd
+    # Restart containerd
     systemctl restart containerd
     systemctl enable containerd
     
     echo -e "${CGREEN}containerd installed and configured successfully${CEND}"
 }
 
-function add_kubernetes_repository() {
-    echo -e "${CGREEN}Adding Kubernetes repository...${CEND}"
+# Function to add Docker repository with intelligent management
+function add_docker_repository_enhanced() {
+    echo -e "${CCYAN}Adding Docker repository for $os $os_ver...${CEND}" >> "$LOG_FILE"
     
-    # Add Kubernetes GPG key
-    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg >> "$LOG_FILE" 2>&1
+    case "$os" in
+        "ubuntu")
+            add_ubuntu_docker_repo_enhanced
+            ;;
+        "debian")
+            add_debian_docker_repo_enhanced
+            ;;
+        "centos"|"rhel"|"rocky"|"almalinux")
+            add_rhel_docker_repo_enhanced
+            ;;
+        "fedora")
+            add_fedora_docker_repo_enhanced
+            ;;
+        *)
+            echo -e "${CRED}✗ Unsupported OS for Docker: $os${CEND}" >> "$LOG_FILE"
+            return 1
+            ;;
+    esac
+}
+
+function add_ubuntu_docker_repo_enhanced() {
+    echo -e "${CCYAN}Configuring Docker repository for Ubuntu...${CEND}" >> "$LOG_FILE"
     
-    # Add Kubernetes repository
-    echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list >> "$LOG_FILE" 2>&1
+    # Check Ubuntu version compatibility
+    case "$os_ver" in
+        "18.04"|"20.04"|"22.04"|"24.04")
+            echo -e "${CGREEN}✓ Ubuntu $os_ver is supported${CEND}" >> "$LOG_FILE"
+            ;;
+        *)
+            echo -e "${CYAN}⚠ Ubuntu $os_ver may not be fully supported${CEND}" >> "$LOG_FILE"
+            ;;
+    esac
     
-    # Update package lists
-    apt update >> "$LOG_FILE" 2>&1
-    
-    if [ $? -ne 0 ]; then
-        echo -e "${CRED}Failed to add Kubernetes repository${CEND}"
-        exit 1
+    # Check if repository already exists
+    if [ -f "/etc/apt/sources.list.d/docker.list" ] || apt-cache policy | grep -q "download.docker.com"; then
+        echo -e "${CYAN}⚠ Docker repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
     fi
     
-    echo -e "${CGREEN}Kubernetes repository added successfully${CEND}"
+    # Install required packages
+    echo -e "${CCYAN}Installing required packages...${CEND}" >> "$LOG_FILE"
+    apt update >> "$LOG_FILE" 2>&1
+    
+    local required_packages=("curl" "wget" "gnupg" "ca-certificates" "apt-transport-https")
+    for pkg in "${required_packages[@]}"; do
+        if ! dpkg -l | grep -q "$pkg"; then
+            echo -e "${CCYAN}Installing $pkg...${CEND}" >> "$LOG_FILE"
+            apt install -y "$pkg" >> "$LOG_FILE" 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ $pkg installed${CEND}" >> "$LOG_FILE"
+            else
+                echo -e "${CRED}✗ Failed to install $pkg${CEND}" >> "$LOG_FILE"
+                return 1
+            fi
+        fi
+    done
+    
+    # Get Ubuntu codename dynamically
+    local ubuntu_codename=""
+    if command -v lsb_release >/dev/null 2>&1; then
+        ubuntu_codename=$(lsb_release -cs 2>/dev/null || echo "jammy")
+    else
+        # Fallback to version-based codename
+        case "$os_ver" in
+            "18.04") ubuntu_codename="bionic" ;;
+            "20.04") ubuntu_codename="focal" ;;
+            "22.04") ubuntu_codename="jammy" ;;
+            "24.04") ubuntu_codename="noble" ;;
+            *) ubuntu_codename="jammy" ;;
+        esac
+    fi
+    
+    echo -e "${CCYAN}Using Ubuntu codename: $ubuntu_codename${CEND}" >> "$LOG_FILE"
+    
+    # Add Docker GPG key
+    echo -e "${CCYAN}Importing Docker GPG key...${CEND}" >> "$LOG_FILE"
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Docker GPG key imported${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to import Docker GPG key${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Add Docker repository
+    echo -e "${CCYAN}Adding Docker repository...${CEND}" >> "$LOG_FILE"
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $ubuntu_codename stable" | tee /etc/apt/sources.list.d/docker.list >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Docker repository added${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to add Docker repository${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Update package list
+    echo -e "${CCYAN}Updating package list...${CEND}" >> "$LOG_FILE"
+    apt update >> "$LOG_FILE" 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Package list updated${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to update package list${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Verify Docker packages are available
+    echo -e "${CCYAN}Verifying Docker package availability...${CEND}" >> "$LOG_FILE"
+    if apt-cache show "containerd.io" >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ Docker packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Docker packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+}
+
+function add_debian_docker_repo_enhanced() {
+    echo -e "${CCYAN}Configuring Docker repository for Debian...${CEND}" >> "$LOG_FILE"
+    
+    # Check Debian version compatibility
+    case "$os_ver" in
+        "10"|"11"|"12"|"13")
+            echo -e "${CGREEN}✓ Debian $os_ver is supported${CEND}" >> "$LOG_FILE"
+            ;;
+        *)
+            echo -e "${CYAN}⚠ Debian $os_ver may not be fully supported${CEND}" >> "$LOG_FILE"
+            ;;
+    esac
+    
+    # Check if repository already exists
+    if [ -f "/etc/apt/sources.list.d/docker.list" ] || apt-cache policy | grep -q "download.docker.com"; then
+        echo -e "${CYAN}⚠ Docker repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Install required packages
+    echo -e "${CCYAN}Installing required packages...${CEND}" >> "$LOG_FILE"
+    apt update >> "$LOG_FILE" 2>&1
+    
+    local required_packages=("curl" "wget" "gnupg" "ca-certificates" "apt-transport-https")
+    for pkg in "${required_packages[@]}"; do
+        if ! dpkg -l | grep -q "$pkg"; then
+            echo -e "${CCYAN}Installing $pkg...${CEND}" >> "$LOG_FILE"
+            apt install -y "$pkg" >> "$LOG_FILE" 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ $pkg installed${CEND}" >> "$LOG_FILE"
+            else
+                echo -e "${CRED}✗ Failed to install $pkg${CEND}" >> "$LOG_FILE"
+                return 1
+            fi
+        fi
+    done
+    
+    # Get Debian codename dynamically
+    local debian_codename=""
+    if command -v lsb_release >/dev/null 2>&1; then
+        debian_codename=$(lsb_release -cs 2>/dev/null || echo "bookworm")
+    else
+        # Fallback to version-based codename
+        case "$os_ver" in
+            "10") debian_codename="buster" ;;
+            "11") debian_codename="bullseye" ;;
+            "12") debian_codename="bookworm" ;;
+            "13") debian_codename="trixie" ;;
+            *) debian_codename="bookworm" ;;
+        esac
+    fi
+    
+    echo -e "${CCYAN}Using Debian codename: $debian_codename${CEND}" >> "$LOG_FILE"
+    
+    # Add Docker GPG key
+    echo -e "${CCYAN}Importing Docker GPG key...${CEND}" >> "$LOG_FILE"
+    curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Docker GPG key imported${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to import Docker GPG key${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Add Docker repository
+    echo -e "${CCYAN}Adding Docker repository...${CEND}" >> "$LOG_FILE"
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian $debian_codename stable" | tee /etc/apt/sources.list.d/docker.list >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Docker repository added${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to add Docker repository${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Update package list
+    echo -e "${CCYAN}Updating package list...${CEND}" >> "$LOG_FILE"
+    apt update >> "$LOG_FILE" 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Package list updated${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to update package list${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Verify Docker packages are available
+    echo -e "${CCYAN}Verifying Docker package availability...${CEND}" >> "$LOG_FILE"
+    if apt-cache show "containerd.io" >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ Docker packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Docker packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+}
+
+function add_rhel_docker_repo_enhanced() {
+    echo -e "${CCYAN}Configuring Docker repository for RHEL-based systems...${CEND}" >> "$LOG_FILE"
+    
+    # Check OS version compatibility
+    case "$os_ver" in
+        "7"|"8"|"9")
+            echo -e "${CGREEN}✓ RHEL/CentOS/Rocky/AlmaLinux $os_ver is supported${CEND}" >> "$LOG_FILE"
+            ;;
+        *)
+            echo -e "${CRED}✗ RHEL/CentOS version $os_ver not supported${CEND}" >> "$LOG_FILE"
+            return 1
+            ;;
+    esac
+    
+    # Determine package manager
+    local pkg_manager="dnf"
+    if ! command -v dnf >/dev/null 2>&1; then
+        pkg_manager="yum"
+    fi
+    
+    echo -e "${CCYAN}Using package manager: $pkg_manager${CEND}" >> "$LOG_FILE"
+    
+    # Check if repository already exists
+    if [ -f "/etc/yum.repos.d/docker-ce.repo" ]; then
+        echo -e "${CYAN}⚠ Docker repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Install Docker Yum repository
+    echo -e "${CCYAN}Installing Docker Yum repository...${CEND}" >> "$LOG_FILE"
+    local docker_repo_url="https://download.docker.com/linux/centos/docker-ce.repo"
+    
+    $pkg_manager config-manager --add-repo "$docker_repo_url" >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Docker Yum repository installed${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to install Docker Yum repository${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Clean package cache
+    echo -e "${CCYAN}Cleaning package cache...${CEND}" >> "$LOG_FILE"
+    $pkg_manager clean all >> "$LOG_FILE" 2>&1
+    
+    # Verify Docker packages are available
+    echo -e "${CCYAN}Verifying Docker package availability...${CEND}" >> "$LOG_FILE"
+    if $pkg_manager info containerd.io >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ Docker packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Docker packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+}
+
+function add_fedora_docker_repo_enhanced() {
+    echo -e "${CCYAN}Configuring Docker repository for Fedora...${CEND}" >> "$LOG_FILE"
+    
+    # Check Fedora version
+    local fedora_major=$(echo "$os_ver" | cut -d. -f1)
+    echo -e "${CGREEN}✓ Fedora $os_ver detected${CEND}" >> "$LOG_FILE"
+    
+    # Determine package manager
+    local pkg_manager="dnf"
+    
+    # Check if repository already exists
+    if [ -f "/etc/yum.repos.d/docker-ce.repo" ]; then
+        echo -e "${CYAN}⚠ Docker repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Install Docker Yum repository
+    echo -e "${CCYAN}Installing Docker Yum repository...${CEND}" >> "$LOG_FILE"
+    local docker_repo_url="https://download.docker.com/linux/fedora/docker-ce.repo"
+    
+    $pkg_manager config-manager --add-repo "$docker_repo_url" >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Docker Yum repository installed${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to install Docker Yum repository${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Clean package cache
+    echo -e "${CCYAN}Cleaning package cache...${CEND}" >> "$LOG_FILE"
+    $pkg_manager clean all >> "$LOG_FILE" 2>&1
+    
+    # Verify Docker packages are available
+    echo -e "${CCYAN}Verifying Docker package availability...${CEND}" >> "$LOG_FILE"
+    if $pkg_manager info containerd.io >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ Docker packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Docker packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+}
+
+function add_kubernetes_repository() {
+    echo -e "${CGREEN}Adding Kubernetes repository with intelligent management...${CEND}"
+    
+    # Enhanced repository management
+    if add_kubernetes_repository_enhanced; then
+        echo -e "${CGREEN}✓ Kubernetes repository configured${CEND}"
+    else
+        echo -e "${CRED}✗ Failed to configure Kubernetes repository${CEND}"
+        exit 1
+    fi
+}
+
+# Function to add Kubernetes repository with intelligent management
+function add_kubernetes_repository_enhanced() {
+    echo -e "${CCYAN}Adding Kubernetes repository for $os $os_ver...${CEND}" >> "$LOG_FILE"
+    
+    case "$os" in
+        "ubuntu")
+            add_ubuntu_kubernetes_repo_enhanced
+            ;;
+        "debian")
+            add_debian_kubernetes_repo_enhanced
+            ;;
+        "centos"|"rhel"|"rocky"|"almalinux")
+            add_rhel_kubernetes_repo_enhanced
+            ;;
+        "fedora")
+            add_fedora_kubernetes_repo_enhanced
+            ;;
+        *)
+            echo -e "${CRED}✗ Unsupported OS for Kubernetes: $os${CEND}" >> "$LOG_FILE"
+            return 1
+            ;;
+    esac
+}
+
+function add_ubuntu_kubernetes_repo_enhanced() {
+    echo -e "${CCYAN}Configuring Kubernetes repository for Ubuntu...${CEND}" >> "$LOG_FILE"
+    
+    # Check Ubuntu version compatibility
+    case "$os_ver" in
+        "18.04"|"20.04"|"22.04"|"24.04")
+            echo -e "${CGREEN}✓ Ubuntu $os_ver is supported${CEND}" >> "$LOG_FILE"
+            ;;
+        *)
+            echo -e "${CYAN}⚠ Ubuntu $os_ver may not be fully supported${CEND}" >> "$LOG_FILE"
+            ;;
+    esac
+    
+    # Check if repository already exists
+    if [ -f "/etc/apt/sources.list.d/kubernetes.list" ] || apt-cache policy | grep -q "pkgs.k8s.io"; then
+        echo -e "${CYAN}⚠ Kubernetes repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Install required packages
+    echo -e "${CCYAN}Installing required packages...${CEND}" >> "$LOG_FILE"
+    local required_packages=("curl" "wget" "gnupg" "ca-certificates" "apt-transport-https")
+    for pkg in "${required_packages[@]}"; do
+        if ! dpkg -l | grep -q "$pkg"; then
+            echo -e "${CCYAN}Installing $pkg...${CEND}" >> "$LOG_FILE"
+            apt install -y "$pkg" >> "$LOG_FILE" 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ $pkg installed${CEND}" >> "$LOG_FILE"
+            else
+                echo -e "${CRED}✗ Failed to install $pkg${CEND}" >> "$LOG_FILE"
+                return 1
+            fi
+        fi
+    done
+    
+    # Add Kubernetes GPG key
+    echo -e "${CCYAN}Importing Kubernetes GPG key...${CEND}" >> "$LOG_FILE"
+    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Kubernetes GPG key imported${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to import Kubernetes GPG key${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Add Kubernetes repository
+    echo -e "${CCYAN}Adding Kubernetes repository...${CEND}" >> "$LOG_FILE"
+    echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Kubernetes repository added${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to add Kubernetes repository${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Update package list
+    echo -e "${CCYAN}Updating package list...${CEND}" >> "$LOG_FILE"
+    apt update >> "$LOG_FILE" 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Package list updated${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to update package list${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Verify Kubernetes packages are available
+    echo -e "${CCYAN}Verifying Kubernetes package availability...${CEND}" >> "$LOG_FILE"
+    if apt-cache show "kubelet" >/dev/null 2>&1 && apt-cache show "kubeadm" >/dev/null 2>&1 && apt-cache show "kubectl" >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ Kubernetes packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Kubernetes packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+}
+
+function add_debian_kubernetes_repo_enhanced() {
+    echo -e "${CCYAN}Configuring Kubernetes repository for Debian...${CEND}" >> "$LOG_FILE"
+    
+    # Check Debian version compatibility
+    case "$os_ver" in
+        "10"|"11"|"12"|"13")
+            echo -e "${CGREEN}✓ Debian $os_ver is supported${CEND}" >> "$LOG_FILE"
+            ;;
+        *)
+            echo -e "${CYAN}⚠ Debian $os_ver may not be fully supported${CEND}" >> "$LOG_FILE"
+            ;;
+    esac
+    
+    # Check if repository already exists
+    if [ -f "/etc/apt/sources.list.d/kubernetes.list" ] || apt-cache policy | grep -q "pkgs.k8s.io"; then
+        echo -e "${CYAN}⚠ Kubernetes repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Install required packages
+    echo -e "${CCYAN}Installing required packages...${CEND}" >> "$LOG_FILE"
+    local required_packages=("curl" "wget" "gnupg" "ca-certificates" "apt-transport-https")
+    for pkg in "${required_packages[@]}"; do
+        if ! dpkg -l | grep -q "$pkg"; then
+            echo -e "${CCYAN}Installing $pkg...${CEND}" >> "$LOG_FILE"
+            apt install -y "$pkg" >> "$LOG_FILE" 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ $pkg installed${CEND}" >> "$LOG_FILE"
+            else
+                echo -e "${CRED}✗ Failed to install $pkg${CEND}" >> "$LOG_FILE"
+                return 1
+            fi
+        fi
+    done
+    
+    # Add Kubernetes GPG key
+    echo -e "${CCYAN}Importing Kubernetes GPG key...${CEND}" >> "$LOG_FILE"
+    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Kubernetes GPG key imported${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to import Kubernetes GPG key${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Add Kubernetes repository
+    echo -e "${CCYAN}Adding Kubernetes repository...${CEND}" >> "$LOG_FILE"
+    echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Kubernetes repository added${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to add Kubernetes repository${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Update package list
+    echo -e "${CCYAN}Updating package list...${CEND}" >> "$LOG_FILE"
+    apt update >> "$LOG_FILE" 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Package list updated${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to update package list${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Verify Kubernetes packages are available
+    echo -e "${CCYAN}Verifying Kubernetes package availability...${CEND}" >> "$LOG_FILE"
+    if apt-cache show "kubelet" >/dev/null 2>&1 && apt-cache show "kubeadm" >/dev/null 2>&1 && apt-cache show "kubectl" >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ Kubernetes packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Kubernetes packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+}
+
+function add_rhel_kubernetes_repo_enhanced() {
+    echo -e "${CCYAN}Configuring Kubernetes repository for RHEL-based systems...${CEND}" >> "$LOG_FILE"
+    
+    # Check OS version compatibility
+    case "$os_ver" in
+        "7"|"8"|"9")
+            echo -e "${CGREEN}✓ RHEL/CentOS/Rocky/AlmaLinux $os_ver is supported${CEND}" >> "$LOG_FILE"
+            ;;
+        *)
+            echo -e "${CRED}✗ RHEL/CentOS version $os_ver not supported${CEND}" >> "$LOG_FILE"
+            return 1
+            ;;
+    esac
+    
+    # Determine package manager
+    local pkg_manager="dnf"
+    if ! command -v dnf >/dev/null 2>&1; then
+        pkg_manager="yum"
+    fi
+    
+    echo -e "${CCYAN}Using package manager: $pkg_manager${CEND}" >> "$LOG_FILE"
+    
+    # Check if repository already exists
+    if [ -f "/etc/yum.repos.d/kubernetes.repo" ]; then
+        echo -e "${CYAN}⚠ Kubernetes repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Create Kubernetes repository file
+    echo -e "${CCYAN}Creating Kubernetes repository file...${CEND}" >> "$LOG_FILE"
+    cat > /etc/yum.repos.d/kubernetes.repo << EOF
+[kubernetes]
+name=Kubernetes
+baseurl=https://pkgs.k8s.io/core:/stable:/v1.29/rpm/
+enabled=1
+gpgcheck=1
+gpgkey=https://pkgs.k8s.io/core:/stable:/v1.29/rpm/repodata/repomd.xml.key
+exclude=kubelet kubeadm kubectl cri-tools kubernetes-cni
+EOF
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Kubernetes repository file created${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to create Kubernetes repository file${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Clean package cache
+    echo -e "${CCYAN}Cleaning package cache...${CEND}" >> "$LOG_FILE"
+    $pkg_manager clean all >> "$LOG_FILE" 2>&1
+    
+    # Verify Kubernetes packages are available
+    echo -e "${CCYAN}Verifying Kubernetes package availability...${CEND}" >> "$LOG_FILE"
+    if $pkg_manager info kubelet >/dev/null 2>&1 && $pkg_manager info kubeadm >/dev/null 2>&1 && $pkg_manager info kubectl >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ Kubernetes packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Kubernetes packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+}
+
+function add_fedora_kubernetes_repo_enhanced() {
+    echo -e "${CCYAN}Configuring Kubernetes repository for Fedora...${CEND}" >> "$LOG_FILE"
+    
+    # Check Fedora version
+    local fedora_major=$(echo "$os_ver" | cut -d. -f1)
+    echo -e "${CGREEN}✓ Fedora $os_ver detected${CEND}" >> "$LOG_FILE"
+    
+    # Determine package manager
+    local pkg_manager="dnf"
+    
+    # Check if repository already exists
+    if [ -f "/etc/yum.repos.d/kubernetes.repo" ]; then
+        echo -e "${CYAN}⚠ Kubernetes repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Create Kubernetes repository file
+    echo -e "${CCYAN}Creating Kubernetes repository file...${CEND}" >> "$LOG_FILE"
+    cat > /etc/yum.repos.d/kubernetes.repo << EOF
+[kubernetes]
+name=Kubernetes
+baseurl=https://pkgs.k8s.io/core:/stable:/v1.29/rpm/
+enabled=1
+gpgcheck=1
+gpgkey=https://pkgs.k8s.io/core:/stable:/v1.29/rpm/repodata/repomd.xml.key
+exclude=kubelet kubeadm kubectl cri-tools kubernetes-cni
+EOF
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Kubernetes repository file created${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to create Kubernetes repository file${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Clean package cache
+    echo -e "${CCYAN}Cleaning package cache...${CEND}" >> "$LOG_FILE"
+    $pkg_manager clean all >> "$LOG_FILE" 2>&1
+    
+    # Verify Kubernetes packages are available
+    echo -e "${CCYAN}Verifying Kubernetes package availability...${CEND}" >> "$LOG_FILE"
+    if $pkg_manager info kubelet >/dev/null 2>&1 && $pkg_manager info kubeadm >/dev/null 2>&1 && $pkg_manager info kubectl >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ Kubernetes packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Kubernetes packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
 }
 
 function install_kubernetes() {

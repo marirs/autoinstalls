@@ -399,82 +399,671 @@ function install_dependencies() {
 }
 
 function add_erlang_repository() {
-    echo -e "${CGREEN}Adding Erlang repository...${CEND}"
+    echo -e "${CGREEN}Adding Erlang repository with intelligent management...${CEND}"
+    
+    # Enhanced repository management
+    if add_erlang_repository_enhanced; then
+        echo -e "${CGREEN}✓ Erlang repository configured${CEND}"
+    else
+        echo -e "${CRED}✗ Failed to configure Erlang repository${CEND}"
+        exit 1
+    fi
+}
+
+# Function to add Erlang repository with intelligent management
+function add_erlang_repository_enhanced() {
+    echo -e "${CCYAN}Adding Erlang repository for $os $os_ver...${CEND}" >> "$LOG_FILE"
+    
+    case "$os" in
+        "ubuntu")
+            add_ubuntu_erlang_repo_enhanced
+            ;;
+        "debian")
+            add_debian_erlang_repo_enhanced
+            ;;
+        "centos"|"rhel"|"rocky"|"almalinux")
+            add_rhel_erlang_repo_enhanced
+            ;;
+        "fedora")
+            add_fedora_erlang_repo_enhanced
+            ;;
+        *)
+            echo -e "${CRED}✗ Unsupported OS for Erlang: $os${CEND}" >> "$LOG_FILE"
+            return 1
+            ;;
+    esac
+}
+
+function add_ubuntu_erlang_repo_enhanced() {
+    echo -e "${CCYAN}Configuring Erlang repository for Ubuntu...${CEND}" >> "$LOG_FILE"
+    
+    # Check Ubuntu version compatibility
+    case "$os_ver" in
+        "18.04"|"20.04"|"22.04"|"24.04")
+            echo -e "${CGREEN}✓ Ubuntu $os_ver is supported${CEND}" >> "$LOG_FILE"
+            ;;
+        *)
+            echo -e "${CYAN}⚠ Ubuntu $os_ver may not be fully supported${CEND}" >> "$LOG_FILE"
+            ;;
+    esac
+    
+    # Check if repository already exists
+    if [ -f "/etc/apt/sources.list.d/rabbitmq.list" ] || apt-cache policy | grep -q "ppa1.novemberain.com"; then
+        echo -e "${CYAN}⚠ Erlang repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Install required packages
+    echo -e "${CCYAN}Installing required packages...${CEND}" >> "$LOG_FILE"
+    apt update >> "$LOG_FILE" 2>&1
+    
+    local required_packages=("curl" "wget" "gnupg" "ca-certificates" "apt-transport-https")
+    for pkg in "${required_packages[@]}"; do
+        if ! dpkg -l | grep -q "$pkg"; then
+            echo -e "${CCYAN}Installing $pkg...${CEND}" >> "$LOG_FILE"
+            apt install -y "$pkg" >> "$LOG_FILE" 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ $pkg installed${CEND}" >> "$LOG_FILE"
+            else
+                echo -e "${CRED}✗ Failed to install $pkg${CEND}" >> "$LOG_FILE"
+                return 1
+            fi
+        fi
+    done
+    
+    # Get Ubuntu codename dynamically
+    local ubuntu_codename=""
+    if command -v lsb_release >/dev/null 2>&1; then
+        ubuntu_codename=$(lsb_release -cs 2>/dev/null || echo "jammy")
+    else
+        # Fallback to version-based codename
+        case "$os_ver" in
+            "18.04") ubuntu_codename="bionic" ;;
+            "20.04") ubuntu_codename="focal" ;;
+            "22.04") ubuntu_codename="jammy" ;;
+            "24.04") ubuntu_codename="noble" ;;
+            *) ubuntu_codename="jammy" ;;
+        esac
+    fi
+    
+    echo -e "${CCYAN}Using Ubuntu codename: $ubuntu_codename${CEND}" >> "$LOG_FILE"
     
     # Import RabbitMQ/Erlang GPG key
+    echo -e "${CCYAN}Importing RabbitMQ/Erlang GPG key...${CEND}" >> "$LOG_FILE"
     curl -fsSL https://github.com/rabbitmq/signing-keys/releases/download/2.0/rabbitmq-release-signing-key.asc | gpg --dearmor -o /usr/share/keyrings/rabbitmq-archive-keyring.gpg >> "$LOG_FILE" 2>&1
     
-    if [ $? -ne 0 ]; then
-        echo -e "${CRED}Failed to import RabbitMQ GPG key${CEND}"
-        exit 1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ RabbitMQ/Erlang GPG key imported${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to import RabbitMQ/Erlang GPG key${CEND}" >> "$LOG_FILE"
+        return 1
     fi
     
     # Add Erlang repository
-    echo "deb [signed-by=/usr/share/keyrings/rabbitmq-archive-keyring.gpg] https://ppa1.novemberain.com/rabbitmq/rabbitmq-erlang/deb/ubuntu $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/rabbitmq.list >> "$LOG_FILE" 2>&1
+    echo -e "${CCYAN}Adding Erlang repository...${CEND}" >> "$LOG_FILE"
+    echo "deb [signed-by=/usr/share/keyrings/rabbitmq-archive-keyring.gpg] https://ppa1.novemberain.com/rabbitmq/rabbitmq-erlang/deb/ubuntu $ubuntu_codename main" | tee /etc/apt/sources.list.d/rabbitmq.list >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Erlang repository added${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to add Erlang repository${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
     
     # Set Erlang package priority
+    echo -e "${CCYAN}Setting Erlang package priority...${CEND}" >> "$LOG_FILE"
     echo "Package: erlang*" | tee /etc/apt/preferences.d/erlang >> "$LOG_FILE" 2>&1
     echo "Pin: release o=LP-PPA-rabbitmq-rabbitmq-erlang" | tee -a /etc/apt/preferences.d/erlang >> "$LOG_FILE" 2>&1
     echo "Pin-Priority: 1000" | tee -a /etc/apt/preferences.d/erlang >> "$LOG_FILE" 2>&1
     
-    # Update package lists
+    # Update package list
+    echo -e "${CCYAN}Updating package list...${CEND}" >> "$LOG_FILE"
     apt update >> "$LOG_FILE" 2>&1
-    
-    if [ $? -ne 0 ]; then
-        echo -e "${CRED}Failed to add Erlang repository${CEND}"
-        exit 1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Package list updated${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to update package list${CEND}" >> "$LOG_FILE"
+        return 1
     fi
     
-    echo -e "${CGREEN}Erlang repository added successfully${CEND}"
+    # Verify Erlang packages are available
+    echo -e "${CCYAN}Verifying Erlang package availability...${CEND}" >> "$LOG_FILE"
+    if apt-cache show "erlang-base" >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ Erlang packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Erlang packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
 }
 
-function install_erlang() {
-    echo -e "${CGREEN}Installing Erlang...${CEND}"
+function add_debian_erlang_repo_enhanced() {
+    echo -e "${CCYAN}Configuring Erlang repository for Debian...${CEND}" >> "$LOG_FILE"
     
-    # Install Erlang
-    apt install -y \
-        erlang-base \
-        erlang-asn1 \
-        erlang-crypto \
-        erlang-eldap \
-        erlang-ftp \
-        erlang-inets \
-        erlang-mnesia \
-        erlang-os-mon \
-        erlang-parsetools \
-        erlang-public-key \
-        erlang-runtime-tools \
-        erlang-snmp \
-        erlang-ssl \
-        erlang-syntax-tools \
-        erlang-tftp \
-        erlang-tools \
-        erlang-xmerl \
-        >> "$LOG_FILE" 2>&1
+    # Check Debian version compatibility
+    case "$os_ver" in
+        "10"|"11"|"12"|"13")
+            echo -e "${CGREEN}✓ Debian $os_ver is supported${CEND}" >> "$LOG_FILE"
+            ;;
+        *)
+            echo -e "${CYAN}⚠ Debian $os_ver may not be fully supported${CEND}" >> "$LOG_FILE"
+            ;;
+    esac
     
-    if [ $? -ne 0 ]; then
-        echo -e "${CRED}Failed to install Erlang${CEND}"
-        exit 1
+    # Check if repository already exists
+    if [ -f "/etc/apt/sources.list.d/rabbitmq.list" ] || apt-cache policy | grep -q "ppa1.novemberain.com"; then
+        echo -e "${CYAN}⚠ Erlang repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
     fi
     
-    echo -e "${CGREEN}Erlang installed successfully${CEND}"
+    # Install required packages
+    echo -e "${CCYAN}Installing required packages...${CEND}" >> "$LOG_FILE"
+    apt update >> "$LOG_FILE" 2>&1
+    
+    local required_packages=("curl" "wget" "gnupg" "ca-certificates" "apt-transport-https")
+    for pkg in "${required_packages[@]}"; do
+        if ! dpkg -l | grep -q "$pkg"; then
+            echo -e "${CCYAN}Installing $pkg...${CEND}" >> "$LOG_FILE"
+            apt install -y "$pkg" >> "$LOG_FILE" 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ $pkg installed${CEND}" >> "$LOG_FILE"
+            else
+                echo -e "${CRED}✗ Failed to install $pkg${CEND}" >> "$LOG_FILE"
+                return 1
+            fi
+        fi
+    done
+    
+    # Get Debian codename dynamically
+    local debian_codename=""
+    if command -v lsb_release >/dev/null 2>&1; then
+        debian_codename=$(lsb_release -cs 2>/dev/null || echo "bookworm")
+    else
+        # Fallback to version-based codename
+        case "$os_ver" in
+            "10") debian_codename="buster" ;;
+            "11") debian_codename="bullseye" ;;
+            "12") debian_codename="bookworm" ;;
+            "13") debian_codename="trixie" ;;
+            *) debian_codename="bookworm" ;;
+        esac
+    fi
+    
+    echo -e "${CCYAN}Using Debian codename: $debian_codename${CEND}" >> "$LOG_FILE"
+    
+    # Import RabbitMQ/Erlang GPG key
+    echo -e "${CCYAN}Importing RabbitMQ/Erlang GPG key...${CEND}" >> "$LOG_FILE"
+    curl -fsSL https://github.com/rabbitmq/signing-keys/releases/download/2.0/rabbitmq-release-signing-key.asc | gpg --dearmor -o /usr/share/keyrings/rabbitmq-archive-keyring.gpg >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ RabbitMQ/Erlang GPG key imported${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to import RabbitMQ/Erlang GPG key${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Add Erlang repository
+    echo -e "${CCYAN}Adding Erlang repository...${CEND}" >> "$LOG_FILE"
+    echo "deb [signed-by=/usr/share/keyrings/rabbitmq-archive-keyring.gpg] https://ppa1.novemberain.com/rabbitmq/rabbitmq-erlang/deb/ubuntu $debian_codename main" | tee /etc/apt/sources.list.d/rabbitmq.list >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Erlang repository added${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to add Erlang repository${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Set Erlang package priority
+    echo -e "${CCYAN}Setting Erlang package priority...${CEND}" >> "$LOG_FILE"
+    echo "Package: erlang*" | tee /etc/apt/preferences.d/erlang >> "$LOG_FILE" 2>&1
+    echo "Pin: release o=LP-PPA-rabbitmq-rabbitmq-erlang" | tee -a /etc/apt/preferences.d/erlang >> "$LOG_FILE" 2>&1
+    echo "Pin-Priority: 1000" | tee -a /etc/apt/preferences.d/erlang >> "$LOG_FILE" 2>&1
+    
+    # Update package list
+    echo -e "${CCYAN}Updating package list...${CEND}" >> "$LOG_FILE"
+    apt update >> "$LOG_FILE" 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Package list updated${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to update package list${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Verify Erlang packages are available
+    echo -e "${CCYAN}Verifying Erlang package availability...${CEND}" >> "$LOG_FILE"
+    if apt-cache show "erlang-base" >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ Erlang packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Erlang packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+}
+
+function add_rhel_erlang_repo_enhanced() {
+    echo -e "${CCYAN}Configuring Erlang repository for RHEL-based systems...${CEND}" >> "$LOG_FILE"
+    
+    # Check OS version compatibility
+    case "$os_ver" in
+        "7"|"8"|"9")
+            echo -e "${CGREEN}✓ RHEL/CentOS/Rocky/AlmaLinux $os_ver is supported${CEND}" >> "$LOG_FILE"
+            ;;
+        *)
+            echo -e "${CRED}✗ RHEL/CentOS version $os_ver not supported${CEND}" >> "$LOG_FILE"
+            return 1
+            ;;
+    esac
+    
+    # Determine package manager
+    local pkg_manager="dnf"
+    if ! command -v dnf >/dev/null 2>&1; then
+        pkg_manager="yum"
+    fi
+    
+    echo -e "${CCYAN}Using package manager: $pkg_manager${CEND}" >> "$LOG_FILE"
+    
+    # Check if repository already exists
+    if [ -f "/etc/yum.repos.d/rabbitmq-erlang.repo" ]; then
+        echo -e "${CYAN}⚠ Erlang repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Import RabbitMQ/Erlang GPG key
+    echo -e "${CCYAN}Importing RabbitMQ/Erlang GPG key...${CEND}" >> "$LOG_FILE"
+    rpm --import https://github.com/rabbitmq/signing-keys/releases/download/2.0/rabbitmq-release-signing-key.asc >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ RabbitMQ/Erlang GPG key imported${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to import RabbitMQ/Erlang GPG key${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Create Erlang repository file
+    echo -e "${CCYAN}Creating Erlang repository file...${CEND}" >> "$LOG_FILE"
+    cat > /etc/yum.repos.d/rabbitmq-erlang.repo << EOF
+[rabbitmq-erlang]
+name=rabbitmq-erlang
+baseurl=https://ppa1.novemberain.com/rabbitmq/rabbitmq-erlang/erlang/25/el/8/\$basearch
+repo_gpgcheck=1
+enabled=1
+gpgkey=https://github.com/rabbitmq/signing-keys/releases/download/2.0/rabbitmq-release-signing-key.asc
+gpgcheck=1
+EOF
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Erlang repository file created${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to create Erlang repository file${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Clean package cache
+    echo -e "${CCYAN}Cleaning package cache...${CEND}" >> "$LOG_FILE"
+    $pkg_manager clean all >> "$LOG_FILE" 2>&1
+    
+    # Verify Erlang packages are available
+    echo -e "${CCYAN}Verifying Erlang package availability...${CEND}" >> "$LOG_FILE"
+    if $pkg_manager info erlang >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ Erlang packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Erlang packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+}
+
+function add_fedora_erlang_repo_enhanced() {
+    echo -e "${CCYAN}Configuring Erlang repository for Fedora...${CEND}" >> "$LOG_FILE"
+    
+    # Check Fedora version
+    local fedora_major=$(echo "$os_ver" | cut -d. -f1)
+    echo -e "${CGREEN}✓ Fedora $os_ver detected${CEND}" >> "$LOG_FILE"
+    
+    # Determine package manager
+    local pkg_manager="dnf"
+    
+    # Check if repository already exists
+    if [ -f "/etc/yum.repos.d/rabbitmq-erlang.repo" ]; then
+        echo -e "${CYAN}⚠ Erlang repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Import RabbitMQ/Erlang GPG key
+    echo -e "${CCYAN}Importing RabbitMQ/Erlang GPG key...${CEND}" >> "$LOG_FILE"
+    rpm --import https://github.com/rabbitmq/signing-keys/releases/download/2.0/rabbitmq-release-signing-key.asc >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ RabbitMQ/Erlang GPG key imported${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to import RabbitMQ/Erlang GPG key${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Create Erlang repository file
+    echo -e "${CCYAN}Creating Erlang repository file...${CEND}" >> "$LOG_FILE"
+    cat > /etc/yum.repos.d/rabbitmq-erlang.repo << EOF
+[rabbitmq-erlang]
+name=rabbitmq-erlang
+baseurl=https://ppa1.novemberain.com/rabbitmq/rabbitmq-erlang/erlang/25/el/8/\$basearch
+repo_gpgcheck=1
+enabled=1
+gpgkey=https://github.com/rabbitmq/signing-keys/releases/download/2.0/rabbitmq-release-signing-key.asc
+gpgcheck=1
+EOF
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Erlang repository file created${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to create Erlang repository file${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Clean package cache
+    echo -e "${CCYAN}Cleaning package cache...${CEND}" >> "$LOG_FILE"
+    $pkg_manager clean all >> "$LOG_FILE" 2>&1
+    
+    # Verify Erlang packages are available
+    echo -e "${CCYAN}Verifying Erlang package availability...${CEND}" >> "$LOG_FILE"
+    if $pkg_manager info erlang >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ Erlang packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Erlang packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
 }
 
 function add_rabbitmq_repository() {
-    echo -e "${CGREEN}Adding RabbitMQ repository...${CEND}"
+    echo -e "${CGREEN}Adding RabbitMQ repository with intelligent management...${CEND}"
     
-    # Add RabbitMQ repository
-    echo "deb [signed-by=/usr/share/keyrings/rabbitmq-archive-keyring.gpg] https://ppa1.novemberain.com/rabbitmq/rabbitmq-server/deb/ubuntu $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/rabbitmq.list >> "$LOG_FILE" 2>&1
-    
-    # Update package lists
-    apt update >> "$LOG_FILE" 2>&1
-    
-    if [ $? -ne 0 ]; then
-        echo -e "${CRED}Failed to add RabbitMQ repository${CEND}"
+    # Enhanced repository management
+    if add_rabbitmq_repository_enhanced; then
+        echo -e "${CGREEN}✓ RabbitMQ repository configured${CEND}"
+    else
+        echo -e "${CRED}✗ Failed to configure RabbitMQ repository${CEND}"
         exit 1
     fi
+}
+
+# Function to add RabbitMQ repository with intelligent management
+function add_rabbitmq_repository_enhanced() {
+    echo -e "${CCYAN}Adding RabbitMQ repository for $os $os_ver...${CEND}" >> "$LOG_FILE"
     
-    echo -e "${CGREEN}RabbitMQ repository added successfully${CEND}"
+    case "$os" in
+        "ubuntu")
+            add_ubuntu_rabbitmq_repo_enhanced
+            ;;
+        "debian")
+            add_debian_rabbitmq_repo_enhanced
+            ;;
+        "centos"|"rhel"|"rocky"|"almalinux")
+            add_rhel_rabbitmq_repo_enhanced
+            ;;
+        "fedora")
+            add_fedora_rabbitmq_repo_enhanced
+            ;;
+        *)
+            echo -e "${CRED}✗ Unsupported OS for RabbitMQ: $os${CEND}" >> "$LOG_FILE"
+            return 1
+            ;;
+    esac
+}
+
+function add_ubuntu_rabbitmq_repo_enhanced() {
+    echo -e "${CCYAN}Configuring RabbitMQ repository for Ubuntu...${CEND}" >> "$LOG_FILE"
+    
+    # Check Ubuntu version compatibility
+    case "$os_ver" in
+        "18.04"|"20.04"|"22.04"|"24.04")
+            echo -e "${CGREEN}✓ Ubuntu $os_ver is supported${CEND}" >> "$LOG_FILE"
+            ;;
+        *)
+            echo -e "${CYAN}⚠ Ubuntu $os_ver may not be fully supported${CEND}" >> "$LOG_FILE"
+            ;;
+    esac
+    
+    # Check if repository already exists
+    if [ -f "/etc/apt/sources.list.d/rabbitmq.list" ] || apt-cache policy | grep -q "ppa1.novemberain.com"; then
+        echo -e "${CYAN}⚠ RabbitMQ repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Get Ubuntu codename dynamically
+    local ubuntu_codename=""
+    if command -v lsb_release >/dev/null 2>&1; then
+        ubuntu_codename=$(lsb_release -cs 2>/dev/null || echo "jammy")
+    else
+        # Fallback to version-based codename
+        case "$os_ver" in
+            "18.04") ubuntu_codename="bionic" ;;
+            "20.04") ubuntu_codename="focal" ;;
+            "22.04") ubuntu_codename="jammy" ;;
+            "24.04") ubuntu_codename="noble" ;;
+            *) ubuntu_codename="jammy" ;;
+        esac
+    fi
+    
+    echo -e "${CCYAN}Using Ubuntu codename: $ubuntu_codename${CEND}" >> "$LOG_FILE"
+    
+    # Add RabbitMQ repository
+    echo -e "${CCYAN}Adding RabbitMQ repository...${CEND}" >> "$LOG_FILE"
+    echo "deb [signed-by=/usr/share/keyrings/rabbitmq-archive-keyring.gpg] https://ppa1.novemberain.com/rabbitmq/rabbitmq-server/deb/ubuntu $ubuntu_codename main" | tee -a /etc/apt/sources.list.d/rabbitmq.list >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ RabbitMQ repository added${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to add RabbitMQ repository${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Update package list
+    echo -e "${CCYAN}Updating package list...${CEND}" >> "$LOG_FILE"
+    apt update >> "$LOG_FILE" 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Package list updated${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to update package list${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Verify RabbitMQ packages are available
+    echo -e "${CCYAN}Verifying RabbitMQ package availability...${CEND}" >> "$LOG_FILE"
+    if apt-cache show "rabbitmq-server" >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ RabbitMQ packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ RabbitMQ packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+}
+
+function add_debian_rabbitmq_repo_enhanced() {
+    echo -e "${CCYAN}Configuring RabbitMQ repository for Debian...${CEND}" >> "$LOG_FILE"
+    
+    # Check Debian version compatibility
+    case "$os_ver" in
+        "10"|"11"|"12"|"13")
+            echo -e "${CGREEN}✓ Debian $os_ver is supported${CEND}" >> "$LOG_FILE"
+            ;;
+        *)
+            echo -e "${CYAN}⚠ Debian $os_ver may not be fully supported${CEND}" >> "$LOG_FILE"
+            ;;
+    esac
+    
+    # Check if repository already exists
+    if [ -f "/etc/apt/sources.list.d/rabbitmq.list" ] || apt-cache policy | grep -q "ppa1.novemberain.com"; then
+        echo -e "${CYAN}⚠ RabbitMQ repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Get Debian codename dynamically
+    local debian_codename=""
+    if command -v lsb_release >/dev/null 2>&1; then
+        debian_codename=$(lsb_release -cs 2>/dev/null || echo "bookworm")
+    else
+        # Fallback to version-based codename
+        case "$os_ver" in
+            "10") debian_codename="buster" ;;
+            "11") debian_codename="bullseye" ;;
+            "12") debian_codename="bookworm" ;;
+            "13") debian_codename="trixie" ;;
+            *) debian_codename="bookworm" ;;
+        esac
+    fi
+    
+    echo -e "${CCYAN}Using Debian codename: $debian_codename${CEND}" >> "$LOG_FILE"
+    
+    # Add RabbitMQ repository
+    echo -e "${CCYAN}Adding RabbitMQ repository...${CEND}" >> "$LOG_FILE"
+    echo "deb [signed-by=/usr/share/keyrings/rabbitmq-archive-keyring.gpg] https://ppa1.novemberain.com/rabbitmq/rabbitmq-server/deb/ubuntu $debian_codename main" | tee -a /etc/apt/sources.list.d/rabbitmq.list >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ RabbitMQ repository added${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to add RabbitMQ repository${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Update package list
+    echo -e "${CCYAN}Updating package list...${CEND}" >> "$LOG_FILE"
+    apt update >> "$LOG_FILE" 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Package list updated${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to update package list${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Verify RabbitMQ packages are available
+    echo -e "${CCYAN}Verifying RabbitMQ package availability...${CEND}" >> "$LOG_FILE"
+    if apt-cache show "rabbitmq-server" >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ RabbitMQ packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ RabbitMQ packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+}
+
+function add_rhel_rabbitmq_repo_enhanced() {
+    echo -e "${CCYAN}Configuring RabbitMQ repository for RHEL-based systems...${CEND}" >> "$LOG_FILE"
+    
+    # Check OS version compatibility
+    case "$os_ver" in
+        "7"|"8"|"9")
+            echo -e "${CGREEN}✓ RHEL/CentOS/Rocky/AlmaLinux $os_ver is supported${CEND}" >> "$LOG_FILE"
+            ;;
+        *)
+            echo -e "${CRED}✗ RHEL/CentOS version $os_ver not supported${CEND}" >> "$LOG_FILE"
+            return 1
+            ;;
+    esac
+    
+    # Determine package manager
+    local pkg_manager="dnf"
+    if ! command -v dnf >/dev/null 2>&1; then
+        pkg_manager="yum"
+    fi
+    
+    echo -e "${CCYAN}Using package manager: $pkg_manager${CEND}" >> "$LOG_FILE"
+    
+    # Check if repository already exists
+    if [ -f "/etc/yum.repos.d/rabbitmq.repo" ]; then
+        echo -e "${CYAN}⚠ RabbitMQ repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Create RabbitMQ repository file
+    echo -e "${CCYAN}Creating RabbitMQ repository file...${CEND}" >> "$LOG_FILE"
+    cat > /etc/yum.repos.d/rabbitmq.repo << EOF
+[rabbitmq-erlang]
+name=rabbitmq-erlang
+baseurl=https://ppa1.novemberain.com/rabbitmq/rabbitmq-erlang/erlang/25/el/8/\$basearch
+repo_gpgcheck=1
+enabled=1
+gpgkey=https://github.com/rabbitmq/signing-keys/releases/download/2.0/rabbitmq-release-signing-key.asc
+gpgcheck=1
+
+[rabbitmq-server]
+name=rabbitmq-server
+baseurl=https://ppa1.novemberain.com/rabbitmq/rabbitmq-server/el/8/\$basearch
+repo_gpgcheck=1
+enabled=1
+gpgkey=https://github.com/rabbitmq/signing-keys/releases/download/2.0/rabbitmq-release-signing-key.asc
+gpgcheck=1
+EOF
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ RabbitMQ repository file created${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to create RabbitMQ repository file${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Clean package cache
+    echo -e "${CCYAN}Cleaning package cache...${CEND}" >> "$LOG_FILE"
+    $pkg_manager clean all >> "$LOG_FILE" 2>&1
+    
+    # Verify RabbitMQ packages are available
+    echo -e "${CCYAN}Verifying RabbitMQ package availability...${CEND}" >> "$LOG_FILE"
+    if $pkg_manager info rabbitmq-server >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ RabbitMQ packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ RabbitMQ packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+}
+
+function add_fedora_rabbitmq_repo_enhanced() {
+    echo -e "${CCYAN}Configuring RabbitMQ repository for Fedora...${CEND}" >> "$LOG_FILE"
+    
+    # Check Fedora version
+    local fedora_major=$(echo "$os_ver" | cut -d. -f1)
+    echo -e "${CGREEN}✓ Fedora $os_ver detected${CEND}" >> "$LOG_FILE"
+    
+    # Determine package manager
+    local pkg_manager="dnf"
+    
+    # Check if repository already exists
+    if [ -f "/etc/yum.repos.d/rabbitmq.repo" ]; then
+        echo -e "${CYAN}⚠ RabbitMQ repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Create RabbitMQ repository file
+    echo -e "${CCYAN}Creating RabbitMQ repository file...${CEND}" >> "$LOG_FILE"
+    cat > /etc/yum.repos.d/rabbitmq.repo << EOF
+[rabbitmq-erlang]
+name=rabbitmq-erlang
+baseurl=https://ppa1.novemberain.com/rabbitmq/rabbitmq-erlang/erlang/25/el/8/\$basearch
+repo_gpgcheck=1
+enabled=1
+gpgkey=https://github.com/rabbitmq/signing-keys/releases/download/2.0/rabbitmq-release-signing-key.asc
+gpgcheck=1
+
+[rabbitmq-server]
+name=rabbitmq-server
+baseurl=https://ppa1.novemberain.com/rabbitmq/rabbitmq-server/el/8/\$basearch
+repo_gpgcheck=1
+enabled=1
+gpgkey=https://github.com/rabbitmq/signing-keys/releases/download/2.0/rabbitmq-release-signing-key.asc
+gpgcheck=1
+EOF
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ RabbitMQ repository file created${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to create RabbitMQ repository file${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Clean package cache
+    echo -e "${CCYAN}Cleaning package cache...${CEND}" >> "$LOG_FILE"
+    $pkg_manager clean all >> "$LOG_FILE" 2>&1
+    
+    # Verify RabbitMQ packages are available
+    echo -e "${CCYAN}Verifying RabbitMQ package availability...${CEND}" >> "$LOG_FILE"
+    if $pkg_manager info rabbitmq-server >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ RabbitMQ packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ RabbitMQ packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
 }
 
 function install_rabbitmq() {
