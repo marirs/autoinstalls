@@ -2,7 +2,7 @@
 #
 # Description: Install Python 3.x with AI/ML Environment Setup
 # Tested:
-#       Debian: 9.x, 10.x, 11.x, 12.x
+#       Debian: 9.x, 10.x, 11.x, 12.x, 13.x
 #       Ubuntu: 18.04, 20.04, 22.04, 24.04
 # 
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
@@ -25,8 +25,138 @@ CBLUE="${CSI}1;34m"
 CMAGENTA="${CSI}1;35m"
 CCYAN="${CSI}1;36m"
 
+# System information detection
+os=$(cat /etc/os-release | grep "^ID=" | cut -d"=" -f2 | xargs)
+os_ver=$(cat /etc/os-release | grep "_ID=" | cut -d"=" -f2 | xargs)
+os_codename=$(cat /etc/os-release | grep "VERSION_CODENAME" | cut -d"=" -f2 | xargs)
+
 # Installation mode
 INSTALL_MODE=""
+
+# Function to install dependencies with comprehensive fallback handling
+function install_packages_with_fallback() {
+    local pkgs="$1"
+    local failed_packages=()
+    local successful_packages=()
+    
+    echo -e "${CGREEN}Installing dependencies for $os $os_ver...${CEND}"
+    
+    # Update package lists first
+    apt update >> /tmp/apt-packages.log 2>&1
+    
+    total_packages=$(echo $pkgs | wc -w)
+    echo -e "${CGREEN}Installing $total_packages dependencies...${CEND}"
+    
+    for pkg in $pkgs; do
+        echo -ne "    - ${CBLUE}installing $pkg ...                                                     ${CEND}\r"
+        
+        # Check if package exists before installing
+        if apt-cache show "$pkg" >/dev/null 2>&1; then
+            apt install -y "$pkg" >> /tmp/apt-packages.log 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "    - ${CGREEN}✓ $pkg installed${CEND}"
+                successful_packages+=("$pkg")
+            else
+                echo -ne "\n"
+                echo -e "    - ${CRED}$pkg failed installation${CEND}"
+                failed_packages+=("$pkg")
+                
+                # Try to find alternatives for common packages
+                case "$pkg" in
+                    "build-essential")
+                        local build_alternatives=("build-base" "base-devel")
+                        for alt_pkg in "${build_alternatives[@]}"; do
+                            if apt-cache show "$alt_pkg" >/dev/null 2>&1; then
+                                echo -e "    - ${CCYAN}Trying alternative: $alt_pkg${CEND}"
+                                apt install -y "$alt_pkg" >> /tmp/apt-packages.log 2>&1
+                                if [ $? -eq 0 ]; then
+                                    echo -e "    - ${CGREEN}✓ $alt_pkg installed (alternative to $pkg)${CEND}"
+                                    successful_packages+=("$alt_pkg")
+                                    break
+                                fi
+                            fi
+                        done
+                        ;;
+                    "libssl-dev")
+                        local ssl_alternatives=("libssl-dev" "openssl-dev" "libssl3-dev")
+                        for alt_pkg in "${ssl_alternatives[@]}"; do
+                            if apt-cache show "$alt_pkg" >/dev/null 2>&1; then
+                                echo -e "    - ${CCYAN}Trying alternative: $alt_pkg${CEND}"
+                                apt install -y "$alt_pkg" >> /tmp/apt-packages.log 2>&1
+                                if [ $? -eq 0 ]; then
+                                    echo -e "    - ${CGREEN}✓ $alt_pkg installed (alternative to $pkg)${CEND}"
+                                    successful_packages+=("$alt_pkg")
+                                    break
+                                fi
+                            fi
+                        done
+                        ;;
+                    "libffi-dev")
+                        local ffi_alternatives=("libffi-dev" "libffi8-dev" "libffi7-dev")
+                        for alt_pkg in "${ffi_alternatives[@]}"; do
+                            if apt-cache show "$alt_pkg" >/dev/null 2>&1; then
+                                echo -e "    - ${CCYAN}Trying alternative: $alt_pkg${CEND}"
+                                apt install -y "$alt_pkg" >> /tmp/apt-packages.log 2>&1
+                                if [ $? -eq 0 ]; then
+                                    echo -e "    - ${CGREEN}✓ $alt_pkg installed (alternative to $pkg)${CEND}"
+                                    successful_packages+=("$alt_pkg")
+                                    break
+                                fi
+                            fi
+                        done
+                        ;;
+                    "software-properties-common")
+                        local software_props_alternatives=("software-properties-common" "python3-software-properties" "software-properties")
+                        for alt_pkg in "${software_props_alternatives[@]}"; do
+                            if apt-cache show "$alt_pkg" >/dev/null 2>&1; then
+                                echo -e "    - ${CCYAN}Trying alternative: $alt_pkg${CEND}"
+                                apt install -y "$alt_pkg" >> /tmp/apt-packages.log 2>&1
+                                if [ $? -eq 0 ]; then
+                                    echo -e "    - ${CGREEN}✓ $alt_pkg installed (alternative to $pkg)${CEND}"
+                                    successful_packages+=("$alt_pkg")
+                                    break
+                                fi
+                            fi
+                        done
+                        ;;
+                esac
+            fi
+        else
+            echo -ne "\n"
+            echo -e "    - ${CCYAN}⚠ Package $pkg not found, skipping${CEND}"
+            failed_packages+=("$pkg")
+        fi
+    done
+    
+    echo -ne "                                                              \r"
+    
+    # Comprehensive package validation
+    echo -e "${CCYAN}Package installation summary:${CEND}"
+    echo -e "${CGREEN}Successfully installed: ${successful_packages[*]}${CEND}"
+    if [ ${#failed_packages[@]} -gt 0 ]; then
+        echo -e "${CCYAN}Failed to install: ${failed_packages[*]}${CEND}"
+    fi
+    
+    # Check if critical packages are available for Python compilation
+    local critical_ok=true
+    if ! command -v gcc >/dev/null 2>&1; then
+        echo -e "${CRED}✗ gcc is missing - critical for Python compilation${CEND}"
+        critical_ok=false
+    fi
+    
+    if ! ldconfig -p | grep -q libssl; then
+        echo -e "${CRED}✗ SSL libraries are missing - critical for Python SSL support${CEND}"
+        critical_ok=false
+    fi
+    
+    if [ "$critical_ok" = true ]; then
+        echo -e "${CGREEN}✓ Critical dependencies are available${CEND}"
+        echo -e "${CCYAN}Python installation will continue...${CEND}"
+    else
+        echo -e "${CRED}✗ Critical dependencies missing. Cannot continue.${CEND}"
+        exit 1
+    fi
+}
 
 # Function to show main menu
 function show_main_menu() {
@@ -235,17 +365,10 @@ function install_deps() {
     fi
     
     total_packages=$(echo $pkgs | wc -w)
-    echo -e "${CGREEN}Installing $total_packages dependancies...${CEND}"
-    for pkg in $pkgs; do
-		echo -ne "    - ${CBLUE}installing $pkg ...                                                     ${CEND}\r"
-        apt install -y $pkg >> /tmp/apt-packages.log 2>&1
-        if [ $? -ne 0 ]; then
-			echo -ne "\n"
-            echo -e "    - ${CRED}$pkg failed installation${CEND}"
-            exit 1
-        fi
-    done
-	echo -ne "                                                              \r"
+    echo -e "${CGREEN}Installing $total_packages dependencies...${CEND}"
+    
+    # Use the comprehensive package installation function
+    install_packages_with_fallback "$pkgs"
 }
 
 function clean_up() {

@@ -5,12 +5,311 @@ CSI="\033["
 CEND="${CSI}0m"
 CRED="${CSI}1;31m"
 CGREEN="${CSI}1;32m"
+CCYAN="${CSI}1;36m"
 
 # Check root access
 if [[ "$EUID" -ne 0 ]]; then
 	echo -e "${CRED}Sorry, you need to run this as root${CEND}"
 	exit 1
 fi
+
+# System information detection
+os=$(cat /etc/os-release | grep "^ID=" | cut -d"=" -f2 | xargs)
+os_ver=$(cat /etc/os-release | grep "_ID=" | cut -d"=" -f2 | xargs)
+os_codename=$(cat /etc/os-release | grep "VERSION_CODENAME" | cut -d"=" -f2 | xargs)
+architecture=$(arch)
+
+# Function to install dependencies based on OS version
+function install_dependencies() {
+    echo -e "${CCYAN}Installing dependencies for $os $os_ver...${CEND}"
+    
+    case "$os" in
+        "ubuntu"|"debian")
+            # Update package lists
+            apt-get update >> /tmp/nginx-install.log 2>&1
+            
+            # Base packages common to all versions
+            local base_packages=(
+                "build-essential"
+                "ca-certificates"
+                "wget"
+                "curl"
+                "apt-utils"
+                "pkgconf"
+                "autoconf"
+                "unzip"
+                "automake"
+                "libtool"
+                "tar"
+                "git"
+                "uuid-dev"
+                "libperl-dev"
+                "libxslt1-dev"
+            )
+            
+            # Version-specific packages
+            local version_packages=()
+            
+            case "$os" in
+                "debian")
+                    case "$os_ver" in
+                        "9"|"10"|"11")
+                            # Older Debian versions
+                            version_packages+=(
+                                "libpcre3"
+                                "libpcre3-dev"
+                                "libldap2-dev"
+                                "libcurl4-openssl-dev"
+                                "libgeoip-dev"
+                                "libpcre2-dev"
+                                "pcre2-utils"
+                                "pcregrep"
+                                "libssl-dev"
+                                "zlib1g-dev"
+                                "libbrotli-dev"
+                            )
+                            ;;
+                        "12")
+                            # Debian 12 Bookworm
+                            version_packages+=(
+                                "libpcre3"
+                                "libpcre3-dev"
+                                "libldap2-dev"
+                                "libcurl4-openssl-dev"
+                                "libgeoip-dev"
+                                "libpcre2-dev"
+                                "pcre2-utils"
+                                "pcregrep"
+                                "libssl-dev"
+                                "zlib1g-dev"
+                                "libbrotli-dev"
+                            )
+                            ;;
+                        "13")
+                            # Debian 13 Trixie - handle package changes
+                            version_packages+=(
+                                "libpcre3"
+                                "libpcre3-dev"
+                                "libldap2-dev"
+                                "libcurl4-openssl-dev"
+                                "libpcre2-dev"
+                                "pcre2-utils"
+                                "pcregrep"
+                                "libssl-dev"
+                                "zlib1g-dev"
+                                "libbrotli-dev"
+                            )
+                            # Try geoip packages with fallbacks
+                            local geoip_packages=("libgeoip-dev" "libmaxminddb-dev")
+                            for geoip_pkg in "${geoip_packages[@]}"; do
+                                if apt-cache show "$geoip_pkg" >/dev/null 2>&1; then
+                                    version_packages+=("$geoip_pkg")
+                                    break
+                                fi
+                            done
+                            ;;
+                        *)
+                            # Future Debian versions
+                            version_packages+=(
+                                "libpcre3"
+                                "libpcre3-dev"
+                                "libldap2-dev"
+                                "libcurl4-openssl-dev"
+                                "libpcre2-dev"
+                                "pcre2-utils"
+                                "pcregrep"
+                                "libssl-dev"
+                                "zlib1g-dev"
+                                "libbrotli-dev"
+                            )
+                            ;;
+                    esac
+                    ;;
+                "ubuntu")
+                    case "$os_ver" in
+                        "18.04"|"20.04")
+                            # Older Ubuntu versions
+                            version_packages+=(
+                                "libpcre3"
+                                "libpcre3-dev"
+                                "libldap2-dev"
+                                "libcurl4-openssl-dev"
+                                "libgeoip-dev"
+                                "libpcre2-dev"
+                                "pcre2-utils"
+                                "pcregrep"
+                                "libssl-dev"
+                                "zlib1g-dev"
+                                "libbrotli-dev"
+                            )
+                            ;;
+                        "22.04"|"24.04")
+                            # Modern Ubuntu versions
+                            version_packages+=(
+                                "libpcre3"
+                                "libpcre3-dev"
+                                "libldap2-dev"
+                                "libcurl4-openssl-dev"
+                                "libgeoip-dev"
+                                "libpcre2-dev"
+                                "pcre2-utils"
+                                "pcregrep"
+                                "libssl-dev"
+                                "zlib1g-dev"
+                                "libbrotli-dev"
+                            )
+                            ;;
+                        *)
+                            # Future Ubuntu versions
+                            version_packages+=(
+                                "libpcre3"
+                                "libpcre3-dev"
+                                "libldap2-dev"
+                                "libcurl4-openssl-dev"
+                                "libpcre2-dev"
+                                "pcre2-utils"
+                                "pcregrep"
+                                "libssl-dev"
+                                "zlib1g-dev"
+                                "libbrotli-dev"
+                            )
+                            ;;
+                    esac
+                    ;;
+            esac
+            
+            # Combine all packages
+            local all_packages=("${base_packages[@]}" "${version_packages[@]}")
+            
+            # Add optional packages if requested
+            if [[ "$MODSEC" = 'y' ]]; then
+                local modsec_packages=("liblmdb-dev" "libyajl-dev" "libmodsecurity3" "libmodsecurity-dev")
+                for pkg in "${modsec_packages[@]}"; do
+                    if apt-cache show "$pkg" >/dev/null 2>&1; then
+                        all_packages+=("$pkg")
+                    fi
+                done
+            fi
+            
+            if [[ "$GEOIP2" = 'y' ]]; then
+                local geoip2_packages=("libgeoip-dev" "libmaxminddb0" "libmaxminddb-dev" "mmdb-bin")
+                for pkg in "${geoip2_packages[@]}"; do
+                    if apt-cache show "$pkg" >/dev/null 2>&1; then
+                        all_packages+=("$pkg")
+                    fi
+                done
+            fi
+            
+            if [[ "$BROTLI" = 'y' ]]; then
+                local brotli_packages=("brotli" "libbrotli-dev" "libbrotli1" "node-brotli-size")
+                for pkg in "${brotli_packages[@]}"; do
+                    if apt-cache show "$pkg" >/dev/null 2>&1; then
+                        all_packages+=("$pkg")
+                    fi
+                done
+            fi
+            
+            # Install packages with error handling
+            local failed_packages=()
+            for package in "${all_packages[@]}"; do
+                echo -e "${CCYAN}Installing $package...${CEND}"
+                if apt-cache show "$package" >/dev/null 2>&1; then
+                    apt-get install -y "$package" >> /tmp/nginx-install.log 2>&1
+                    if [ $? -eq 0 ]; then
+                        echo -e "${CGREEN}✓ $package installed${CEND}"
+                    else
+                        echo -e "${CRED}✗ $package failed to install${CEND}"
+                        failed_packages+=("$package")
+                    fi
+                else
+                    echo -e "${CCYAN}⚠ Package $package not found, skipping${CEND}"
+                    failed_packages+=("$package")
+                fi
+            done
+            
+            # Check if critical packages are available
+            if command -v gcc >/dev/null 2>&1 && command -v make >/dev/null 2>&1; then
+                echo -e "${CGREEN}Critical dependencies installed successfully${CEND}"
+            else
+                echo -e "${CRED}Critical dependencies missing. Cannot continue.${CEND}"
+                exit 1
+            fi
+            
+            # Warn about failed packages but don't exit for non-critical ones
+            if [ ${#failed_packages[@]} -gt 0 ]; then
+                echo -e "${CCYAN}Warning: Some packages failed to install: ${failed_packages[*]}${CEND}"
+                echo -e "${CCYAN}Nginx installation will continue with available packages...${CEND}"
+            fi
+            ;;
+        "centos"|"rhel"|"rocky"|"almalinux")
+            # RHEL-based systems
+            local rhel_packages=(
+                "gcc"
+                "gcc-c++"
+                "make"
+                "wget"
+                "curl"
+                "tar"
+                "git"
+                "pcre-devel"
+                "openssl-devel"
+                "zlib-devel"
+                "uuid-devel"
+                "libxslt-devel"
+            )
+            
+            # Version-specific adjustments
+            case "$os_ver" in
+                "7")
+                    # CentOS 7 uses yum and older package names
+                    if command -v yum >/dev/null 2>&1; then
+                        yum install -y epel-release >> /tmp/nginx-install.log 2>&1
+                        for package in "${rhel_packages[@]}"; do
+                            echo -e "${CCYAN}Installing $package...${CEND}"
+                            yum install -y "$package" >> /tmp/nginx-install.log 2>&1
+                        done
+                    fi
+                    ;;
+                "8"|"9")
+                    # RHEL 8+ uses dnf
+                    if command -v dnf >/dev/null 2>&1; then
+                        dnf install -y epel-release >> /tmp/nginx-install.log 2>&1
+                        for package in "${rhel_packages[@]}"; do
+                            echo -e "${CCYAN}Installing $package...${CEND}"
+                            dnf install -y "$package" >> /tmp/nginx-install.log 2>&1
+                        done
+                    fi
+                    ;;
+            esac
+            ;;
+        "fedora")
+            # Fedora-specific packages
+            local fedora_packages=(
+                "gcc"
+                "gcc-c++"
+                "make"
+                "wget"
+                "curl"
+                "tar"
+                "git"
+                "pcre-devel"
+                "openssl-devel"
+                "zlib-devel"
+                "uuid-devel"
+                "libxslt-devel"
+            )
+            
+            for package in "${fedora_packages[@]}"; do
+                echo -e "${CCYAN}Installing $package...${CEND}"
+                dnf install -y "$package" >> /tmp/nginx-install.log 2>&1
+            done
+            ;;
+        *)
+            echo -e "${CRED}Unsupported OS: $os${CEND}"
+            exit 1
+            ;;
+    esac
+}
 
 # Defined Variables
 # Get all the NGINX versions from the ngnix.org web page
@@ -191,32 +490,7 @@ case $OPTION in
         mkdir -p /usr/local/src/nginx/modules >> /tmp/nginx-install.log 2>&1
 
         # Dependencies
-        echo -ne "       Installing dependencies        [..]\r"
-        apt-get update >> /tmp/nginx-install.log 2>&1
-        INSTALL_PKGS="build-essential ca-certificates wget curl apt-utils pkgconf libpcre3 libpcre3-dev libldap2-dev autoconf libcurl4-openssl-dev libgeoip-dev libpcre2-dev pcre2-utils pcregrep unzip automake libtool tar git libssl-dev zlib1g-dev uuid-dev libbrotli-dev libperl-dev libxslt1-dev"
-        if [[ "$MODSEC" = 'y' ]]; then
-            INSTALL_PKGS=$(echo $INSTALL_PKGS; echo liblmdb-dev libyajl-dev libmodsecurity3 libmodsecurity-dev)
-        fi
-        if [[ "$GEOIP2" = 'y' ]]; then
-            INSTALL_PKGS=$(echo $INSTALL_PKGS; echo libgeoip-dev libmaxminddb0 libmaxminddb-dev mmdb-bin)
-        fi
-        if [[ "$BROTLI" = 'y' ]]; then
-          INSTALL_PKGS=$(echo $INSTALL_PKGS; echo brotli libbrotli-dev libbrotli1 node-brotli-size)
-        fi
-        for i in $INSTALL_PKGS; do
-                apt-get install -y $i  >> /tmp/nginx-install.log 2>&1
-                if [ $? -ne 0 ]; then
-                    echo -e "       Installing dependencies        [${CRED}FAIL${CEND}]"
-                    echo ""
-                    echo "Please look at /tmp/nginx-install.log"
-                    echo ""
-                    exit 1
-                fi
-        done
-        if [ $? -eq 0 ]; then
-            echo -ne "       Installing dependencies        [${CGREEN}OK${CEND}]\r"
-            echo -ne "\n"
-        fi
+        install_dependencies
 
         if [[ "$GEOIP2" = 'y' || "$MODSEC" = 'y' ]]; then
             echo -ne "       Geoip/Modsec dependencies      [..]\r"

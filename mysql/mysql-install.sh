@@ -32,8 +32,9 @@ DB_SOCKET="/var/run/mysqld/mysqld.sock"
 
 # System Information
 ARCH=$(uname -m)
-OS=$(lsb_release -si 2>/dev/null || echo "Unknown")
-OS_VERSION=$(lsb_release -sr 2>/dev/null || echo "Unknown")
+os=$(cat /etc/os-release | grep "^ID=" | cut -d"=" -f2 | xargs)
+os_ver=$(cat /etc/os-release | grep "_ID=" | cut -d"=" -f2 | xargs)
+os_codename=$(cat /etc/os-release | grep "VERSION_CODENAME" | cut -d"=" -f2 | xargs)
 
 # Logging
 LOG_FILE="/tmp/mysql-install.log"
@@ -50,7 +51,7 @@ function show_header() {
         echo -e "${CCYAN}Version: ${MARIADB_VERSION}${CEND}"
     fi
     echo -e "${CCYAN}Architecture: ${ARCH}${CEND}"
-    echo -e "${CCYAN}OS: ${OS} ${OS_VERSION}${CEND}"
+    echo -e "${CCYAN}OS: ${os} ${os_ver}${CEND}"
     echo ""
 }
 
@@ -119,32 +120,189 @@ function check_system() {
 }
 
 function install_dependencies() {
-    echo -e "${CGREEN}Installing dependencies...${CEND}"
+    echo -e "${CGREEN}Installing dependencies for $os $os_ver...${CEND}"
     
-    # Update package lists
-    apt update >> "$LOG_FILE" 2>&1
-    
-    # Install dependencies
-    apt install -y \
-        software-properties-common \
-        apt-transport-https \
-        ca-certificates \
-        gnupg \
-        wget \
-        curl \
-        lsb-release \
-        ufw \
-        systemd \
-        logrotate \
-        bc \
-        >> "$LOG_FILE" 2>&1
-    
-    if [ $? -ne 0 ]; then
-        echo -e "${CRED}Failed to install dependencies${CEND}"
-        exit 1
-    fi
-    
-    echo -e "${CGREEN}Dependencies installed successfully${CEND}"
+    case "$os" in
+        "ubuntu"|"debian")
+            # Update package lists
+            apt update >> "$LOG_FILE" 2>&1
+            
+            # Base packages common to all versions
+            local base_packages=(
+                "ca-certificates"
+                "gnupg"
+                "wget"
+                "curl"
+                "lsb-release"
+                "ufw"
+                "systemd"
+                "logrotate"
+                "bc"
+            )
+            
+            # Version-specific packages
+            local version_packages=()
+            
+            case "$os" in
+                "debian")
+                    case "$os_ver" in
+                        "9"|"10"|"11")
+                            # Older Debian versions
+                            version_packages+=(
+                                "software-properties-common"
+                                "apt-transport-https"
+                            )
+                            ;;
+                        "12")
+                            # Debian 12 Bookworm
+                            version_packages+=(
+                                "software-properties-common"
+                                "apt-transport-https"
+                            )
+                            ;;
+                        "13")
+                            # Debian 13 Trixie - handle package changes
+                            version_packages+=(
+                                "apt-transport-https"
+                            )
+                            # Try software-properties-common alternatives
+                            if ! apt-cache show software-properties-common >/dev/null 2>&1; then
+                                echo -e "${CCYAN}software-properties-common not found, skipping...${CEND}"
+                            else
+                                version_packages+=("software-properties-common")
+                            fi
+                            ;;
+                        *)
+                            # Future Debian versions
+                            version_packages+=(
+                                "software-properties-common"
+                                "apt-transport-https"
+                            )
+                            ;;
+                    esac
+                    ;;
+                "ubuntu")
+                    case "$os_ver" in
+                        "18.04"|"20.04")
+                            # Older Ubuntu versions
+                            version_packages+=(
+                                "software-properties-common"
+                                "apt-transport-https"
+                            )
+                            ;;
+                        "22.04"|"24.04")
+                            # Modern Ubuntu versions
+                            version_packages+=(
+                                "software-properties-common"
+                                "apt-transport-https"
+                            )
+                            ;;
+                        *)
+                            # Future Ubuntu versions
+                            version_packages+=(
+                                "software-properties-common"
+                                "apt-transport-https"
+                            )
+                            ;;
+                    esac
+                    ;;
+            esac
+            
+            # Combine all packages
+            local all_packages=("${base_packages[@]}" "${version_packages[@]}")
+            
+            # Install packages with error handling
+            local failed_packages=()
+            for package in "${all_packages[@]}"; do
+                echo -e "${CCYAN}Installing $package...${CEND}"
+                if apt-cache show "$package" >/dev/null 2>&1; then
+                    apt install -y "$package" >> "$LOG_FILE" 2>&1
+                    if [ $? -eq 0 ]; then
+                        echo -e "${CGREEN}✓ $package installed${CEND}"
+                    else
+                        echo -e "${CRED}✗ $package failed to install${CEND}"
+                        failed_packages+=("$package")
+                    fi
+                else
+                    echo -e "${CCYAN}⚠ Package $package not found, skipping${CEND}"
+                    failed_packages+=("$package")
+                fi
+            done
+            
+            # Check if critical packages are available
+            if command -v wget >/dev/null 2>&1 && command -v curl >/dev/null 2>&1; then
+                echo -e "${CGREEN}Critical dependencies installed successfully${CEND}"
+            else
+                echo -e "${CRED}Critical dependencies missing. Cannot continue.${CEND}"
+                exit 1
+            fi
+            
+            # Warn about failed packages but don't exit for non-critical ones
+            if [ ${#failed_packages[@]} -gt 0 ]; then
+                echo -e "${CCYAN}Warning: Some packages failed to install: ${failed_packages[*]}${CEND}"
+                echo -e "${CCYAN}MySQL installation will continue with available packages...${CEND}"
+            fi
+            ;;
+        "centos"|"rhel"|"rocky"|"almalinux")
+            # RHEL-based systems
+            local rhel_packages=(
+                "ca-certificates"
+                "gnupg2"
+                "wget"
+                "curl"
+                "firewalld"
+                "systemd"
+                "logrotate"
+                "bc"
+            )
+            
+            # Version-specific adjustments
+            case "$os_ver" in
+                "7")
+                    # CentOS 7 uses yum
+                    if command -v yum >/dev/null 2>&1; then
+                        yum install -y epel-release >> "$LOG_FILE" 2>&1
+                        for package in "${rhel_packages[@]}"; do
+                            echo -e "${CCYAN}Installing $package...${CEND}"
+                            yum install -y "$package" >> "$LOG_FILE" 2>&1
+                        done
+                    fi
+                    ;;
+                "8"|"9")
+                    # RHEL 8+ uses dnf
+                    if command -v dnf >/dev/null 2>&1; then
+                        dnf install -y epel-release >> "$LOG_FILE" 2>&1
+                        for package in "${rhel_packages[@]}"; do
+                            echo -e "${CCYAN}Installing $package...${CEND}"
+                            dnf install -y "$package" >> "$LOG_FILE" 2>&1
+                        done
+                    fi
+                    ;;
+            esac
+            ;;
+        "fedora")
+            # Fedora-specific packages
+            local fedora_packages=(
+                "ca-certificates"
+                "gnupg2"
+                "wget"
+                "curl"
+                "firewalld"
+                "systemd"
+                "logrotate"
+                "bc"
+            )
+            
+            for package in "${fedora_packages[@]}"; do
+                echo -e "${CCYAN}Installing $package...${CEND}"
+                dnf install -y "$package" >> "$LOG_FILE" 2>&1
+            done
+            ;;
+        *)
+            echo -e "${CRED}Unsupported OS: $os${CEND}"
+            exit 1
+            ;;
+    esac
 }
 
 function add_repository() {

@@ -26,8 +26,9 @@ REDIS_PASSWORD_FILE="/etc/redis/redis.passwd"
 
 # System Information
 ARCH=$(uname -m)
-OS=$(lsb_release -si 2>/dev/null || echo "Unknown")
-OS_VERSION=$(lsb_release -sr 2>/dev/null || echo "Unknown")
+os=$(cat /etc/os-release | grep "^ID=" | cut -d"=" -f2 | xargs)
+os_ver=$(cat /etc/os-release | grep "_ID=" | cut -d"=" -f2 | xargs)
+os_codename=$(cat /etc/os-release | grep "VERSION_CODENAME" | cut -d"=" -f2 | xargs)
 
 # Logging
 LOG_FILE="/tmp/redis-install.log"
@@ -39,7 +40,7 @@ function show_header() {
     echo -e "${CBLUE}========================================${CEND}"
     echo -e "${CCYAN}Version: ${REDIS_VERSION}${CEND}"
     echo -e "${CCYAN}Architecture: ${ARCH}${CEND}"
-    echo -e "${CCYAN}OS: ${OS} ${OS_VERSION}${CEND}"
+    echo -e "${CCYAN}OS: ${os} ${os_ver}${CEND}"
     echo ""
 }
 
@@ -50,24 +51,409 @@ function check_root() {
     fi
 }
 
-function check_architecture() {
-    case "$ARCH" in
-        x86_64)
-            echo -e "${CGREEN}Architecture: x86_64 (supported)${CEND}"
+function install_dependencies() {
+    echo -e "${CGREEN}Installing dependencies for $os $os_ver...${CEND}"
+    
+    case "$os" in
+        "ubuntu"|"debian")
+            # Update package lists
+            apt-get update >> "$APT_LOG" 2>&1
+            
+            # Base packages common to all versions
+            local base_packages=(
+                "tcl"
+                "pkg-config"
+                "wget"
+                "curl"
+                "openssl"
+                "systemd"
+                "python3"
+                "python3-pip"
+                "htop"
+            )
+            
+            # Version-specific packages with comprehensive fallbacks
+            local version_packages=()
+            
+            case "$os" in
+                "debian")
+                    case "$os_ver" in
+                        "9"|"10"|"11")
+                            # Older Debian versions
+                            version_packages+=(
+                                "build-essential"
+                                "libssl-dev"
+                                "zlib1g-dev"
+                                "libjemalloc-dev"
+                            )
+                            ;;
+                        "12")
+                            # Debian 12 Bookworm
+                            version_packages+=(
+                                "build-essential"
+                                "libssl-dev"
+                                "zlib1g-dev"
+                                "libjemalloc-dev"
+                            )
+                            ;;
+                        "13")
+                            # Debian 13 Trixie - comprehensive package handling
+                            version_packages+=(
+                                "zlib1g-dev"
+                            )
+                            
+                            # Try multiple build tool variations
+                            local build_packages=("build-essential" "build-base" "base-devel")
+                            for build_pkg in "${build_packages[@]}"; do
+                                if apt-cache show "$build_pkg" >/dev/null 2>&1; then
+                                    version_packages+=("$build_pkg")
+                                    echo -e "${CCYAN}Found $build_pkg for build tools${CEND}"
+                                    break
+                                fi
+                            done
+                            
+                            # Try SSL library variations
+                            local ssl_packages=("libssl-dev" "libssl3-dev" "openssl-dev")
+                            for ssl_pkg in "${ssl_packages[@]}"; do
+                                if apt-cache show "$ssl_pkg" >/dev/null 2>&1; then
+                                    version_packages+=("$ssl_pkg")
+                                    echo -e "${CCYAN}Found $ssl_pkg for SSL support${CEND}"
+                                    break
+                                fi
+                            done
+                            
+                            # Try jemalloc variations
+                            local jemalloc_packages=("libjemalloc-dev" "jemalloc-dev")
+                            for jemalloc_pkg in "${jemalloc_packages[@]}"; do
+                                if apt-cache show "$jemalloc_pkg" >/dev/null 2>&1; then
+                                    version_packages+=("$jemalloc_pkg")
+                                    echo -e "${CCYAN}Found $jemalloc_pkg for memory allocation${CEND}"
+                                    break
+                                fi
+                            done
+                            ;;
+                        *)
+                            # Future Debian versions - try all variations
+                            version_packages+=(
+                                "zlib1g-dev"
+                            )
+                            
+                            # Try build packages
+                            local build_packages=("build-essential" "build-base" "base-devel")
+                            for build_pkg in "${build_packages[@]}"; do
+                                if apt-cache show "$build_pkg" >/dev/null 2>&1; then
+                                    version_packages+=("$build_pkg")
+                                    break
+                                fi
+                            done
+                            
+                            # Try SSL packages
+                            local ssl_packages=("libssl-dev" "libssl3-dev" "openssl-dev")
+                            for ssl_pkg in "${ssl_packages[@]}"; do
+                                if apt-cache show "$ssl_pkg" >/dev/null 2>&1; then
+                                    version_packages+=("$ssl_pkg")
+                                    break
+                                fi
+                            done
+                            
+                            # Try jemalloc packages
+                            local jemalloc_packages=("libjemalloc-dev" "jemalloc-dev")
+                            for jemalloc_pkg in "${jemalloc_packages[@]}"; do
+                                if apt-cache show "$jemalloc_pkg" >/dev/null 2>&1; then
+                                    version_packages+=("$jemalloc_pkg")
+                                    break
+                                fi
+                            done
+                            ;;
+                    esac
+                    ;;
+                "ubuntu")
+                    case "$os_ver" in
+                        "18.04"|"20.04")
+                            # Older Ubuntu versions
+                            version_packages+=(
+                                "build-essential"
+                                "libssl-dev"
+                                "zlib1g-dev"
+                                "libjemalloc-dev"
+                            )
+                            ;;
+                        "22.04"|"24.04")
+                            # Modern Ubuntu versions
+                            version_packages+=(
+                                "build-essential"
+                                "libssl-dev"
+                                "zlib1g-dev"
+                                "libjemalloc-dev"
+                            )
+                            ;;
+                        *)
+                            # Future Ubuntu versions - try all variations
+                            version_packages+=(
+                                "zlib1g-dev"
+                            )
+                            
+                            # Try build packages
+                            local build_packages=("build-essential" "build-base" "base-devel")
+                            for build_pkg in "${build_packages[@]}"; do
+                                if apt-cache show "$build_pkg" >/dev/null 2>&1; then
+                                    version_packages+=("$build_pkg")
+                                    break
+                                fi
+                            done
+                            
+                            # Try SSL packages
+                            local ssl_packages=("libssl-dev" "libssl3-dev" "openssl-dev")
+                            for ssl_pkg in "${ssl_packages[@]}"; do
+                                if apt-cache show "$ssl_pkg" >/dev/null 2>&1; then
+                                    version_packages+=("$ssl_pkg")
+                                    break
+                                fi
+                            done
+                            
+                            # Try jemalloc packages
+                            local jemalloc_packages=("libjemalloc-dev" "jemalloc-dev")
+                            for jemalloc_pkg in "${jemalloc_packages[@]}"; do
+                                if apt-cache show "$jemalloc_pkg" >/dev/null 2>&1; then
+                                    version_packages+=("$jemalloc_pkg")
+                                    break
+                                fi
+                            done
+                            ;;
+                    esac
+                    ;;
+            esac
+            
+            # Combine all packages
+            local all_packages=("${base_packages[@]}" "${version_packages[@]}")
+            
+            # Install packages with comprehensive error handling
+            local failed_packages=()
+            local successful_packages=()
+            
+            for package in "${all_packages[@]}"; do
+                echo -e "${CCYAN}Installing $package...${CEND}"
+                if apt-cache show "$package" >/dev/null 2>&1; then
+                    apt-get install -y "$package" >> "$APT_LOG" 2>&1
+                    if [ $? -eq 0 ]; then
+                        echo -e "${CGREEN}✓ $package installed${CEND}"
+                        successful_packages+=("$package")
+                    else
+                        echo -e "${CRED}✗ $package failed to install${CEND}"
+                        failed_packages+=("$package")
+                        
+                        # Try to find alternatives for common packages
+                        case "$package" in
+                            "build-essential")
+                                local build_alternatives=("build-base" "base-devel")
+                                for alt_pkg in "${build_alternatives[@]}"; do
+                                    if apt-cache show "$alt_pkg" >/dev/null 2>&1; then
+                                        echo -e "${CCYAN}Trying alternative: $alt_pkg${CEND}"
+                                        apt-get install -y "$alt_pkg" >> "$APT_LOG" 2>&1
+                                        if [ $? -eq 0 ]; then
+                                            echo -e "${CGREEN}✓ $alt_pkg installed (alternative to $package)${CEND}"
+                                            successful_packages+=("$alt_pkg")
+                                            break
+                                        fi
+                                    fi
+                                done
+                                ;;
+                            "libssl-dev")
+                                local ssl_alternatives=("libssl3-dev" "openssl-dev")
+                                for alt_pkg in "${ssl_alternatives[@]}"; do
+                                    if apt-cache show "$alt_pkg" >/dev/null 2>&1; then
+                                        echo -e "${CCYAN}Trying alternative: $alt_pkg${CEND}"
+                                        apt-get install -y "$alt_pkg" >> "$APT_LOG" 2>&1
+                                        if [ $? -eq 0 ]; then
+                                            echo -e "${CGREEN}✓ $alt_pkg installed (alternative to $package)${CEND}"
+                                            successful_packages+=("$alt_pkg")
+                                            break
+                                        fi
+                                    fi
+                                done
+                                ;;
+                            "libjemalloc-dev")
+                                local jemalloc_alternatives=("jemalloc-dev")
+                                for alt_pkg in "${jemalloc_alternatives[@]}"; do
+                                    if apt-cache show "$alt_pkg" >/dev/null 2>&1; then
+                                        echo -e "${CCYAN}Trying alternative: $alt_pkg${CEND}"
+                                        apt-get install -y "$alt_pkg" >> "$APT_LOG" 2>&1
+                                        if [ $? -eq 0 ]; then
+                                            echo -e "${CGREEN}✓ $alt_pkg installed (alternative to $package)${CEND}"
+                                            successful_packages+=("$alt_pkg")
+                                            break
+                                        fi
+                                    fi
+                                done
+                                ;;
+                        esac
+                    fi
+                else
+                    echo -e "${CYAN}⚠ Package $package not found, skipping${CEND}"
+                    failed_packages+=("$package")
+                fi
+            done
+            
+            # Comprehensive package validation
+            echo -e "${CCYAN}Package installation summary:${CEND}"
+            echo -e "${CGREEN}Successfully installed: ${successful_packages[*]}${CEND}"
+            if [ ${#failed_packages[@]} -gt 0 ]; then
+                echo -e "${CYAN}Failed to install: ${failed_packages[*]}${CEND}"
+            fi
+            
+            # Check if critical functionality is available
+            local critical_ok=true
+            if ! command -v gcc >/dev/null 2>&1; then
+                echo -e "${CRED}✗ gcc is missing - critical for Redis compilation${CEND}"
+                critical_ok=false
+            fi
+            
+            if ! command -v make >/dev/null 2>&1; then
+                echo -e "${CRED}✗ make is missing - critical for Redis compilation${CEND}"
+                critical_ok=false
+            fi
+            
+            if [ "$critical_ok" = true ]; then
+                echo -e "${CGREEN}✓ Critical dependencies are available${CEND}"
+                echo -e "${CCYAN}Redis installation will continue...${CEND}"
+            else
+                echo -e "${CRED}✗ Critical dependencies missing. Cannot continue.${CEND}"
+                exit 1
+            fi
             ;;
-        aarch64|arm64)
-            echo -e "${CGREEN}Architecture: ARM64 (supported)${CEND}"
+        "centos"|"rhel"|"rocky"|"almalinux")
+            # RHEL-based systems with comprehensive package handling
+            local rhel_base_packages=(
+                "tcl"
+                "pkgconfig"
+                "wget"
+                "curl"
+                "openssl"
+                "systemd"
+                "python3"
+                "python3-pip"
+                "htop"
+            )
+            
+            # Try different development package names
+            local dev_packages=("gcc" "gcc-c++" "make")
+            for dev_pkg in "${dev_packages[@]}"; do
+                if command -v dnf >/dev/null 2>&1; then
+                    if dnf info "$dev_pkg" >/dev/null 2>&1; then
+                        rhel_base_packages+=("$dev_pkg")
+                        echo -e "${CCYAN}Found $dev_pkg for development${CEND}"
+                    fi
+                elif command -v yum >/dev/null 2>&1; then
+                    if yum info "$dev_pkg" >/dev/null 2>&1; then
+                        rhel_base_packages+=("$dev_pkg")
+                        echo -e "${CCYAN}Found $dev_pkg for development${CEND}"
+                    fi
+                fi
+            done
+            
+            # Try SSL library packages
+            local ssl_packages=("openssl-devel" "libssl-devel")
+            for ssl_pkg in "${ssl_packages[@]}"; do
+                if command -v dnf >/dev/null 2>&1; then
+                    if dnf info "$ssl_pkg" >/dev/null 2>&1; then
+                        rhel_base_packages+=("$ssl_pkg")
+                        echo -e "${CCYAN}Found $ssl_pkg for SSL support${CEND}"
+                        break
+                    fi
+                elif command -v yum >/dev/null 2>&1; then
+                    if yum info "$ssl_pkg" >/dev/null 2>&1; then
+                        rhel_base_packages+=("$ssl_pkg")
+                        echo -e "${CCYAN}Found $ssl_pkg for SSL support${CEND}"
+                        break
+                    fi
+                fi
+            done
+            
+            # Try zlib packages
+            local zlib_packages=("zlib-devel")
+            if command -v dnf >/dev/null 2>&1; then
+                if dnf info "zlib-devel" >/dev/null 2>&1; then
+                    rhel_base_packages+=("zlib-devel")
+                    echo -e "${CCYAN}Found zlib-devel for compression${CEND}"
+                fi
+            elif command -v yum >/dev/null 2>&1; then
+                if yum info "zlib-devel" >/dev/null 2>&1; then
+                    rhel_base_packages+=("zlib-devel")
+                    echo -e "${CCYAN}Found zlib-devel for compression${CEND}"
+                fi
+            fi
+            
+            # Version-specific adjustments
+            case "$os_ver" in
+                "7")
+                    # CentOS 7 uses yum
+                    if command -v yum >/dev/null 2>&1; then
+                        yum update -y >> "$APT_LOG" 2>&1
+                        for package in "${rhel_base_packages[@]}"; do
+                            echo -e "${CCYAN}Installing $package...${CEND}"
+                            yum install -y "$package" >> "$APT_LOG" 2>&1
+                            if [ $? -eq 0 ]; then
+                                echo -e "${CGREEN}✓ $package installed${CEND}"
+                            else
+                                echo -e "${CRED}✗ $package failed to install${CEND}"
+                            fi
+                        done
+                    fi
+                    ;;
+                "8"|"9")
+                    # RHEL 8+ uses dnf
+                    if command -v dnf >/dev/null 2>&1; then
+                        dnf update -y >> "$APT_LOG" 2>&1
+                        for package in "${rhel_base_packages[@]}"; do
+                            echo -e "${CCYAN}Installing $package...${CEND}"
+                            dnf install -y "$package" >> "$APT_LOG" 2>&1
+                            if [ $? -eq 0 ]; then
+                                echo -e "${CGREEN}✓ $package installed${CEND}"
+                            else
+                                echo -e "${CRED}✗ $package failed to install${CEND}"
+                            fi
+                        done
+                    fi
+                    ;;
+            esac
+            ;;
+        "fedora")
+            # Fedora-specific packages with comprehensive handling
+            local fedora_base_packages=(
+                "tcl"
+                "pkgconfig"
+                "wget"
+                "curl"
+                "openssl"
+                "systemd"
+                "python3"
+                "python3-pip"
+                "htop"
+                "gcc"
+                "gcc-c++"
+                "make"
+                "openssl-devel"
+                "zlib-devel"
+            )
+            
+            dnf update -y >> "$APT_LOG" 2>&1
+            for package in "${fedora_base_packages[@]}"; do
+                echo -e "${CCYAN}Installing $package...${CEND}"
+                dnf install -y "$package" >> "$APT_LOG" 2>&1
+                if [ $? -eq 0 ]; then
+                    echo -e "${CGREEN}✓ $package installed${CEND}"
+                else
+                    echo -e "${CRED}✗ $package failed to install${CEND}"
+                fi
+            done
             ;;
         *)
-            echo -e "${CRED}Architecture: $ARCH (not supported)${CEND}"
+            echo -e "${CRED}Unsupported OS: $os${CEND}"
             exit 1
             ;;
     esac
 }
 
-function install_dependencies() {
-    echo -e "${CGREEN}Installing dependencies...${CEND}"
-    
     # Update package lists
     apt-get update >> "$APT_LOG" 2>&1
     

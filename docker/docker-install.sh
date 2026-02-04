@@ -155,7 +155,7 @@ function install_deps() {
                 "gnupg"
             )
             
-            # Version-specific packages
+            # Version-specific packages with comprehensive fallbacks
             local version_packages=()
             
             case "$os" in
@@ -178,31 +178,58 @@ function install_deps() {
                             )
                             ;;
                         "13")
-                            # Debian 13 Trixie - updated package names
+                            # Debian 13 Trixie - comprehensive package handling
                             version_packages+=(
                                 "lsb-release"
                                 "apt-transport-https"
-                                "software-properties-common"
                             )
-                            # Try alternative if not found
-                            if ! apt-cache show software-properties-common >/dev/null 2>&1; then
-                                version_packages=()
-                                version_packages+=(
-                                    "lsb-release"
-                                    "apt-transport-https"
-                                    "ca-certificates"
-                                    "curl"
-                                    "gnupg"
-                                )
+                            
+                            # Try multiple package name variations
+                            local pkg_variations=(
+                                "software-properties-common"
+                                "python3-software-properties"
+                                "software-properties"
+                            )
+                            
+                            for pkg in "${pkg_variations[@]}"; do
+                                if apt-cache show "$pkg" >/dev/null 2>&1; then
+                                    version_packages+=("$pkg")
+                                    echo -e "${CCYAN}Found $pkg for software properties${CEND}"
+                                    break
+                                fi
+                            done
+                            
+                            # Try lsb-release alternatives
+                            if ! apt-cache show lsb-release >/dev/null 2>&1; then
+                                local lsb_alternatives=("lsb-base" "lsb-core")
+                                for lsb_pkg in "${lsb_alternatives[@]}"; do
+                                    if apt-cache show "$lsb_pkg" >/dev/null 2>&1; then
+                                        version_packages+=("$lsb_pkg")
+                                        echo -e "${CCYAN}Found $lsb_pkg as lsb-release alternative${CEND}"
+                                        break
+                                    fi
+                                done
                             fi
                             ;;
                         *)
-                            # Future Debian versions - try common packages
+                            # Future Debian versions - try all variations
                             version_packages+=(
                                 "lsb-release"
                                 "apt-transport-https"
-                                "software-properties-common"
                             )
+                            
+                            # Try software-properties variations
+                            local pkg_variations=(
+                                "software-properties-common"
+                                "python3-software-properties"
+                                "software-properties"
+                            )
+                            for pkg in "${pkg_variations[@]}"; do
+                                if apt-cache show "$pkg" >/dev/null 2>&1; then
+                                    version_packages+=("$pkg")
+                                    break
+                                fi
+                            done
                             ;;
                     esac
                     ;;
@@ -229,8 +256,20 @@ function install_deps() {
                             version_packages+=(
                                 "lsb-release"
                                 "apt-transport-https"
-                                "software-properties-common"
                             )
+                            
+                            # Try software-properties variations
+                            local pkg_variations=(
+                                "software-properties-common"
+                                "python3-software-properties"
+                                "software-properties"
+                            )
+                            for pkg in "${pkg_variations[@]}"; do
+                                if apt-cache show "$pkg" >/dev/null 2>&1; then
+                                    version_packages+=("$pkg")
+                                    break
+                                fi
+                            done
                             ;;
                     esac
                     ;;
@@ -239,17 +278,52 @@ function install_deps() {
             # Combine all packages
             local all_packages=("${base_packages[@]}" "${version_packages[@]}")
             
-            # Install packages with error handling
+            # Install packages with comprehensive error handling
             local failed_packages=()
+            local successful_packages=()
+            
             for package in "${all_packages[@]}"; do
                 echo -e "${CCYAN}Installing $package...${CEND}"
                 if apt-cache show "$package" >/dev/null 2>&1; then
                     apt-get install -y "$package" >> /tmp/apt-packages.log 2>&1
                     if [ $? -eq 0 ]; then
                         echo -e "${CGREEN}✓ $package installed${CEND}"
+                        successful_packages+=("$package")
                     else
                         echo -e "${CRED}✗ $package failed to install${CEND}"
                         failed_packages+=("$package")
+                        
+                        # Try to find alternatives for common packages
+                        case "$package" in
+                            "lsb-release")
+                                local lsb_alternatives=("lsb-base" "lsb-core")
+                                for alt_pkg in "${lsb_alternatives[@]}"; do
+                                    if apt-cache show "$alt_pkg" >/dev/null 2>&1; then
+                                        echo -e "${CCYAN}Trying alternative: $alt_pkg${CEND}"
+                                        apt-get install -y "$alt_pkg" >> /tmp/apt-packages.log 2>&1
+                                        if [ $? -eq 0 ]; then
+                                            echo -e "${CGREEN}✓ $alt_pkg installed (alternative to $package)${CEND}"
+                                            successful_packages+=("$alt_pkg")
+                                            break
+                                        fi
+                                    fi
+                                done
+                                ;;
+                            "gnupg")
+                                local gpg_alternatives=("gnupg2" "gpg")
+                                for alt_pkg in "${gpg_alternatives[@]}"; do
+                                    if apt-cache show "$alt_pkg" >/dev/null 2>&1; then
+                                        echo -e "${CCYAN}Trying alternative: $alt_pkg${CEND}"
+                                        apt-get install -y "$alt_pkg" >> /tmp/apt-packages.log 2>&1
+                                        if [ $? -eq 0 ]; then
+                                            echo -e "${CGREEN}✓ $alt_pkg installed (alternative to $package)${CEND}"
+                                            successful_packages+=("$alt_pkg")
+                                            break
+                                        fi
+                                    fi
+                                done
+                                ;;
+                        esac
                     fi
                 else
                     echo -e "${CYAN}⚠ Package $package not found, skipping${CEND}"
@@ -257,66 +331,153 @@ function install_deps() {
                 fi
             done
             
-            # Warn about failed packages but don't exit
+            # Comprehensive package validation
+            echo -e "${CCYAN}Package installation summary:${CEND}"
+            echo -e "${CGREEN}Successfully installed: ${successful_packages[*]}${CEND}"
             if [ ${#failed_packages[@]} -gt 0 ]; then
-                echo -e "${CYAN}Warning: Some packages failed to install: ${failed_packages[*]}${CEND}"
-                echo -e "${CYAN}Docker installation will continue with available packages...${CEND}"
+                echo -e "${CYAN}Failed to install: ${failed_packages[*]}${CEND}"
+            fi
+            
+            # Check if critical functionality is available
+            local critical_ok=true
+            if ! command -v curl >/dev/null 2>&1; then
+                echo -e "${CRED}✗ curl is missing - critical for Docker installation${CEND}"
+                critical_ok=false
+            fi
+            
+            if ! command -v gpg >/dev/null 2>&1 && ! command -v gpg2 >/dev/null 2>&1; then
+                echo -e "${CRED}✗ gpg/gpg2 is missing - critical for repository verification${CEND}"
+                critical_ok=false
+            fi
+            
+            if [ "$critical_ok" = true ]; then
+                echo -e "${CGREEN}✓ Critical dependencies are available${CEND}"
+                echo -e "${CCYAN}Docker installation will continue...${CEND}"
+            else
+                echo -e "${CRED}✗ Critical dependencies missing. Cannot continue.${CEND}"
+                exit 1
             fi
             ;;
         "centos"|"rhel"|"rocky"|"almalinux")
-            # RHEL-based systems
-            local rhel_packages=(
+            # RHEL-based systems with comprehensive package handling
+            local rhel_base_packages=(
                 "ca-certificates"
                 "curl"
-                "gnupg2"
-                "yum-utils"
             )
+            
+            # Try different GPG package names
+            local gpg_packages=("gnupg2" "gnupg" "gpg")
+            for gpg_pkg in "${gpg_packages[@]}"; do
+                if command -v dnf >/dev/null 2>&1; then
+                    if dnf info "$gpg_pkg" >/dev/null 2>&1; then
+                        rhel_base_packages+=("$gpg_pkg")
+                        echo -e "${CCYAN}Found $gpg_pkg for GPG support${CEND}"
+                        break
+                    fi
+                elif command -v yum >/dev/null 2>&1; then
+                    if yum info "$gpg_pkg" >/dev/null 2>&1; then
+                        rhel_base_packages+=("$gpg_pkg")
+                        echo -e "${CCYAN}Found $gpg_pkg for GPG support${CEND}"
+                        break
+                    fi
+                fi
+            done
             
             # Version-specific adjustments
             case "$os_ver" in
                 "7")
                     # CentOS 7 uses older package names
-                    rhel_packages+=("lsb_release")
+                    local rhel_packages=(
+                        "yum-utils"
+                    )
+                    
+                    # Try lsb alternatives
+                    local lsb_packages=("redhat-lsb-core" "lsb_core")
+                    for lsb_pkg in "${lsb_packages[@]}"; do
+                        if yum info "$lsb_pkg" >/dev/null 2>&1; then
+                            rhel_packages+=("$lsb_pkg")
+                            echo -e "${CCYAN}Found $lsb_pkg for LSB support${CEND}"
+                            break
+                        fi
+                    done
+                    
+                    if command -v yum >/dev/null 2>&1; then
+                        yum update -y >> /tmp/apt-packages.log 2>&1
+                        for package in "${rhel_base_packages[@]}" "${rhel_packages[@]}"; do
+                            echo -e "${CCYAN}Installing $package...${CEND}"
+                            yum install -y "$package" >> /tmp/apt-packages.log 2>&1
+                            if [ $? -eq 0 ]; then
+                                echo -e "${CGREEN}✓ $package installed${CEND}"
+                            else
+                                echo -e "${CRED}✗ $package failed to install${CEND}"
+                            fi
+                        done
+                    fi
                     ;;
                 "8"|"9")
-                    # RHEL 8+ uses gnupg2 and dnf
-                    rhel_packages+=("lsb_release")
+                    # RHEL 8+ uses dnf and newer package names
+                    local rhel_packages=(
+                        "dnf-plugins-core"
+                    )
+                    
+                    # Try lsb alternatives
+                    local lsb_packages=("redhat-lsb-core" "lsb_core")
+                    for lsb_pkg in "${lsb_packages[@]}"; do
+                        if dnf info "$lsb_pkg" >/dev/null 2>&1; then
+                            rhel_packages+=("$lsb_pkg")
+                            echo -e "${CCYAN}Found $lsb_pkg for LSB support${CEND}"
+                            break
+                        fi
+                    done
+                    
+                    if command -v dnf >/dev/null 2>&1; then
+                        dnf update -y >> /tmp/apt-packages.log 2>&1
+                        for package in "${rhel_base_packages[@]}" "${rhel_packages[@]}"; do
+                            echo -e "${CCYAN}Installing $package...${CEND}"
+                            dnf install -y "$package" >> /tmp/apt-packages.log 2>&1
+                            if [ $? -eq 0 ]; then
+                                echo -e "${CGREEN}✓ $package installed${CEND}"
+                            else
+                                echo -e "${CRED}✗ $package failed to install${CEND}"
+                            fi
+                        done
+                    fi
                     ;;
             esac
-            
-            if command -v dnf >/dev/null 2>&1; then
-                for package in "${rhel_packages[@]}"; do
-                    echo -e "${CCYAN}Installing $package...${CEND}"
-                    dnf install -y "$package" >> /tmp/apt-packages.log 2>&1
-                    if [ $? -eq 0 ]; then
-                        echo -e "${CGREEN}✓ $package installed${CEND}"
-                    else
-                        echo -e "${CRED}✗ $package failed to install${CEND}"
-                    fi
-                done
-            elif command -v yum >/dev/null 2>&1; then
-                for package in "${rhel_packages[@]}"; do
-                    echo -e "${CCYAN}Installing $package...${CEND}"
-                    yum install -y "$package" >> /tmp/apt-packages.log 2>&1
-                    if [ $? -eq 0 ]; then
-                        echo -e "${CGREEN}✓ $package installed${CEND}"
-                    else
-                        echo -e "${CRED}✗ $package failed to install${CEND}"
-                    fi
-                done
-            fi
             ;;
         "fedora")
-            # Fedora-specific packages
-            local fedora_packages=(
+            # Fedora-specific packages with comprehensive handling
+            local fedora_base_packages=(
                 "ca-certificates"
                 "curl"
-                "gnupg2"
-                "lsb_release"
+            )
+            
+            # Try different GPG package names
+            local gpg_packages=("gnupg2" "gnupg" "gpg")
+            for gpg_pkg in "${gpg_packages[@]}"; do
+                if dnf info "$gpg_pkg" >/dev/null 2>&1; then
+                    fedora_base_packages+=("$gpg_pkg")
+                    echo -e "${CCYAN}Found $gpg_pkg for GPG support${CEND}"
+                    break
+                fi
+            done
+            
+            local fedora_packages=(
                 "dnf-plugins-core"
             )
             
-            for package in "${fedora_packages[@]}"; do
+            # Try lsb alternatives
+            local lsb_packages=("redhat-lsb-core" "lsb_core")
+            for lsb_pkg in "${lsb_packages[@]}"; do
+                if dnf info "$lsb_pkg" >/dev/null 2>&1; then
+                    fedora_packages+=("$lsb_pkg")
+                    echo -e "${CCYAN}Found $lsb_pkg for LSB support${CEND}"
+                    break
+                fi
+            done
+            
+            dnf update -y >> /tmp/apt-packages.log 2>&1
+            for package in "${fedora_base_packages[@]}" "${fedora_packages[@]}"; do
                 echo -e "${CCYAN}Installing $package...${CEND}"
                 dnf install -y "$package" >> /tmp/apt-packages.log 2>&1
                 if [ $? -eq 0 ]; then
@@ -331,14 +492,6 @@ function install_deps() {
             exit 1
             ;;
     esac
-    
-    # Check if critical packages are available
-    if command -v curl >/dev/null 2>&1 && command -v gpg >/dev/null 2>&1; then
-        echo -e "${CGREEN}Critical dependencies installed successfully${CEND}"
-    else
-        echo -e "${CRED}Critical dependencies missing. Cannot continue.${CEND}"
-        exit 1
-    fi
 }
 
 function setup_docker_repo() {

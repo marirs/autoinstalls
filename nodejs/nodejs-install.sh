@@ -22,8 +22,9 @@ INSTALL_METHOD="nodesource"  # Default to NodeSource
 
 # System Information
 ARCH=$(uname -m)
-OS=$(lsb_release -si 2>/dev/null || echo "Unknown")
-OS_VERSION=$(lsb_release -sr 2>/dev/null || echo "Unknown")
+os=$(cat /etc/os-release | grep "^ID=" | cut -d"=" -f2 | xargs)
+os_ver=$(cat /etc/os-release | grep "_ID=" | cut -d"=" -f2 | xargs)
+os_codename=$(cat /etc/os-release | grep "VERSION_CODENAME" | cut -d"=" -f2 | xargs)
 
 # Logging
 LOG_FILE="/tmp/nodejs-install.log"
@@ -35,7 +36,7 @@ function show_header() {
     echo -e "${CBLUE}========================================${CEND}"
     echo -e "${CCYAN}Version: ${NODE_VERSION} LTS${CEND}"
     echo -e "${CCYAN}Architecture: ${ARCH}${CEND}"
-    echo -e "${CCYAN}OS: ${OS} ${OS_VERSION}${CEND}"
+    echo -e "${CCYAN}OS: ${os} ${os_ver}${CEND}"
     echo ""
 }
 

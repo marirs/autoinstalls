@@ -531,7 +531,7 @@ function install_linux_essentials() {
                         )
                         ;;
                     "13")
-                        # Debian 13 Trixie - handle package changes
+                        # Debian 13 Trixie - comprehensive package handling
                         apt_packages+=(
                             "sudo"
                             "p7zip-full"
@@ -550,25 +550,61 @@ function install_linux_essentials() {
                             "libuv1"
                             "libuv1-dev"
                         )
-                        # Try different re2 package versions
-                        local re2_packages=("libre2-9" "libre2-10" "libre2-8" "libre2-dev" "libre2")
+                        
+                        # Try multiple re2 package versions
+                        local re2_packages=("libre2-9" "libre2-10" "libre2-8" "libre2-dev" "libre2" "libre2-11")
                         for re2_pkg in "${re2_packages[@]}"; do
                             if apt-cache show "$re2_pkg" >/dev/null 2>&1; then
                                 apt_packages+=("$re2_pkg")
+                                echo -e "${CCYAN}Found $re2_pkg for regex support${CEND}"
                                 break
                             fi
                         done
+                        
                         # Try software-properties-common alternatives
-                        if ! apt-cache show software-properties-common >/dev/null 2>&1; then
-                            echo -e "${CYAN}software-properties-common not found, skipping...${CEND}"
-                        else
-                            apt_packages+=("software-properties-common")
+                        local software_props_packages=(
+                            "software-properties-common"
+                            "python3-software-properties"
+                            "software-properties"
+                        )
+                        local found_software_props=false
+                        for sp_pkg in "${software_props_packages[@]}"; do
+                            if apt-cache show "$sp_pkg" >/dev/null 2>&1; then
+                                apt_packages+=("$sp_pkg")
+                                echo -e "${CCYAN}Found $sp_pkg for software properties${CEND}"
+                                found_software_props=true
+                                break
+                            fi
+                        done
+                        if [ "$found_software_props" = false ]; then
+                            echo -e "${CYAN}software-properties packages not found, skipping...${CEND}"
+                        fi
+                        
+                        # Try mailutils alternatives
+                        local mail_packages=("mailutils" "mailx" "bsd-mailx" "heirloom-mailx" "s-nail")
+                        for mail_pkg in "${mail_packages[@]}"; do
+                            if apt-cache show "$mail_pkg" >/dev/null 2>&1; then
+                                apt_packages+=("$mail_pkg")
+                                echo -e "${CCYAN}Found $mail_pkg for mail support${CEND}"
+                                break
+                            fi
+                        done
+                        
+                        # Try build-essential alternatives
+                        if ! apt-cache show build-essential >/dev/null 2>&1; then
+                            local build_packages=("build-essential" "build-base" "base-devel")
+                            for build_pkg in "${build_packages[@]}"; do
+                                if apt-cache show "$build_pkg" >/dev/null 2>&1; then
+                                    apt_packages+=("$build_pkg")
+                                    echo -e "${CCYAN}Found $build_pkg for build tools${CEND}"
+                                    break
+                                fi
+                            done
                         fi
                         ;;
                     *)
-                        # Future Debian versions
+                        # Future Debian versions - comprehensive fallbacks
                         apt_packages+=(
-                            "software-properties-common"
                             "sudo"
                             "p7zip-full"
                             "p7zip-rar"
@@ -581,96 +617,137 @@ function install_linux_essentials() {
                             "pcregrep"
                             "net-tools"
                         )
+                        
                         # Try re2 packages
-                        local re2_packages=("libre2-9" "libre2-10" "libre2-8" "libre2-dev" "libre2")
+                        local re2_packages=("libre2-9" "libre2-10" "libre2-8" "libre2-dev" "libre2" "libre2-11")
                         for re2_pkg in "${re2_packages[@]}"; do
                             if apt-cache show "$re2_pkg" >/dev/null 2>&1; then
                                 apt_packages+=("$re2_pkg")
                                 break
                             fi
                         done
-                        ;;
-                esac
-                ;;
-            "ubuntu")
-                case "$os_version" in
-                    "18.04"|"20.04")
-                        # Older Ubuntu versions
-                        apt_packages+=(
+                        
+                        # Try software-properties alternatives
+                        local software_props_packages=(
                             "software-properties-common"
-                            "sudo"
-                            "p7zip-full"
-                            "p7zip-rar"
-                            "libre2-9"
-                            "sysstat"
-                            "schedtool"
-                            "poppler-utils"
-                            "libffi-dev"
-                            "libssl-dev"
-                            "screen"
-                            "pcregrep"
-                            "net-tools"
-                            "libx11-xcb1"
-                            "dnsutils"
-                            "devscripts"
-                            "libuv1"
-                            "libuv1-dev"
-                            "libre2-dev"
+                            "python3-software-properties"
+                            "software-properties"
                         )
+                        for sp_pkg in "${software_props_packages[@]}"; do
+                            if apt-cache show "$sp_pkg" >/dev/null 2>&1; then
+                                apt_packages+=("$sp_pkg")
+                                break
+                            fi
+                        done
                         ;;
-                    "22.04"|"24.04")
-                        # Modern Ubuntu versions
-                        apt_packages+=(
-                            "software-properties-common"
-                            "sudo"
-                            "p7zip-full"
-                            "p7zip-rar"
-                            "libre2-9"
-                            "sysstat"
-                            "schedtool"
-                            "poppler-utils"
-                            "libffi-dev"
-                            "libssl-dev"
-                            "screen"
-                            "pcregrep"
-                            "net-tools"
-                            "libx11-xcb1"
-                            "dnsutils"
-                            "devscripts"
-                            "libuv1"
-                            "libuv1-dev"
-                            "libre2-dev"
-                        )
-                        ;;
-                    *)
-                        # Future Ubuntu versions
-                        apt_packages+=(
-                            "software-properties-common"
-                            "sudo"
-                            "p7zip-full"
-                            "p7zip-rar"
-                            "sysstat"
-                            "schedtool"
-                            "poppler-utils"
-                            "libffi-dev"
-                            "libssl-dev"
-                            "screen"
-                            "pcregrep"
-                            "net-tools"
-                        )
-                        ;;
-                esac
-                ;;
-        esac
-        
-        # Try mailutils or alternatives
-        local mail_packages=("mailutils" "mailx" "bsd-mailx")
-        for mail_pkg in "${mail_packages[@]}"; do
-            if apt-cache show "$mail_pkg" >/dev/null 2>&1; then
-                apt_packages+=("$mail_pkg")
-                break
+                    esac
+                    ;;
+                "ubuntu")
+                    case "$os_version" in
+                        "18.04"|"20.04")
+                            # Older Ubuntu versions
+                            apt_packages+=(
+                                "software-properties-common"
+                                "sudo"
+                                "p7zip-full"
+                                "p7zip-rar"
+                                "libre2-9"
+                                "sysstat"
+                                "schedtool"
+                                "poppler-utils"
+                                "libffi-dev"
+                                "libssl-dev"
+                                "screen"
+                                "pcregrep"
+                                "net-tools"
+                                "libx11-xcb1"
+                                "dnsutils"
+                                "devscripts"
+                                "libuv1"
+                                "libuv1-dev"
+                                "libre2-dev"
+                            )
+                            ;;
+                        "22.04"|"24.04")
+                            # Modern Ubuntu versions
+                            apt_packages+=(
+                                "software-properties-common"
+                                "sudo"
+                                "p7zip-full"
+                                "p7zip-rar"
+                                "libre2-9"
+                                "sysstat"
+                                "schedtool"
+                                "poppler-utils"
+                                "libffi-dev"
+                                "libssl-dev"
+                                "screen"
+                                "pcregrep"
+                                "net-tools"
+                                "libx11-xcb1"
+                                "dnsutils"
+                                "devscripts"
+                                "libuv1"
+                                "libuv1-dev"
+                                "libre2-dev"
+                            )
+                            ;;
+                        *)
+                            # Future Ubuntu versions - comprehensive fallbacks
+                            apt_packages+=(
+                                "sudo"
+                                "p7zip-full"
+                                "p7zip-rar"
+                                "sysstat"
+                                "schedtool"
+                                "poppler-utils"
+                                "libffi-dev"
+                                "libssl-dev"
+                                "screen"
+                                "pcregrep"
+                                "net-tools"
+                            )
+                            
+                            # Try re2 packages
+                            local re2_packages=("libre2-9" "libre2-10" "libre2-8" "libre2-dev" "libre2")
+                            for re2_pkg in "${re2_packages[@]}"; do
+                                if apt-cache show "$re2_pkg" >/dev/null 2>&1; then
+                                    apt_packages+=("$re2_pkg")
+                                    break
+                                fi
+                            done
+                            
+                            # Try software-properties alternatives
+                            local software_props_packages=(
+                                "software-properties-common"
+                                "python3-software-properties"
+                                "software-properties"
+                            )
+                            for sp_pkg in "${software_props_packages[@]}"; do
+                                if apt-cache show "$sp_pkg" >/dev/null 2>&1; then
+                                    apt_packages+=("$sp_pkg")
+                                    break
+                                fi
+                            done
+                            ;;
+                    esac
+                    ;;
+            esac
+            
+            # Try mailutils or alternatives with comprehensive fallbacks
+            local mail_packages=("mailutils" "mailx" "bsd-mailx" "heirloom-mailx" "s-nail")
+            local mail_found=false
+            for mail_pkg in "${mail_packages[@]}"; do
+                if apt-cache show "$mail_pkg" >/dev/null 2>&1; then
+                    apt_packages+=("$mail_pkg")
+                    echo -e "${CCYAN}Found $mail_pkg for mail support${CEND}"
+                    mail_found=true
+                    break
+                fi
+            done
+            if [ "$mail_found" = false ]; then
+                echo -e "${CYAN}No mail packages found, skipping mail support${CEND}"
             fi
-        done
         
         packages+=("${apt_packages[@]}")
         

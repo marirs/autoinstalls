@@ -9,12 +9,311 @@ CEND="${CSI}0m"
 CRED="${CSI}1;31m"
 CGREEN="${CSI}1;32m"
 CYELLOW="${CSI}1;33m"
+CCYAN="${CSI}1;36m"
 
 # Check root access
 if [[ "$EUID" -ne 0 ]]; then
 	echo -e "${CRED}Sorry, you need to run this as root${CEND}"
 	exit 1
 fi
+
+# System information detection
+os=$(cat /etc/os-release | grep "^ID=" | cut -d"=" -f2 | xargs)
+os_ver=$(cat /etc/os-release | grep "_ID=" | cut -d"=" -f2 | xargs)
+os_codename=$(cat /etc/os-release | grep "VERSION_CODENAME" | cut -d"=" -f2 | xargs)
+architecture=$(arch)
+
+# Function to install dependencies based on OS version
+function install_dependencies() {
+    echo -e "${CCYAN}Installing dependencies for $os $os_ver...${CEND}"
+    
+    case "$os" in
+        "ubuntu"|"debian")
+            # Update package lists
+            apt-get update >> /tmp/mongodb-install.log 2>&1
+            
+            # Base packages common to all versions
+            local base_packages=(
+                "curl"
+                "wget"
+                "ca-certificates"
+            )
+            
+            # Try different GPG package names
+            local gpg_packages=("gnupg" "gnupg2" "gpg")
+            for gpg_pkg in "${gpg_packages[@]}"; do
+                if apt-cache show "$gpg_pkg" >/dev/null 2>&1; then
+                    base_packages+=("$gpg_pkg")
+                    echo -e "${CCYAN}Found $gpg_pkg for GPG support${CEND}"
+                    break
+                fi
+            done
+            
+            # Version-specific packages with comprehensive fallbacks
+            local version_packages=()
+            
+            case "$os" in
+                "debian")
+                    case "$os_ver" in
+                        "9"|"10"|"11")
+                            # Older Debian versions
+                            version_packages+=(
+                                "apt-transport-https"
+                                "software-properties-common"
+                            )
+                            ;;
+                        "12")
+                            # Debian 12 Bookworm
+                            version_packages+=(
+                                "apt-transport-https"
+                                "software-properties-common"
+                            )
+                            ;;
+                        "13")
+                            # Debian 13 Trixie - comprehensive package handling
+                            version_packages+=(
+                                "apt-transport-https"
+                            )
+                            
+                            # Try multiple package name variations
+                            local pkg_variations=(
+                                "software-properties-common"
+                                "python3-software-properties"
+                                "software-properties"
+                            )
+                            
+                            for pkg in "${pkg_variations[@]}"; do
+                                if apt-cache show "$pkg" >/dev/null 2>&1; then
+                                    version_packages+=("$pkg")
+                                    echo -e "${CCYAN}Found $pkg for software properties${CEND}"
+                                    break
+                                fi
+                            done
+                            ;;
+                        *)
+                            # Future Debian versions - try all variations
+                            version_packages+=(
+                                "apt-transport-https"
+                            )
+                            
+                            # Try software-properties variations
+                            local pkg_variations=(
+                                "software-properties-common"
+                                "python3-software-properties"
+                                "software-properties"
+                            )
+                            for pkg in "${pkg_variations[@]}"; do
+                                if apt-cache show "$pkg" >/dev/null 2>&1; then
+                                    version_packages+=("$pkg")
+                                    break
+                                fi
+                            done
+                            ;;
+                    esac
+                    ;;
+                "ubuntu")
+                    case "$os_ver" in
+                        "18.04"|"20.04")
+                            # Older Ubuntu versions
+                            version_packages+=(
+                                "apt-transport-https"
+                                "software-properties-common"
+                            )
+                            ;;
+                        "22.04"|"24.04")
+                            # Modern Ubuntu versions
+                            version_packages+=(
+                                "apt-transport-https"
+                                "software-properties-common"
+                            )
+                            ;;
+                        *)
+                            # Future Ubuntu versions
+                            version_packages+=(
+                                "apt-transport-https"
+                            )
+                            
+                            # Try software-properties variations
+                            local pkg_variations=(
+                                "software-properties-common"
+                                "python3-software-properties"
+                                "software-properties"
+                            )
+                            for pkg in "${pkg_variations[@]}"; do
+                                if apt-cache show "$pkg" >/dev/null 2>&1; then
+                                    version_packages+=("$pkg")
+                                    break
+                                fi
+                            done
+                            ;;
+                    esac
+                    ;;
+            esac
+            
+            # Combine all packages
+            local all_packages=("${base_packages[@]}" "${version_packages[@]}")
+            
+            # Install packages with comprehensive error handling
+            local failed_packages=()
+            local successful_packages=()
+            
+            for package in "${all_packages[@]}"; do
+                echo -e "${CCYAN}Installing $package...${CEND}"
+                if apt-cache show "$package" >/dev/null 2>&1; then
+                    apt-get install -y "$package" >> /tmp/mongodb-install.log 2>&1
+                    if [ $? -eq 0 ]; then
+                        echo -e "${CGREEN}✓ $package installed${CEND}"
+                        successful_packages+=("$package")
+                    else
+                        echo -e "${CRED}✗ $package failed to install${CEND}"
+                        failed_packages+=("$package")
+                        
+                        # Try to find alternatives for common packages
+                        case "$package" in
+                            "gnupg")
+                                local gpg_alternatives=("gnupg2" "gpg")
+                                for alt_pkg in "${gpg_alternatives[@]}"; do
+                                    if apt-cache show "$alt_pkg" >/dev/null 2>&1; then
+                                        echo -e "${CCYAN}Trying alternative: $alt_pkg${CEND}"
+                                        apt-get install -y "$alt_pkg" >> /tmp/mongodb-install.log 2>&1
+                                        if [ $? -eq 0 ]; then
+                                            echo -e "${CGREEN}✓ $alt_pkg installed (alternative to $package)${CEND}"
+                                            successful_packages+=("$alt_pkg")
+                                            break
+                                        fi
+                                    fi
+                                done
+                                ;;
+                        esac
+                    fi
+                else
+                    echo -e "${CYAN}⚠ Package $package not found, skipping${CEND}"
+                    failed_packages+=("$package")
+                fi
+            done
+            
+            # Comprehensive package validation
+            echo -e "${CCYAN}Package installation summary:${CEND}"
+            echo -e "${CGREEN}Successfully installed: ${successful_packages[*]}${CEND}"
+            if [ ${#failed_packages[@]} -gt 0 ]; then
+                echo -e "${CYAN}Failed to install: ${failed_packages[*]}${CEND}"
+            fi
+            
+            # Check if critical functionality is available
+            local critical_ok=true
+            if ! command -v curl >/dev/null 2>&1; then
+                echo -e "${CRED}✗ curl is missing - critical for MongoDB installation${CEND}"
+                critical_ok=false
+            fi
+            
+            if ! command -v gpg >/dev/null 2>&1 && ! command -v gpg2 >/dev/null 2>&1; then
+                echo -e "${CRED}✗ gpg/gpg2 is missing - critical for repository verification${CEND}"
+                critical_ok=false
+            fi
+            
+            if [ "$critical_ok" = true ]; then
+                echo -e "${CGREEN}✓ Critical dependencies are available${CEND}"
+                echo -e "${CCYAN}MongoDB installation will continue...${CEND}"
+            else
+                echo -e "${CRED}✗ Critical dependencies missing. Cannot continue.${CEND}"
+                exit 1
+            fi
+            ;;
+        "centos"|"rhel"|"rocky"|"almalinux")
+            # RHEL-based systems with comprehensive package handling
+            local rhel_base_packages=(
+                "curl"
+                "wget"
+                "ca-certificates"
+            )
+            
+            # Try different GPG package names
+            local gpg_packages=("gnupg2" "gnupg" "gpg")
+            for gpg_pkg in "${gpg_packages[@]}"; do
+                if command -v dnf >/dev/null 2>&1; then
+                    if dnf info "$gpg_pkg" >/dev/null 2>&1; then
+                        rhel_base_packages+=("$gpg_pkg")
+                        echo -e "${CCYAN}Found $gpg_pkg for GPG support${CEND}"
+                        break
+                    fi
+                elif command -v yum >/dev/null 2>&1; then
+                    if yum info "$gpg_pkg" >/dev/null 2>&1; then
+                        rhel_base_packages+=("$gpg_pkg")
+                        echo -e "${CCYAN}Found $gpg_pkg for GPG support${CEND}"
+                        break
+                    fi
+                fi
+            done
+            
+            # Version-specific adjustments
+            case "$os_ver" in
+                "7")
+                    # CentOS 7 uses yum
+                    if command -v yum >/dev/null 2>&1; then
+                        yum update -y >> /tmp/mongodb-install.log 2>&1
+                        for package in "${rhel_base_packages[@]}"; do
+                            echo -e "${CCYAN}Installing $package...${CEND}"
+                            yum install -y "$package" >> /tmp/mongodb-install.log 2>&1
+                            if [ $? -eq 0 ]; then
+                                echo -e "${CGREEN}✓ $package installed${CEND}"
+                            else
+                                echo -e "${CRED}✗ $package failed to install${CEND}"
+                            fi
+                        done
+                    fi
+                    ;;
+                "8"|"9")
+                    # RHEL 8+ uses dnf
+                    if command -v dnf >/dev/null 2>&1; then
+                        dnf update -y >> /tmp/mongodb-install.log 2>&1
+                        for package in "${rhel_base_packages[@]}"; do
+                            echo -e "${CCYAN}Installing $package...${CEND}"
+                            dnf install -y "$package" >> /tmp/mongodb-install.log 2>&1
+                            if [ $? -eq 0 ]; then
+                                echo -e "${CGREEN}✓ $package installed${CEND}"
+                            else
+                                echo -e "${CRED}✗ $package failed to install${CEND}"
+                            fi
+                        done
+                    fi
+                    ;;
+            esac
+            ;;
+        "fedora")
+            # Fedora-specific packages with comprehensive handling
+            local fedora_base_packages=(
+                "curl"
+                "wget"
+                "ca-certificates"
+            )
+            
+            # Try different GPG package names
+            local gpg_packages=("gnupg2" "gnupg" "gpg")
+            for gpg_pkg in "${gpg_packages[@]}"; do
+                if dnf info "$gpg_pkg" >/dev/null 2>&1; then
+                    fedora_base_packages+=("$gpg_pkg")
+                    echo -e "${CCYAN}Found $gpg_pkg for GPG support${CEND}"
+                    break
+                fi
+            done
+            
+            dnf update -y >> /tmp/mongodb-install.log 2>&1
+            for package in "${fedora_base_packages[@]}"; do
+                echo -e "${CCYAN}Installing $package...${CEND}"
+                dnf install -y "$package" >> /tmp/mongodb-install.log 2>&1
+                if [ $? -eq 0 ]; then
+                    echo -e "${CGREEN}✓ $package installed${CEND}"
+                else
+                    echo -e "${CRED}✗ $package failed to install${CEND}"
+                fi
+            done
+            ;;
+        *)
+            echo -e "${CRED}Unsupported OS: $os${CEND}"
+            exit 1
+            ;;
+    esac
+}
 
 # Get MongoDB latest version
 MONGODB_VERSIONS=$(curl -s https://www.mongodb.org/download-center/community | grep -oP 'mongodb-\d+\.\d+\.\d+' | sort -V | uniq | tail -n2)
@@ -96,19 +395,7 @@ case $OPTION in
 		echo ""
 		
 		# Dependencies
-		echo -ne "       Installing dependencies        [..]\r"
-		apt-get update >> /tmp/mongodb-install.log 2>&1
-		apt-get install -y curl gnupg wget >> /tmp/mongodb-install.log 2>&1
-		if [ $? -eq 0 ]; then
-			echo -ne "       Installing dependencies        [${CGREEN}OK${CEND}]\r"
-			echo -ne "\n"
-		else
-			echo -e "       Installing dependencies        [${CRED}FAIL${CEND}]"
-			echo ""
-			echo "Please look at /tmp/mongodb-install.log"
-			echo ""
-			exit 1
-		fi
+		install_dependencies
 		
 		# Import MongoDB public key
 		echo -ne "       Adding MongoDB repository       [..]\r"

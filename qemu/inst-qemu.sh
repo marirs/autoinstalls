@@ -46,7 +46,309 @@ is_numa=$(lscpu | grep -i numa | head -1 | cut -d":" -f2 | xargs)
 cores=$(nproc)
 os=$(cat /etc/os-release | grep "^ID=" | cut -d"=" -f2 | xargs)
 os_ver=$(cat /etc/os-release | grep "_ID=" | cut -d"=" -f2 | xargs)
+os_codename=$(cat /etc/os-release | grep "VERSION_CODENAME" | cut -d"=" -f2 | xargs)
 architecture=$(arch)
+
+# Function to install dependencies with comprehensive fallback handling
+function install_deps() {
+    echo -e "${CGREEN}Installing dependencies for $os $os_ver...${CEND}"
+    
+    # Update package lists first
+    apt update >> /tmp/apt-packages.log 2>&1
+    
+    # Base packages common to all versions
+    local base_packages=(
+        "python3-libxml2"
+        "autotools-dev"
+        "libnfs-dev"
+        "libusbredirhost-dev"
+        "libnl-route-3-dev"
+        "python3-sphinx"
+        "spice-client-gtk"
+        "libssh2-1-dev"
+        "libbz2-dev"
+        "libvde-dev"
+        "xfslibs-dev"
+        "libfdt-dev"
+        "python3-libvirt"
+        "libsasl2-dev"
+        "zlib1g-dev"
+        "libbrlapi-dev"
+        "libaio-dev"
+        "git"
+        "libguestfs-tools"
+        "glusterfs-client"
+        "spice-client-glib-usb-acl-helper"
+        "libpixman-1-dev"
+        "python3-requests"
+        "spice-vdagent"
+        "libgtk-3-dev"
+        "libxml2-dev"
+        "libnl-route-3-200"
+        "gir1.2-gtk-vnc-2.0"
+        "libspice-server-dev"
+        "libspice-protocol-dev"
+        "libxml2-utils"
+        "liblzo2-dev"
+        "librdmacm-dev"
+        "libgnutls28-dev"
+        "libosinfo-1.0-dev"
+        "libseccomp-dev"
+        "automake"
+        "libiscsi-dev"
+        "valgrind"
+        "xmlto"
+        "libvdeplug-dev"
+        "gir1.2-spiceclientglib-2.0"
+        "libosinfo-1.0-0"
+        "libcap-dev"
+        "gettext"
+        "libnuma-dev"
+        "libdevmapper-dev"
+        "librbd-dev"
+        "libyajl2"
+        "libsdl1.2-dev"
+        "python3-dev"
+        "texinfo"
+        "gir1.2-spiceclientgtk-3.0"
+        "libgoogle-perftools-dev"
+        "libcurl4-gnutls-dev"
+        "libcap-ng-dev"
+        "python3-requests-cache"
+        "meson"
+        "libspice-server1"
+        "python3-requests-unixsocket"
+        "libsnappy-dev"
+        "libspice-client-gtk-3.0-5"
+        "libspice-client-glib-2.0-8"
+        "libibverbs-dev"
+        "libvte-2.91-0"
+        "libxen-dev"
+        "libglib2.0-dev"
+        "libbluetooth-dev"
+        "libspice-client-gtk-3.0-dev"
+        "gobject-introspection"
+        "libncurses5-dev"
+        "autoconf"
+        "genisoimage"
+    )
+    
+    # Version-specific packages with comprehensive fallbacks
+    local version_packages=()
+    
+    case "$os" in
+        "debian")
+            case "$os_ver" in
+                "9"|"10"|"11")
+                    # Older Debian versions
+                    version_packages+=(
+                        "libjpeg62-turbo-dev"
+                        "acpica-tools"
+                    )
+                    ;;
+                "12")
+                    # Debian 12 Bookworm
+                    version_packages+=(
+                        "libjpeg62-turbo-dev"
+                        "acpica-tools"
+                    )
+                    ;;
+                "13")
+                    # Debian 13 Trixie - comprehensive package handling
+                    version_packages+=(
+                        "acpica-tools"
+                    )
+                    
+                    # Try multiple JPEG library variations
+                    local jpeg_packages=("libjpeg62-turbo-dev" "libjpeg-dev" "libjpeg8-dev")
+                    for jpeg_pkg in "${jpeg_packages[@]}"; do
+                        if apt-cache show "$jpeg_pkg" >/dev/null 2>&1; then
+                            version_packages+=("$jpeg_pkg")
+                            echo -e "${CCYAN}Found $jpeg_pkg for JPEG support${CEND}"
+                            break
+                        fi
+                    done
+                    
+                    # Try alternative package names for common packages
+                    local alt_packages=(
+                        "libnl-route-3-200:libnl-route-3-300"
+                        "libvte-2.91-0:libvte-2.91-dev"
+                        "libgnutls28-dev:libgnutls-dev"
+                    )
+                    
+                    for alt_pair in "${alt_packages[@]}"; do
+                        local main_pkg="${alt_pair%%:*}"
+                        local alt_pkg="${alt_pair##*:}"
+                        if ! apt-cache show "$main_pkg" >/dev/null 2>&1 && apt-cache show "$alt_pkg" >/dev/null 2>&1; then
+                            # Replace the package in base_packages
+                            version_packages+=("$alt_pkg")
+                            echo -e "${CCYAN}Found $alt_pkg as alternative to $main_pkg${CEND}"
+                        fi
+                    done
+                    ;;
+                *)
+                    # Future Debian versions - try all variations
+                    version_packages+=(
+                        "acpica-tools"
+                    )
+                    
+                    # Try JPEG packages
+                    local jpeg_packages=("libjpeg62-turbo-dev" "libjpeg-dev" "libjpeg8-dev")
+                    for jpeg_pkg in "${jpeg_packages[@]}"; do
+                        if apt-cache show "$jpeg_pkg" >/dev/null 2>&1; then
+                            version_packages+=("$jpeg_pkg")
+                            break
+                        fi
+                    done
+                    ;;
+            esac
+            ;;
+        "ubuntu")
+            case "$os_ver" in
+                "18.04"|"20.04")
+                    # Older Ubuntu versions
+                    version_packages+=(
+                        "libjpeg62-dev"
+                        "acpica-tools"
+                    )
+                    ;;
+                "22.04"|"24.04")
+                    # Modern Ubuntu versions
+                    version_packages+=(
+                        "libjpeg62-dev"
+                        "acpica-tools"
+                    )
+                    ;;
+                *)
+                    # Future Ubuntu versions - try all variations
+                    version_packages+=(
+                        "acpica-tools"
+                    )
+                    
+                    # Try JPEG packages
+                    local jpeg_packages=("libjpeg62-dev" "libjpeg-dev" "libjpeg8-dev")
+                    for jpeg_pkg in "${jpeg_packages[@]}"; do
+                        if apt-cache show "$jpeg_pkg" >/dev/null 2>&1; then
+                            version_packages+=("$jpeg_pkg")
+                            break
+                        fi
+                    done
+                    ;;
+            esac
+            ;;
+    esac
+    
+    # Combine all packages
+    local all_packages=("${base_packages[@]}" "${version_packages[@]}")
+    
+    # Install packages with comprehensive error handling
+    local failed_packages=()
+    local successful_packages=()
+    
+    total_packages=$(echo ${all_packages[@]} | wc -w)
+    echo -e "${CGREEN}Installing $total_packages dependencies...${CEND}"
+    
+    for pkg in "${all_packages[@]}"; do
+        echo -ne "    - ${CBLUE}installing $pkg ...                                                     ${CEND}\r"
+        
+        # Check if package exists before installing
+        if apt-cache show "$pkg" >/dev/null 2>&1; then
+            apt install -y "$pkg" >> /tmp/apt-packages.log 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "    - ${CGREEN}✓ $pkg installed${CEND}"
+                successful_packages+=("$pkg")
+            else
+                echo -ne "\n"
+                echo -e "    - ${CRED}$pkg failed installation${CEND}"
+                failed_packages+=("$pkg")
+                
+                # Try to find alternatives for common packages
+                case "$pkg" in
+                    "autotools-dev")
+                        local autotools_alternatives=("autoconf" "automake")
+                        for alt_pkg in "${autotools_alternatives[@]}"; do
+                            if apt-cache show "$alt_pkg" >/dev/null 2>&1; then
+                                echo -e "    - ${CCYAN}Trying alternative: $alt_pkg${CEND}"
+                                apt install -y "$alt_pkg" >> /tmp/apt-packages.log 2>&1
+                                if [ $? -eq 0 ]; then
+                                    echo -e "    - ${CGREEN}✓ $alt_pkg installed (alternative to $pkg)${CEND}"
+                                    successful_packages+=("$alt_pkg")
+                                    break
+                                fi
+                            fi
+                        done
+                        ;;
+                    "libgnutls28-dev")
+                        local gnutls_alternatives=("libgnutls-dev" "gnutls-dev")
+                        for alt_pkg in "${gnutls_alternatives[@]}"; do
+                            if apt-cache show "$alt_pkg" >/dev/null 2>&1; then
+                                echo -e "    - ${CCYAN}Trying alternative: $alt_pkg${CEND}"
+                                apt install -y "$alt_pkg" >> /tmp/apt-packages.log 2>&1
+                                if [ $? -eq 0 ]; then
+                                    echo -e "    - ${CGREEN}✓ $alt_pkg installed (alternative to $pkg)${CEND}"
+                                    successful_packages+=("$alt_pkg")
+                                    break
+                                fi
+                            fi
+                        done
+                        ;;
+                    "libnl-route-3-200")
+                        local nl_alternatives=("libnl-route-3-dev" "libnl-3-dev")
+                        for alt_pkg in "${nl_alternatives[@]}"; do
+                            if apt-cache show "$alt_pkg" >/dev/null 2>&1; then
+                                echo -e "    - ${CCYAN}Trying alternative: $alt_pkg${CEND}"
+                                apt install -y "$alt_pkg" >> /tmp/apt-packages.log 2>&1
+                                if [ $? -eq 0 ]; then
+                                    echo -e "    - ${CGREEN}✓ $alt_pkg installed (alternative to $pkg)${CEND}"
+                                    successful_packages+=("$alt_pkg")
+                                    break
+                                fi
+                            fi
+                        done
+                        ;;
+                esac
+            fi
+        else
+            echo -ne "\n"
+            echo -e "    - ${CCYAN}⚠ Package $pkg not found, skipping${CEND}"
+            failed_packages+=("$pkg")
+        fi
+    done
+    
+    echo -ne "                                                              \r"
+    
+    # Comprehensive package validation
+    echo -e "${CCYAN}Package installation summary:${CEND}"
+    echo -e "${CGREEN}Successfully installed: ${successful_packages[*]}${CEND}"
+    if [ ${#failed_packages[@]} -gt 0 ]; then
+        echo -e "${CCYAN}Failed to install: ${failed_packages[*]}${CEND}"
+    fi
+    
+    # Check if critical packages are available for QEMU compilation
+    local critical_ok=true
+    if ! command -v gcc >/dev/null 2>&1; then
+        echo -e "${CRED}✗ gcc is missing - critical for QEMU compilation${CEND}"
+        critical_ok=false
+    fi
+    
+    if ! command -v make >/dev/null 2>&1; then
+        echo -e "${CRED}✗ make is missing - critical for QEMU compilation${CEND}"
+        critical_ok=false
+    fi
+    
+    if ! ldconfig -p | grep -q libglib; then
+        echo -e "${CRED}✗ GLib libraries are missing - critical for QEMU${CEND}"
+        critical_ok=false
+    fi
+    
+    if [ "$critical_ok" = true ]; then
+        echo -e "${CGREEN}✓ Critical dependencies are available${CEND}"
+        echo -e "${CCYAN}QEMU installation will continue...${CEND}"
+    else
+        echo -e "${CRED}✗ Critical dependencies missing. Cannot continue.${CEND}"
+        exit 1
+    fi
+}
 
 # Architecture support
 if [[ "$architecture" != "x86_64" && "$architecture" != "aarch64" && "$architecture" != "arm64" ]]; then
@@ -93,34 +395,6 @@ if [[ "$is_numa" -ge "1" ]]; then
 fi
 qemu_targets="--target-list=i386-softmmu,x86_64-softmmu,i386-linux-user,x86_64-linux-user"
 
-function install_deps() {
-    pkgs="python3-libxml2 autotools-dev libnfs-dev libusbredirhost-dev libnl-route-3-dev python3-sphinx spice-client-gtk libssh2-1-dev libbz2-dev \
-    libvde-dev xfslibs-dev libfdt-dev python3-libvirt libsasl2-dev zlib1g-dev libbrlapi-dev libaio-dev git libguestfs-tools glusterfs-client \
-    spice-client-glib-usb-acl-helper libpixman-1-dev python3-requests spice-vdagent libgtk-3-dev libxml2-dev libnl-route-3-200 gir1.2-gtk-vnc-2.0 \
-    libspice-server-dev libspice-protocol-dev libxml2-utils liblzo2-dev librdmacm-dev libgnutls28-dev libosinfo-1.0-dev libseccomp-dev automake libiscsi-dev \
-    valgrind xmlto libvdeplug-dev gir1.2-spiceclientglib-2.0 libosinfo-1.0-0 libcap-dev gettext libnuma-dev libdevmapper-dev librbd-dev libyajl2 libsdl1.2-dev \
-    python3-dev texinfo gir1.2-spiceclientgtk-3.0 libgoogle-perftools-dev libcurl4-gnutls-dev libcap-ng-dev python3-requests-cache meson libspice-server1 \
-    python3-requests-unixsocket libsnappy-dev libspice-client-gtk-3.0-5 libspice-client-glib-2.0-8 libibverbs-dev libvte-2.91-0 libxen-dev libglib2.0-dev \
-    libbluetooth-dev libspice-client-gtk-3.0-dev gobject-introspection libncurses5-dev autoconf genisoimage "
-    if [[ "$os" == *"ubuntu"* ]]; then
-        pkgs=$(echo $pkgs; echo "libjpeg62-dev acpica-tools")
-        cd /tmp/ || return
-    elif [[ "$os" == *"debian"* ]]; then
-        pkgs=$(echo $pkgs; echo "libjpeg62-turbo-dev")
-    fi
-    total_packages=$(echo $pkgs | wc -w)
-    echo -e "${CGREEN}Installing $total_packages dependancies...${CEND}"
-    for pkg in $pkgs; do
-		echo -ne "    - ${CBLUE}installing $pkg ...                                                     ${CEND}\r"
-        apt install -y $pkg >> /tmp/apt-packages.log 2>&1
-        if [ $? -ne 0 ]; then
-			echo -ne "\n"
-            echo -e "    - ${CRED}$pkg failed installation${CEND}"
-            exit 1
-        fi
-    done
-	echo -ne "                                                              \r"
-}
 
 function _replace() {
     pattern=$1
