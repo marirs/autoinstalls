@@ -2,7 +2,7 @@
 ![GitHub](https://img.shields.io/github/license/marirs/autoinstalls?label=Apache-2.0)
 ![https://img.shields.io/badge/shell-bash-blue](https://img.shields.io/badge/shell-bash-blue)
 ![https://img.shields.io/badge/platform-ubuntu%2018.04%2C%2020.04%2C%2022.04%2C%2024.04%20%7C%20Debian%209.x%2C%2010.x%2C%2011.x%2C%2012.x%2C%2013.x%20%7C%20macOS%20%7C%20Windows-orange](https://img.shields.io/badge/platform-ubuntu%2018.04%2C%2020.04%2C%2022.04%2C%2024.04%20%7C%20Debian%209.x%2C%2010.x%2C%2011.x%2C%2012.x%2C%2013.x%20%7C%20macOS%20%7C%20Windows-orange)
-![https://img.shields.io/badge/components-15-green](https://img.shields.io/badge/components-15-green)
+![https://img.shields.io/badge/components-16-green](https://img.shields.io/badge/components-16-green)
 ![https://img.shields.io/badge/cross%20compilation-enabled-purple](https://img.shields.io/badge/cross%20compilation-enabled-purple)
 ![https://img.shields.io/badge/ai%20ml-ready-blue](https://img.shields.io/badge/ai%20ml-ready-blue)
 ![https://img.shields.io/badge/security-hardened-red](https://img.shields.io/badge/security-hardened-red)
@@ -150,7 +150,71 @@ sudo ./nginx-vhost-generator.sh
 
 ---
 
-### � PHP Programming Language
+### 🚀 Lighttpd Web Server
+**High-performance web server with comprehensive module support and security hardening**
+![https://img.shields.io/badge/lighttpd-latest%20stable-blue](https://img.shields.io/badge/lighttpd-latest%20stable-blue)
+![https://img.shields.io/badge/security-hardened-brightgreen](https://img.shields.io/badge/security-hardened-brightgreen)
+![https://img.shields.io/badge/status-production%20ready-green](https://img.shields.io/badge/status-production%20ready-green)
+
+**Features:**
+- ✅ Latest stable Lighttpd with optimized configuration
+- ✅ Advanced modules (FastCGI, SSL/TLS, Cache, Proxy, Rewrite, Compression)
+- ✅ Security hardening with headers and access controls
+- ✅ Performance optimization with caching and compression
+- ✅ Virtual host management with enhanced hosting
+- ✅ Management tools for monitoring and maintenance
+- ✅ SSL/TLS integration with Let's Encrypt compatibility
+- ✅ Production-ready security configurations
+
+**Module Categories:**
+- 🔄 **Core Modules** - Access, logging, alias, directory listing
+- 🔄 **Performance Modules** - Cache, compression, proxy, FastCGI
+- 🔄 **Security Modules** - SSL/TLS, secure downloads, authentication
+- 🔄 **Advanced Modules** - URL rewriting, virtual hosting, monitoring
+
+**Installation:**
+```bash
+cd lighttpd/
+sudo ./lighttpd-install.sh
+
+# Interactive module selection:
+# - FastCGI (PHP/Python/Ruby support)
+# - SSL/TLS (HTTPS support)
+# - ModCache (Caching system)
+# - ModProxy (Reverse proxy)
+# - ModRewrite (URL rewriting)
+# - ModCompress (Compression)
+# - And more...
+```
+
+**Management Tools:**
+```bash
+# Monitor server status
+lighttpd-monitor
+
+# Graceful reload configuration
+lighttpd-reload
+
+# Backup configurations
+lighttpd-backup
+
+# Service management
+systemctl status lighttpd
+```
+
+**What's Included:**
+- Lighttpd with performance optimizations
+- Comprehensive module ecosystem
+- Security hardening and headers
+- SSL/TLS configuration support
+- Virtual host management
+- Monitoring and management tools
+- Log rotation and backup scripts
+- Production-ready configuration
+
+---
+
+### 🐘 PHP Programming Language
 **Multi-version PHP installation with FPM, 40+ extensions, and webserver integration**
 ![https://img.shields.io/badge/php-8.3%20%7C%208.2%20%7C%208.1%20%7C%208.0%20%7C%207.4-blue](https://img.shields.io/badge/php-8.3%20%7C%208.2%20%7C%208.1%20%7C%208.0%20%7C%207.4-blue)
 ![https://img.shields.io/badge/php--fpm-enabled-green](https://img.shields.io/badge/php--fpm-enabled-green)
