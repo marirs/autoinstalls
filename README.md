@@ -1,8 +1,8 @@
 # AutoInstalls
-![GitHub](https://img.shields.io/github/license/marirs/autoinstalls)
+![GitHub](https://img.shields.io/github/license/marirs/autoinstalls?label=Apache-2.0)
 ![https://img.shields.io/badge/shell-bash-blue](https://img.shields.io/badge/shell-bash-blue)
-![https://img.shields.io/badge/platform-ubuntu%2018.04%2C%2020.04%2C%2022.04%2C%2024.04%20%7C%20Debian%209.x%2C%2010.x%2C%2011.x%2C%2012.x%20%7C%20macOS%20%7C%20Windows-orange](https://img.shields.io/badge/platform-ubuntu%2018.04%2C%2020.04%2C%2022.04%2C%2024.04%20%7C%20Debian%209.x%2C%2010.x%2C%2011.x%2C%2012.x%20%7C%20macOS%20%7C%20Windows-orange)
-![https://img.shields.io/badge/components-13-green](https://img.shields.io/badge/components-13-green)
+![https://img.shields.io/badge/platform-ubuntu%2018.04%2C%2020.04%2C%2022.04%2C%2024.04%20%7C%20Debian%209.x%2C%2010.x%2C%2011.x%2C%2012.x%2C%2013.x%20%7C%20macOS%20%7C%20Windows-orange](https://img.shields.io/badge/platform-ubuntu%2018.04%2C%2020.04%2C%2022.04%2C%2024.04%20%7C%20Debian%209.x%2C%2010.x%2C%2011.x%2C%2012.x%2C%2013.x%20%7C%20macOS%20%7C%20Windows-orange)
+![https://img.shields.io/badge/components-14-green](https://img.shields.io/badge/components-14-green)
 ![https://img.shields.io/badge/cross%20compilation-enabled-purple](https://img.shields.io/badge/cross%20compilation-enabled-purple)
 ![https://img.shields.io/badge/ai%20ml-ready-blue](https://img.shields.io/badge/ai%20ml-ready-blue)
 ![https://img.shields.io/badge/security-hardened-red](https://img.shields.io/badge/security-hardened-red)
@@ -680,7 +680,7 @@ sudo ./<install-script>.sh
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
 ---
 
