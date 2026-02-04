@@ -1,0 +1,119 @@
+# PostgreSQL Service Configuration
+# Systemd service file for PostgreSQL
+
+[Unit]
+Description=PostgreSQL database server
+Documentation=https://www.postgresql.org/docs/
+After=network.target
+Wants=network.target
+
+[Service]
+Type=notify
+User=postgres
+Group=postgres
+
+# Data directory
+Environment=PGDATA=/var/lib/postgresql/data
+
+# Configuration files
+EnvironmentFile=-/etc/postgresql/postgresql.conf
+EnvironmentFile=-/etc/postgresql/pg_hba.conf
+
+# Start PostgreSQL as a service
+ExecStart=/usr/lib/postgresql/*/bin/postgres -D ${PGDATA}
+ExecReload=/bin/kill -HUP $MAINPID
+
+# Send SIGTERM signal to gracefully stop PostgreSQL
+KillMode=mixed
+KillSignal=SIGINT
+KillTimeout=120
+
+# Restart policy
+Restart=on-failure
+RestartSec=10s
+StartLimitInterval=60s
+StartLimitBurst=5
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/postgresql /var/log/postgresql /var/run/postgresql
+ReadWriteDirectories=/var/lib/postgresql /var/log/postgresql /var/run/postgresql
+
+# Capability bounding set (remove unnecessary capabilities)
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FSET CAP_FOWNER CAP_SETGID CAP_SETUID CAP_SETPCAP CAP_IPC_LOCK CAP_SYS_RESOURCE
+
+# Memory usage limits
+MemoryLimit=infinity
+MemoryMax=infinity
+
+# CPU usage limits
+CPUQuota=infinity
+CPUQuotaPeriod=infinity
+
+# File descriptor limits
+LimitNOFILE=65536
+LimitNPROC=32768
+
+# Network restrictions (if needed)
+# RestrictNetworkInterfaces=eth0
+# IPAddressAllow=127.0.0.1/8
+# IPAddressDeny=0.0.0.0/0
+
+# I/O priority
+IOSchedulingClass=2
+IOWeight=100
+IOReadBandwidthMax=unlimited
+IOWriteBandwidthMax=unlimited
+
+# Device access restrictions
+DeviceAllow=/dev/null
+DeviceAllow=/dev/zero
+DeviceAllow=/dev/random
+DeviceAllow=/dev/urandom
+DevicePolicy=deny
+
+# Mount restrictions
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectKernelLogs=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+
+# Temporary file restrictions
+PrivateTmp=yes
+ProtectSystem=full
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+
+# Environment variables
+Environment=PGPORT=5432
+Environment=PGHOST=/var/run/postgresql
+Environment=PGDATABASE=postgres
+Environment=PGUSER=postgres
+
+# Pre-execution setup
+ExecStartPre=/usr/lib/postgresql/*/bin/initdb -D ${PGDATA}
+ExecStartPre=/usr/bin/mkdir -p /var/lib/postgresql /var/log/postgresql /var/run/postgresql
+ExecStartPre=/usr/bin/chown postgres:postgres /var/lib/postgresql /var/log/postgresql /var/run/postgresql
+ExecStartPre=/usr/bin/chmod 0755 /var/lib/postgresql /var/log/postgresql /var/run/postgresql
+
+# Post-execution cleanup
+ExecStopPost=/usr/bin/rm -f /var/run/postgresql/postgresql.pid
+
+# Timeout settings
+TimeoutStartSec=300
+TimeoutStopSec=120
+
+# OOM settings
+OOMScoreAdjust=-900
+
+[Install]
+WantedBy=multi-user.target
+
+[Alias]
+postgresql.service

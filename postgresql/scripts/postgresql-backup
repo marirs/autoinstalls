@@ -1,0 +1,280 @@
+# PostgreSQL Backup Script
+# Automated PostgreSQL backup with compression and rotation
+
+#!/bin/bash
+
+# Configuration
+BACKUP_DIR="/var/backups/postgresql"
+DATE=$(date +%Y%m%d_%H%M%S)
+RETENTION_DAYS=7
+POSTGRES_USER="postgres"
+POSTGRES_HOST="localhost"
+POSTGRES_PORT="5432"
+
+# Create backup directory if it doesn't exist
+mkdir -p "$BACKUP_DIR"
+
+# Function to perform backup
+backup_postgresql() {
+    echo "Starting PostgreSQL backup..."
+    
+    # Create backup directory for this run
+    BACKUP_PATH="$BACKUP_DIR/backup_$DATE"
+    mkdir -p "$BACKUP_PATH"
+    
+    # Get list of databases
+    DATABASES=$(psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -t -c "SELECT datname FROM pg_database WHERE datname NOT IN ('template0', 'template1', 'postgres')" | tr -d ' ')
+    
+    # Backup each database
+    for DB in $DATABASES; do
+        echo "Backing up database: $DB"
+        pg_dump -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d "$DB" --format=custom --compress=9 --file="$BACKUP_PATH/${DB}_${DATE}.dump"
+        
+        if [ $? -eq 0 ]; then
+            echo "Database $DB backed up successfully"
+        else
+            echo "Failed to backup database $DB"
+        fi
+    done
+    
+    # Backup global objects
+    echo "Backing up global objects..."
+    pg_dumpall -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER --globals-only --file="$BACKUP_PATH/globals_${DATE}.sql"
+    
+    # Create backup info file
+    echo "Backup Info" > "$BACKUP_PATH/backup_info.txt"
+    echo "Date: $DATE" >> "$BACKUP_PATH/backup_info.txt"
+    echo "Host: $POSTGRES_HOST:$POSTGRES_PORT" >> "$BACKUP_PATH/backup_info.txt"
+    echo "User: $POSTGRES_USER" >> "$BACKUP_PATH/backup_info.txt"
+    echo "Databases: $DATABASES" >> "$BACKUP_PATH/backup_info.txt"
+    echo "Size: $(du -sh $BACKUP_PATH | cut -f1)" >> "$BACKUP_PATH/backup_info.txt"
+    
+    # Compress the backup
+    tar -czf "$BACKUP_DIR/backup_$DATE.tar.gz" -C "$BACKUP_DIR" "backup_$DATE"
+    rm -rf "$BACKUP_PATH"
+    
+    echo "Backup completed: backup_$DATE.tar.gz"
+}
+
+# Function to restore backup
+restore_postgresql() {
+    if [ -z "$1" ]; then
+        echo "Usage: $0 restore <backup_file>"
+        exit 1
+    fi
+    
+    BACKUP_FILE="$1"
+    
+    if [ ! -f "$BACKUP_FILE" ]; then
+        echo "Backup file not found: $BACKUP_FILE"
+        exit 1
+    fi
+    
+    echo "Restoring from backup: $BACKUP_FILE"
+    
+    # Extract backup
+    TEMP_DIR="/tmp/postgresql_restore_$(date +%s)"
+    mkdir -p "$TEMP_DIR"
+    tar -xzf "$BACKUP_FILE" -C "$TEMP_DIR"
+    
+    # Find the backup directory
+    BACKUP_DIR_NAME=$(ls "$TEMP_DIR" | grep "backup_")
+    RESTORE_PATH="$TEMP_DIR/$BACKUP_DIR_NAME"
+    
+    # Restore global objects
+    if [ -f "$RESTORE_PATH/globals_${DATE}.sql" ]; then
+        echo "Restoring global objects..."
+        psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -f "$RESTORE_PATH/globals_${DATE}.sql"
+    fi
+    
+    # Restore databases
+    for DB_DUMP in "$RESTORE_PATH"/*.dump; do
+        if [ -f "$DB_DUMP" ]; then
+            DB_NAME=$(basename "$DB_DUMP" | cut -d'_' -f1)
+            echo "Restoring database: $DB_NAME"
+            
+            # Drop existing database if it exists
+            psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -c "DROP DATABASE IF EXISTS $DB_NAME" 2>/dev/null
+            
+            # Create new database
+            psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -c "CREATE DATABASE $DB_NAME"
+            
+            # Restore database
+            pg_restore -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d "$DB_NAME" --clean --if-exists "$DB_DUMP"
+            
+            if [ $? -eq 0 ]; then
+                echo "Database $DB_NAME restored successfully"
+            else
+                echo "Failed to restore database $DB_NAME"
+            fi
+        fi
+    done
+    
+    # Clean up
+    rm -rf "$TEMP_DIR"
+    
+    echo "Restore completed"
+}
+
+# Function to clean old backups
+cleanup_old_backups() {
+    echo "Cleaning up backups older than $RETENTION_DAYS days..."
+    find "$BACKUP_DIR" -name "backup_*.tar.gz" -mtime +$RETENTION_DAYS -delete
+    echo "Cleanup completed"
+}
+
+# Function to list backups
+list_backups() {
+    echo "Available PostgreSQL backups:"
+    ls -lh "$BACKUP_DIR"/backup_*.tar.gz 2>/dev/null | awk '{print $9, $5, $6, $7, $8}'
+}
+
+# Function to verify backup integrity
+verify_backup() {
+    if [ -z "$1" ]; then
+        echo "Usage: $0 verify <backup_file>"
+        exit 1
+    fi
+    
+    BACKUP_FILE="$1"
+    
+    if [ ! -f "$BACKUP_FILE" ]; then
+        echo "Backup file not found: $BACKUP_FILE"
+        exit 1
+    fi
+    
+    echo "Verifying backup integrity: $BACKUP_FILE"
+    
+    # Test tar file integrity
+    if tar -tzf "$BACKUP_FILE" >/dev/null 2>&1; then
+        echo "Backup file integrity: OK"
+        
+        # Show backup info if available
+        TEMP_DIR="/tmp/postgresql_verify_$(date +%s)"
+        mkdir -p "$TEMP_DIR"
+        tar -xzf "$BACKUP_FILE" -C "$TEMP_DIR" 2>/dev/null
+        
+        BACKUP_DIR_NAME=$(ls "$TEMP_DIR" 2>/dev/null | grep "backup_")
+        if [ -f "$TEMP_DIR/$BACKUP_DIR_NAME/backup_info.txt" ]; then
+            echo "Backup info:"
+            cat "$TEMP_DIR/$BACKUP_DIR_NAME/backup_info.txt"
+        fi
+        
+        rm -rf "$TEMP_DIR"
+    else
+        echo "Backup file integrity: FAILED"
+        exit 1
+    fi
+}
+
+# Function to backup specific database
+backup_database() {
+    if [ -z "$1" ]; then
+        echo "Usage: $0 backup-db <database_name>"
+        exit 1
+    fi
+    
+    DATABASE="$1"
+    
+    echo "Backing up database: $DATABASE"
+    
+    BACKUP_FILE="$BACKUP_DIR/${DATABASE}_${DATE}.dump"
+    
+    pg_dump -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d "$DATABASE" --format=custom --compress=9 --file="$BACKUP_FILE"
+    
+    if [ $? -eq 0 ]; then
+        echo "Database $DATABASE backed up successfully: $BACKUP_FILE"
+        
+        # Compress the backup
+        gzip "$BACKUP_FILE"
+        echo "Backup compressed: ${BACKUP_FILE}.gz"
+    else
+        echo "Failed to backup database $DATABASE"
+        exit 1
+    fi
+}
+
+# Function to restore specific database
+restore_database() {
+    if [ -z "$1" ] || [ -z "$2" ]; then
+        echo "Usage: $0 restore-db <database_name> <backup_file>"
+        exit 1
+    fi
+    
+    DATABASE="$1"
+    BACKUP_FILE="$2"
+    
+    if [ ! -f "$BACKUP_FILE" ]; then
+        echo "Backup file not found: $BACKUP_FILE"
+        exit 1
+    fi
+    
+    echo "Restoring database: $DATABASE from $BACKUP_FILE"
+    
+    # Drop existing database if it exists
+    psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -c "DROP DATABASE IF EXISTS $DATABASE" 2>/dev/null
+    
+    # Create new database
+    psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -c "CREATE DATABASE $DATABASE"
+    
+    # Restore database
+    if [[ "$BACKUP_FILE" == *.gz ]]; then
+        gunzip -c "$BACKUP_FILE" | pg_restore -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d "$DATABASE" --clean --if-exists
+    else
+        pg_restore -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d "$DATABASE" --clean --if-exists "$BACKUP_FILE"
+    fi
+    
+    if [ $? -eq 0 ]; then
+        echo "Database $DATABASE restored successfully"
+    else
+        echo "Failed to restore database $DATABASE"
+        exit 1
+    fi
+}
+
+# Main script logic
+case "$1" in
+    "backup")
+        backup_postgresql
+        cleanup_old_backups
+        ;;
+    "restore")
+        restore_postgresql "$2"
+        ;;
+    "cleanup")
+        cleanup_old_backups
+        ;;
+    "list")
+        list_backups
+        ;;
+    "verify")
+        verify_backup "$2"
+        ;;
+    "backup-db")
+        backup_database "$2"
+        ;;
+    "restore-db")
+        restore_database "$2" "$3"
+        ;;
+    *)
+        echo "PostgreSQL Backup Script"
+        echo "Usage: $0 {backup|restore|cleanup|list|verify|backup-db|restore-db} [arguments]"
+        echo ""
+        echo "Commands:"
+        echo "  backup           - Create a new backup of all databases"
+        echo "  restore          - Restore from backup file"
+        echo "  cleanup          - Remove old backups"
+        echo "  list             - List available backups"
+        echo "  verify           - Verify backup integrity"
+        echo "  backup-db        - Backup specific database"
+        echo "  restore-db       - Restore specific database"
+        echo ""
+        echo "Examples:"
+        echo "  $0 backup"
+        echo "  $0 restore /var/backups/postgresql/backup_20250204_120000.tar.gz"
+        echo "  $0 verify /var/backups/postgresql/backup_20250204_120000.tar.gz"
+        echo "  $0 backup-db myapp"
+        echo "  $0 restore-db myapp /var/backups/postgresql/myapp_20250204_120000.dump.gz"
+        exit 1
+        ;;
+esac

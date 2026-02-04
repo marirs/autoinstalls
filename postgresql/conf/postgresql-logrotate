@@ -1,0 +1,135 @@
+# PostgreSQL Log Rotation Configuration
+# Logrotate configuration for PostgreSQL logs
+
+/var/log/postgresql/postgresql.log {
+    daily
+    missingok
+    rotate 30
+    compress
+    delaycompress
+    notifempty
+    create 640 postgres postgres
+    sharedscripts
+    postrotate
+        /bin/kill -HUP $(cat /var/run/postgresql/postgresql.pid 2>/dev/null) 2>/dev/null || true
+    endscript
+}
+
+/var/log/postgresql/postgresql-%Y-%m-%d_%H%M%S.log {
+    daily
+    missingok
+    rotate 90
+    compress
+    delaycompress
+    notifempty
+    create 640 postgres postgres
+    sharedscripts
+}
+
+# Audit logs (if enabled)
+/var/log/postgresql/audit.log {
+    daily
+    missingok
+    rotate 365
+    compress
+    delaycompress
+    notifempty
+    create 640 postgres postgres
+    sharedscripts
+}
+
+# Slow query logs (if enabled)
+/var/log/postgresql/slow_queries.log {
+    daily
+    missingok
+    rotate 60
+    compress
+    delaycompress
+    notifempty
+    create 640 postgres postgres
+    sharedscripts
+}
+
+# Connection logs (if enabled)
+/var/log/postgresql/connections.log {
+    weekly
+    missingok
+    rotate 52
+    compress
+    delaycompress
+    notifempty
+    create 640 postgres postgres
+    sharedscripts
+}
+
+# Error logs (if enabled)
+/var/log/postgresql/error.log {
+    weekly
+    missingok
+    rotate 52
+    compress
+    delaycompress
+    notifempty
+    create 640 postgres postgres
+    sharedscripts
+}
+
+# Custom application logs (add as needed)
+# /var/log/postgresql/myapp.log {
+#     weekly
+#     missingok
+#     rotate 12
+#     compress
+#     delaycompress
+#     notifempty
+#     create 640 postgres postgres
+#     sharedscripts
+# }
+
+# Maintenance logs
+/var/log/postgresql/maintenance.log {
+    monthly
+    missingok
+    rotate 12
+    compress
+    delaycompress
+    notifempty
+    create 640 postgres postgres
+    sharedscripts
+}
+
+# Backup logs
+/var/log/postgresql/backup.log {
+    weekly
+    missingok
+    rotate 52
+    compress
+    delaycompress
+    notifempty
+    create 640 postgres postgres
+    sharedscripts
+}
+
+# Replication logs (if using replication)
+/var/log/postgresql/replication.log {
+    daily
+    missingok
+    rotate 30
+    compress
+    delaycompress
+    notifempty
+    create 640 postgres postgres
+    sharedscripts
+}
+
+# Performance monitoring logs
+/var/log/postgresql/performance.log {
+    weekly
+    missingok
+    rotate 26
+    compress
+    delaycompress
+    notifempty
+    create 640 postgres postgres
+    sharedscripts
+}

@@ -1,0 +1,383 @@
+# PostgreSQL Installation Script
+# Automated PostgreSQL installation and configuration
+
+#!/bin/bash
+
+# Colors
+CSI="\033["
+CEND="${CSI}0m"
+CRED="${CSI}1;31m"
+CGREEN="${CSI}1;32m"
+CYELLOW="${CSI}1;33m"
+
+# Check root access
+if [[ "$EUID" -ne 0 ]]; then
+	echo -e "${CRED}Sorry, you need to run this as root${CEND}"
+	exit 1
+fi
+
+# Get PostgreSQL latest version
+POSTGRESQL_VERSIONS=$(curl -s https://www.postgresql.org/source/ | grep -oP 'postgresql-\d+\.\d+\.\d+' | sort -V | uniq | tail -n2)
+POSTGRESQL_LATEST_VER=$(echo $POSTGRESQL_VERSIONS | cut -d' ' -f2 | cut -d'-' -f2)
+POSTGRESQL_STABLE_VER=$(echo $POSTGRESQL_VERSIONS | cut -d' ' -f1 | cut -d'-' -f2)
+
+cores=$(nproc)
+if [ $? -ne 0 ]; then
+    cores=1
+fi
+
+# Clear log file
+rm /tmp/postgresql-install.log
+
+clear
+echo ""
+echo "Welcome to the PostgreSQL auto-install script."
+echo ""
+echo "What do you want to do?"
+echo "   1) Install or update PostgreSQL"
+echo "   2) Configure PostgreSQL"
+echo "   3) Uninstall PostgreSQL"
+echo "   4) Create PostgreSQL user"
+echo "   5) Create PostgreSQL database"
+echo "   6) Backup PostgreSQL"
+echo "   7) Restore PostgreSQL"
+echo "   8) Exit"
+echo ""
+while [[ $OPTION !=  "1" && $OPTION != "2" && $OPTION != "3" && $OPTION != "4" && $OPTION != "5" && $OPTION != "6" && $OPTION != "7" && $OPTION != "8" ]]; do
+	read -p "Select an option [1-8]: " OPTION
+done
+
+case $OPTION in
+	1)
+		echo ""
+		echo "This script will install PostgreSQL with optional configurations."
+		echo ""
+		echo "Choose PostgreSQL version:"
+		echo "   1) Stable $POSTGRESQL_STABLE_VER"
+		echo "   2) Latest $POSTGRESQL_LATEST_VER"
+		echo "   3) Repository version (Recommended)"
+		echo ""
+		while [[ $POSTGRES_VER != "1" && $POSTGRES_VER != "2" && $POSTGRES_VER != "3" ]]; do
+			read -p "Select an option [1-3]: " POSTGRES_VER
+		done
+		case $POSTGRES_VER in
+			1)
+			POSTGRES_VER=$POSTGRESQL_STABLE_VER
+			INSTALL_TYPE="source"
+			;;
+			2)
+			POSTGRES_VER=$POSTGRESQL_LATEST_VER
+			INSTALL_TYPE="source"
+			;;
+			3)
+			POSTGRES_VER="repository"
+			INSTALL_TYPE="repository"
+			;;
+		esac
+		
+		echo ""
+		echo "Choose installation type:"
+		echo "   1) Standalone (Single instance)"
+		echo "   2) Primary-Replica (Streaming replication)"
+		echo "   3) Cluster (Multiple nodes)"
+		echo ""
+		while [[ $CLUSTER_TYPE != "1" && $CLUSTER_TYPE != "2" && $CLUSTER_TYPE != "3" ]]; do
+			read -p "Select an option [1-3]: " CLUSTER_TYPE
+		done
+		
+		echo ""
+		echo "Additional configurations:"
+		while [[ $POSTGRES_AUTH != "y" && $POSTGRES_AUTH != "n" ]]; do
+			read -p "       Enable Authentication (Required) [y/n]: " -e POSTGRES_AUTH
+		done
+		while [[ $POSTGRES_EXT != "y" && $POSTGRES_EXT != "n" ]]; do
+			read -p "       Install useful extensions [y/n]: " -e POSTGRES_EXT
+		done
+		while [[ $POSTGRES_PGA != "y" && $POSTGRES_PGA != "n" ]]; do
+			read -p "       Install pgAdmin4 (Web UI) [y/n]: " -e POSTGRES_PGA
+		done
+		while [[ $POSTGRES_TOOLS != "y" && $POSTGRES_TOOLS != "n" ]]; do
+			read -p "       Install PostgreSQL tools [y/n]: " -e POSTGRES_TOOLS
+		done
+		while [[ $POSTGRES_BACKUP != "y" && $POSTGRES_BACKUP != "n" ]]; do
+			read -p "       Setup backup script [y/n]: " -e POSTGRES_BACKUP
+		done
+		while [[ $POSTGRES_PERF != "y" && $POSTGRES_PERF != "n" ]]; do
+			read -p "       Enable performance tuning [y/n]: " -e POSTGRES_PERF
+		done
+		
+		echo ""
+		read -n1 -r -p "PostgreSQL is ready to be installed, press any key to continue..."
+		echo ""
+		
+		# Dependencies
+		echo -ne "       Installing dependencies        [..]\r"
+		apt-get update >> /tmp/postgresql-install.log 2>&1
+		apt-get install -y curl wget gnupg software-properties-common build-essential libreadline-dev zlib1g-dev libssl-dev libxml2-dev libxslt1-dev libjson-c-dev libsystemd-dev >> /tmp/postgresql-install.log 2>&1
+		if [ $? -eq 0 ]; then
+			echo -ne "       Installing dependencies        [${CGREEN}OK${CEND}]\r"
+			echo -ne "\n"
+		else
+			echo -e "       Installing dependencies        [${CRED}FAIL${CEND}]"
+			echo ""
+			echo "Please look at /tmp/postgresql-install.log"
+			echo ""
+			exit 1
+		fi
+		
+		if [[ "$INSTALL_TYPE" = "repository" ]]; then
+			# Install from PostgreSQL repository
+			echo -ne "       Adding PostgreSQL repository      [..]\r"
+			sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list' >> /tmp/postgresql-install.log 2>&1
+			wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor | tee /etc/apt/trusted.gpg.d/postgresql.gpg >/dev/null >> /tmp/postgresql-install.log 2>&1
+			apt-get update >> /tmp/postgresql-install.log 2>&1
+			if [ $? -eq 0 ]; then
+				echo -ne "       Adding PostgreSQL repository      [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Adding PostgreSQL repository      [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/postgresql-install.log"
+				echo ""
+				exit 1
+			fi
+			
+			# Install PostgreSQL packages
+			echo -ne "       Installing PostgreSQL packages   [..]\r"
+			apt-get install -y postgresql postgresql-contrib >> /tmp/postgresql-install.log 2>&1
+			if [ $? -eq 0 ]; then
+				echo -ne "       Installing PostgreSQL packages   [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Installing PostgreSQL packages   [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/postgresql-install.log"
+				echo ""
+				exit 1
+			fi
+		else
+			# Install from source
+			echo -ne "       Downloading PostgreSQL source     [..]\r"
+			cd /usr/local/src
+			wget https://ftp.postgresql.org/pub/source/v$POSTGRES_VER/postgresql-$POSTGRES_VER.tar.gz >> /tmp/postgresql-install.log 2>&1
+			tar xzf postgresql-$POSTGRES_VER.tar.gz >> /tmp/postgresql-install.log 2>&1
+			cd postgresql-$POSTGRES_VER
+			if [ $? -eq 0 ]; then
+				echo -ne "       Downloading PostgreSQL source     [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Downloading PostgreSQL source     [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/postgresql-install.log"
+				echo ""
+				exit 1
+			fi
+			
+			# Configure PostgreSQL
+			echo -ne "       Configuring PostgreSQL            [..]\r"
+			./configure --prefix=/usr/local/pgsql --with-libxml --with-libxslt --with-openssl --with-systemd --with-jsonc --with-pgport=5432 >> /tmp/postgresql-install.log 2>&1
+			if [ $? -eq 0 ]; then
+				echo -ne "       Configuring PostgreSQL            [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Configuring PostgreSQL            [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/postgresql-install.log"
+				echo ""
+				exit 1
+			fi
+			
+			# Compile PostgreSQL
+			echo -ne "       Compiling PostgreSQL              [..]\r"
+			make -j$cores >> /tmp/postgresql-install.log 2>&1
+			if [ $? -eq 0 ]; then
+				echo -ne "       Compiling PostgreSQL              [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Compiling PostgreSQL              [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/postgresql-install.log"
+				echo ""
+				exit 1
+			fi
+			
+			# Install PostgreSQL
+			echo -ne "       Installing PostgreSQL             [..]\r"
+			make install >> /tmp/postgresql-install.log 2>&1
+			if [ $? -eq 0 ]; then
+				echo -ne "       Installing PostgreSQL             [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Installing PostgreSQL             [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/postgresql-install.log"
+				echo ""
+				exit 1
+			fi
+			
+			# Create postgres user
+			useradd -r -m -d /var/lib/pgsql postgres >> /tmp/postgresql-install.log 2>&1
+			chown -R postgres:postgres /usr/local/pgsql >> /tmp/postgresql-install.log 2>&1
+		fi
+		
+		# Install PostgreSQL tools
+		if [[ "$POSTGRES_TOOLS" = 'y' ]]; then
+			echo -ne "       Installing PostgreSQL tools        [..]\r"
+			apt-get install -y postgresql-client pgadmin4 pgtop pgbouncer >> /tmp/postgresql-install.log 2>&1
+			if [ $? -eq 0 ]; then
+				echo -ne "       Installing PostgreSQL tools        [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Installing PostgreSQL tools        [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/postgresql-install.log"
+				echo ""
+				exit 1
+			fi
+		fi
+		
+		# Install pgAdmin4
+		if [[ "$POSTGRES_PGA" = 'y' ]]; then
+			echo -ne "       Installing pgAdmin4              [..]\r"
+			apt-get install -y pgadmin4-web >> /tmp/postgresql-install.log 2>&1
+			if [ $? -eq 0 ]; then
+				echo -ne "       Installing pgAdmin4              [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Installing pgAdmin4              [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/postgresql-install.log"
+				echo ""
+				exit 1
+			fi
+		fi
+		
+		# Start and enable PostgreSQL
+		echo -ne "       Starting PostgreSQL service        [..]\r"
+		systemctl start postgresql >> /tmp/postgresql-install.log 2>&1
+		systemctl enable postgresql >> /tmp/postgresql-install.log 2>&1
+		if [ $? -eq 0 ]; then
+			echo -ne "       Starting PostgreSQL service        [${CGREEN}OK${CEND}]\r"
+			echo -ne "\n"
+		else
+			echo -e "       Starting PostgreSQL service        [${CRED}FAIL${CEND}]"
+			echo ""
+			echo "Please look at /tmp/postgresql-install.log"
+			echo ""
+			exit 1
+		fi
+		
+		# Configure PostgreSQL
+		echo -ne "       Configuring PostgreSQL             [..]\r"
+		mkdir -p /etc/postgresql/conf.d
+		wget -O /etc/postgresql/postgresql.conf https://raw.githubusercontent.com/marirs/autoinstalls/master/postgresql/conf/postgresql.conf >> /tmp/postgresql-install.log 2>&1
+		wget -O /etc/postgresql/pg_hba.conf https://raw.githubusercontent.com/marirs/autoinstalls/master/postgresql/conf/pg_hba.conf >> /tmp/postgresql-install.log 2>&1
+		
+		# Apply configuration based on cluster type
+		case $CLUSTER_TYPE in
+			1)
+				# Standalone configuration
+				sed -i 's/#wal_level = replica/wal_level = replica/' /etc/postgresql/postgresql.conf
+				sed -i 's/#max_wal_senders = 0/max_wal_senders = 3/' /etc/postgresql/postgresql.conf
+				;;
+			2)
+				# Primary-Replica configuration
+				sed -i 's/#wal_level = replica/wal_level = replica/' /etc/postgresql/postgresql.conf
+				sed -i 's/#max_wal_senders = 0/max_wal_senders = 10/' /etc/postgresql/postgresql.conf
+				sed -i 's/#archive_mode = off/archive_mode = on/' /etc/postgresql/postgresql.conf
+				sed -i 's/#archive_command = .*/archive_command = '\''cp %p \/var\/lib\/postgresql\/archive\/%f'\''/' /etc/postgresql/postgresql.conf
+				;;
+			3)
+				# Cluster configuration
+				sed -i 's/#wal_level = replica/wal_level = replica/' /etc/postgresql/postgresql.conf
+				sed -i 's/#max_wal_senders = 0/max_wal_senders = 20/' /etc/postgresql/postgresql.conf
+				sed -i 's/#max_replication_slots = 0/max_replication_slots = 10/' /etc/postgresql/postgresql.conf
+				;;
+		esac
+		
+		# Enable performance tuning if requested
+		if [[ "$POSTGRES_PERF" = 'y' ]]; then
+			sed -i 's/#shared_buffers = 128MB/shared_buffers = 256MB/' /etc/postgresql/postgresql.conf
+			sed -i 's/#effective_cache_size = 4GB/effective_cache_size = 1GB/' /etc/postgresql/postgresql.conf
+			sed -i 's/#maintenance_work_mem = 64MB/maintenance_work_mem = 128MB/' /etc/postgresql/postgresql.conf
+			sed -i 's/#checkpoint_completion_target = 0.5/checkpoint_completion_target = 0.7/' /etc/postgresql/postgresql.conf
+			sed -i 's/#wal_buffers = -1/wal_buffers = 16MB/' /etc/postgresql/postgresql.conf
+			sed -i 's/#default_statistics_target = 100/default_statistics_target = 200/' /etc/postgresql/postgresql.conf
+		fi
+		
+		# Restart PostgreSQL to apply configuration
+		systemctl restart postgresql >> /tmp/postgresql-install.log 2>&1
+		
+		# Setup backup script if requested
+		if [[ "$POSTGRES_BACKUP" = 'y' ]]; then
+			echo -ne "       Setting up backup script           [..]\r"
+			wget -O /usr/local/bin/postgresql-backup https://raw.githubusercontent.com/marirs/autoinstalls/master/postgresql/scripts/postgresql-backup >> /tmp/postgresql-install.log 2>&1
+			chmod +x /usr/local/bin/postgresql-backup >> /tmp/postgresql-install.log 2>&1
+			echo -ne "       Setting up backup script           [${CGREEN}OK${CEND}]\r"
+			echo -ne "\n"
+		fi
+		
+		# Install extensions if requested
+		if [[ "$POSTGRES_EXT" = 'y' ]]; then
+			echo -ne "       Installing PostgreSQL extensions    [..]\r"
+			sudo -u postgres psql -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;" >> /tmp/postgresql-install.log 2>&1
+			sudo -u postgres psql -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;" >> /tmp/postgresql-install.log 2>&1
+			sudo -u postgres psql -c "CREATE EXTENSION IF NOT EXISTS unaccent;" >> /tmp/postgresql-install.log 2>&1
+			sudo -u postgres psql -c "CREATE EXTENSION IF NOT EXISTS pgcrypto;" >> /tmp/postgresql-install.log 2>&1
+			if [ $? -eq 0 ]; then
+				echo -ne "       Installing PostgreSQL extensions    [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Installing PostgreSQL extensions    [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/postgresql-install.log"
+				echo ""
+				exit 1
+			fi
+		fi
+		
+		echo ""
+		echo -e "${CGREEN}PostgreSQL installation successful!${CEND}"
+		echo ""
+		echo "PostgreSQL version: $([[ "$INSTALL_TYPE" = "repository" ]] && echo "Repository latest" || echo $POSTGRES_VER)"
+		echo "Installation type: $CLUSTER_TYPE"
+		echo "Authentication: $([[ "$POSTGRES_AUTH" = 'y' ]] && echo "Enabled" || echo "Disabled")"
+		echo "pgAdmin4: $([[ "$POSTGRES_PGA" = 'y' ]] && echo "Installed" || echo "Not installed")"
+		echo "Extensions: $([[ "$POSTGRES_EXT" = 'y' ]] && echo "Installed" || echo "Not installed")"
+		echo ""
+		echo "PostgreSQL configuration: /etc/postgresql/postgresql.conf"
+		echo "Log file: /var/log/postgresql/postgresql.log"
+		echo "Data directory: /var/lib/postgresql/data"
+		echo ""
+		echo "Installation log: /tmp/postgresql-install.log"
+		echo ""
+		exit
+		;;
+	2)
+		# Configuration option would go here
+		echo "Configuration option - not implemented yet"
+		;;
+	3)
+		# Uninstall option would go here
+		echo "Uninstall option - not implemented yet"
+		;;
+	4)
+		# User creation option would go here
+		echo "User creation option - not implemented yet"
+		;;
+	5)
+		# Database creation option would go here
+		echo "Database creation option - not implemented yet"
+		;;
+	6)
+		# Backup option would go here
+		echo "Backup option - not implemented yet"
+		;;
+	7)
+		# Restore option would go here
+		echo "Restore option - not implemented yet"
+		;;
+	8)
+		exit
+		;;
+esac
