@@ -20,7 +20,7 @@ CCYAN="${CSI}1;36m"
 # MySQL/MariaDB Configuration
 MYSQL_VERSION="8.0"
 MARIADB_VERSION="10.11"
-DB_TYPE="mysql"  # Default to MySQL, can be changed to mariadb
+DB_TYPE="mariadb"  # Default to MariaDB
 DB_USER="mysql"
 DB_GROUP="mysql"
 DB_DATA_DIR="/var/lib/mysql"
@@ -44,7 +44,11 @@ function show_header() {
     echo -e "${CBLUE}    MySQL/MariaDB Auto-Installation${CEND}"
     echo -e "${CBLUE}========================================${CEND}"
     echo -e "${CCYAN}DB Type: ${DB_TYPE}${CEND}"
-    echo -e "${CCYAN}Version: ${MYSQL_VERSION}${CEND}"
+    if [ "$DB_TYPE" = "mysql" ]; then
+        echo -e "${CCYAN}Version: ${MYSQL_VERSION}${CEND}"
+    else
+        echo -e "${CCYAN}Version: ${MARIADB_VERSION}${CEND}"
+    fi
     echo -e "${CCYAN}Architecture: ${ARCH}${CEND}"
     echo -e "${CCYAN}OS: ${OS} ${OS_VERSION}${CEND}"
     echo ""
@@ -58,11 +62,10 @@ function check_root() {
 }
 
 function choose_database() {
-    echo -e "${CGREEN}Choose database type:${CEND}"
+    echo -e "${CGREEN}Choose database type to install:${CEND}"
     echo "1) MySQL 8.0 (Oracle)"
-    echo "2) MariaDB 10.11 (Community)"
-    echo "3) MariaDB Latest"
-    read -p "Enter choice [1-3]: " -n 1 -r
+    echo "2) MariaDB 10.11 (Community) - [DEFAULT]"
+    read -p "Enter choice [1-2]: " -n 1 -r
     echo
     
     case $REPLY in
@@ -70,19 +73,15 @@ function choose_database() {
             DB_TYPE="mysql"
             echo -e "${CCYAN}Selected: MySQL 8.0${CEND}"
             ;;
-        2)
+        2|"")
             DB_TYPE="mariadb"
             MARIADB_VERSION="10.11"
             echo -e "${CCYAN}Selected: MariaDB 10.11${CEND}"
             ;;
-        3)
-            DB_TYPE="mariadb"
-            MARIADB_VERSION="latest"
-            echo -e "${CCYAN}Selected: MariaDB Latest${CEND}"
-            ;;
         *)
-            echo -e "${CRED}Invalid choice. Using default: MySQL 8.0${CEND}"
-            DB_TYPE="mysql"
+            echo -e "${CRED}Invalid choice. Using default: MariaDB 10.11${CEND}"
+            DB_TYPE="mariadb"
+            MARIADB_VERSION="10.11"
             ;;
     esac
 }
@@ -103,7 +102,7 @@ function check_system() {
     echo -e "${CCYAN}Architecture: $ARCH${CEND}"
     
     # Check if MySQL/MariaDB is already installed
-    if command -v mysql >/dev/null 2>&1 || command -v mysqld >/dev/null 2>&1; then
+    if command -v mysql >/dev/null 2>&1 || command -v mysqld >/dev/null 2>&1 || command -v mariadb >/dev/null 2>&1; then
         echo -e "${CYAN}MySQL/MariaDB is already installed${CEND}"
         read -p "Do you want to reinstall? (y/N): " -n 1 -r
         echo
@@ -360,15 +359,22 @@ EOF
 }
 
 function secure_mysql() {
-    echo -e "${CGREEN}Securing MySQL installation...${CEND}"
+    echo -e "${CGREEN}Securing ${DB_TYPE} installation...${CEND}"
     
-    # Start MySQL service
-    systemctl start mysql
+    # Start the appropriate service
+    if [ "$DB_TYPE" = "mysql" ]; then
+        systemctl start mysql
+        SERVICE_NAME="mysql"
+    else
+        systemctl start mariadb
+        SERVICE_NAME="mariadb"
+    fi
+    
     sleep 5
     
     # Check if service is running
-    if ! systemctl is-active --quiet mysql; then
-        echo -e "${CRED}Failed to start MySQL service${CEND}"
+    if ! systemctl is-active --quiet $SERVICE_NAME; then
+        echo -e "${CRED}Failed to start ${DB_TYPE} service${CEND}"
         exit 1
     fi
     
@@ -380,7 +386,7 @@ function secure_mysql() {
         fi
     fi
     
-    # Secure MySQL
+    # Secure database
     mysql -u root << EOF
 -- Set root password
 ALTER USER 'root'@'localhost' IDENTIFIED BY '$DB_ROOT_PASSWORD';
@@ -404,9 +410,9 @@ FLUSH PRIVILEGES;
 EOF
     
     if [ $? -eq 0 ]; then
-        echo -e "${CGREEN}MySQL secured successfully${CEND}"
+        echo -e "${CGREEN}${DB_TYPE} secured successfully${CEND}"
     else
-        echo -e "${CRED}Failed to secure MySQL${CEND}"
+        echo -e "${CRED}Failed to secure ${DB_TYPE}${CEND}"
         exit 1
     fi
 }
@@ -414,12 +420,21 @@ EOF
 function create_systemd_service() {
     echo -e "${CGREEN}Creating systemd service...${CEND}"
     
-    # MySQL usually comes with systemd service, but we ensure it's properly configured
-    if [ -f "/lib/systemd/system/mysql.service" ]; then
+    # Determine service file location based on database type
+    if [ "$DB_TYPE" = "mysql" ]; then
+        SERVICE_FILE="/lib/systemd/system/mysql.service"
+        SERVICE_NAME="mysql"
+    else
+        SERVICE_FILE="/lib/systemd/system/mariadb.service"
+        SERVICE_NAME="mariadb"
+    fi
+    
+    # Check if service file exists
+    if [ -f "$SERVICE_FILE" ]; then
         # Create override for additional security
-        mkdir -p /etc/systemd/system/mysql.service.d
+        mkdir -p /etc/systemd/system/${SERVICE_NAME}.service.d
         
-        cat > /etc/systemd/system/mysql.service.d/override.conf << EOF
+        cat > /etc/systemd/system/${SERVICE_NAME}.service.d/override.conf << EOF
 [Service]
 # Security settings
 NoNewPrivileges=true
@@ -452,12 +467,12 @@ EOF
         # Reload systemd
         systemctl daemon-reload
         
-        # Enable MySQL service
-        systemctl enable mysql
+        # Enable service
+        systemctl enable $SERVICE_NAME
         
         echo -e "${CGREEN}Systemd service configured and enabled${CEND}"
     else
-        echo -e "${CYAN}MySQL systemd service not found, using default configuration${CEND}"
+        echo -e "${CYAN}${DB_TYPE} systemd service not found, using default configuration${CEND}"
     fi
 }
 
@@ -774,28 +789,35 @@ EOF
 }
 
 function start_mysql() {
-    echo -e "${CGREEN}Starting MySQL service...${CEND}"
+    echo -e "${CGREEN}Starting ${DB_TYPE} service...${CEND}"
     
-    # Restart MySQL to apply configuration
-    systemctl restart mysql
+    # Determine service name based on database type
+    if [ "$DB_TYPE" = "mysql" ]; then
+        SERVICE_NAME="mysql"
+    else
+        SERVICE_NAME="mariadb"
+    fi
     
-    # Wait for MySQL to start
+    # Restart service to apply configuration
+    systemctl restart $SERVICE_NAME
+    
+    # Wait for service to start
     sleep 5
     
-    # Check if MySQL is running
-    if systemctl is-active --quiet mysql; then
-        echo -e "${CGREEN}MySQL service started successfully${CEND}"
+    # Check if service is running
+    if systemctl is-active --quiet $SERVICE_NAME; then
+        echo -e "${CGREEN}${DB_TYPE} service started successfully${CEND}"
     else
-        echo -e "${CRED}Failed to start MySQL service${CEND}"
-        systemctl status mysql
+        echo -e "${CRED}Failed to start ${DB_TYPE} service${CEND}"
+        systemctl status $SERVICE_NAME
         exit 1
     fi
 }
 
 function verify_installation() {
-    echo -e "${CGREEN}Verifying MySQL installation...${CEND}"
+    echo -e "${CGREEN}Verifying ${DB_TYPE} installation...${CEND}"
     
-    # Test MySQL connection
+    # Test database connection
     local password=$(cat "$DB_ROOT_PASSWORD_FILE" 2>/dev/null || echo "")
     local auth_cmd=""
     if [ -n "$password" ]; then
@@ -803,23 +825,23 @@ function verify_installation() {
     fi
     
     if mysql $auth_cmd -e "SELECT 1;" >/dev/null 2>&1; then
-        echo -e "${CGREEN}MySQL connection: OK${CEND}"
+        echo -e "${CGREEN}${DB_TYPE} connection: OK${CEND}"
     else
-        echo -e "${CRED}MySQL connection: FAILED${CEND}"
+        echo -e "${CRED}${DB_TYPE} connection: FAILED${CEND}"
         exit 1
     fi
     
     # Test basic operations
     if mysql $auth_cmd -e "CREATE DATABASE IF NOT EXISTS test_verification; USE test_verification; CREATE TABLE IF NOT EXISTS test_table (id INT); INSERT INTO test_table VALUES (1); SELECT COUNT(*) FROM test_table; DROP TABLE test_table; DROP DATABASE test_verification;" >/dev/null 2>&1; then
-        echo -e "${CGREEN}MySQL operations: OK${CEND}"
+        echo -e "${CGREEN}${DB_TYPE} operations: OK${CEND}"
     else
-        echo -e "${CRED}MySQL operations: FAILED${CEND}"
+        echo -e "${CRED}${DB_TYPE} operations: FAILED${CEND}"
         exit 1
     fi
     
-    # Check MySQL version
-    local mysql_version=$(mysql $auth_cmd -e "SELECT VERSION();" -s -N 2>/dev/null)
-    echo -e "${CGREEN}MySQL version: $mysql_version${CEND}"
+    # Check database version
+    local db_version=$(mysql $auth_cmd -e "SELECT VERSION();" -s -N 2>/dev/null)
+    echo -e "${CGREEN}${DB_TYPE} version: $db_version${CEND}"
     
     # Verify localhost-only binding
     if netstat -tlnp 2>/dev/null | grep ":$DB_PORT" | grep "127.0.0.1" >/dev/null 2>&1; then
@@ -848,16 +870,16 @@ function verify_installation() {
         echo -e "${CYAN}No firewall detected - skipping firewall verification${CEND}"
     fi
     
-    # Verify MySQL configuration
+    # Verify database configuration
     if grep -q "bind-address = 127.0.0.1" "$DB_CONF_DIR/my.cnf"; then
-        echo -e "${CGREEN}MySQL configuration: OK${CEND}"
+        echo -e "${CGREEN}${DB_TYPE} configuration: OK${CEND}"
     else
-        echo -e "${CRED}MySQL configuration: FAILED${CEND}"
+        echo -e "${CRED}${DB_TYPE} configuration: FAILED${CEND}"
         exit 1
     fi
     
-    echo -e "${CGREEN}MySQL installation verified successfully${CEND}"
-    echo -e "${CCYAN}MySQL is configured for localhost-only access${CEND}"
+    echo -e "${CGREEN}${DB_TYPE} installation verified successfully${CEND}"
+    echo -e "${CCYAN}${DB_TYPE} is configured for localhost-only access${CEND}"
 }
 
 function show_success_message() {
