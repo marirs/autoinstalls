@@ -2,7 +2,7 @@
 ![GitHub](https://img.shields.io/github/license/marirs/autoinstalls?label=Apache-2.0)
 ![https://img.shields.io/badge/shell-bash-blue](https://img.shields.io/badge/shell-bash-blue)
 ![https://img.shields.io/badge/platform-ubuntu%2018.04%2C%2020.04%2C%2022.04%2C%2024.04%20%7C%20Debian%209.x%2C%2010.x%2C%2011.x%2C%2012.x%2C%2013.x%20%7C%20macOS%20%7C%20Windows-orange](https://img.shields.io/badge/platform-ubuntu%2018.04%2C%2020.04%2C%2022.04%2C%2024.04%20%7C%20Debian%209.x%2C%2010.x%2C%2011.x%2C%2012.x%2C%2013.x%20%7C%20macOS%20%7C%20Windows-orange)
-![https://img.shields.io/badge/components-16-green](https://img.shields.io/badge/components-16-green)
+![https://img.shields.io/badge/components-17-green](https://img.shields.io/badge/components-17-green)
 ![https://img.shields.io/badge/cross%20compilation-enabled-purple](https://img.shields.io/badge/cross%20compilation-enabled-purple)
 ![https://img.shields.io/badge/ai%20ml-ready-blue](https://img.shields.io/badge/ai%20ml-ready-blue)
 ![https://img.shields.io/badge/security-hardened-red](https://img.shields.io/badge/security-hardened-red)
@@ -206,6 +206,71 @@ systemctl status lighttpd
 - Lighttpd with performance optimizations
 - Comprehensive module ecosystem
 - Security hardening and headers
+- SSL/TLS configuration support
+- Virtual host management
+- Monitoring and management tools
+- Log rotation and backup scripts
+- Production-ready configuration
+
+---
+
+### 🌐 Apache HTTP Server
+**Powerful, flexible, and widely-used web server with comprehensive module ecosystem**
+![https://img.shields.io/badge/apache-latest%20stable-blue](https://img.shields.io/badge/apache-latest%20stable-blue)
+![https://img.shields.io/badge/security-hardened-brightgreen](https://img.shields.io/badge/security-hardened-brightgreen)
+![https://img.shields.io/badge/status-production%20ready-green](https://img.shields.io/badge/status-production%20ready-green)
+
+**Features:**
+- ✅ Latest stable Apache with optimized configuration
+- ✅ Advanced modules (SSL/TLS, Rewrite, Cache, Proxy, Security, PHP)
+- ✅ Multiple MPMs (Event, Worker, Prefork) for different workloads
+- ✅ Security hardening with ModSecurity and headers
+- ✅ Performance optimization with caching and compression
+- ✅ Virtual host management with flexible configuration
+- ✅ Management tools for monitoring and maintenance
+- ✅ Production-ready security configurations
+
+**Module Categories:**
+- 🔄 **Core Modules** - Basic web serving, logging, MIME types
+- 🔄 **Performance Modules** - Cache, compression, rewrite, headers
+- 🔄 **Security Modules** - SSL/TLS, ModSecurity, authentication
+- 🔄 **Advanced Modules** - Status, info, proxy, load balancing
+
+**Installation:**
+```bash
+cd apache/
+sudo ./apache-install.sh
+
+# Interactive module selection:
+# - PHP (mod_php)
+# - SSL/TLS (mod_ssl)
+# - Rewrite (mod_rewrite)
+# - Cache (mod_cache)
+# - Proxy (mod_proxy)
+# - Security (mod_security)
+# - Gzip (mod_deflate)
+# - And more...
+```
+
+**Management Tools:**
+```bash
+# Monitor server status
+apache-monitor
+
+# Graceful reload configuration
+apache-reload
+
+# Backup configurations
+apache-backup
+
+# Service management
+systemctl status apache2
+```
+
+**What's Included:**
+- Apache with performance optimizations
+- Comprehensive module ecosystem
+- Security hardening and ModSecurity
 - SSL/TLS configuration support
 - Virtual host management
 - Monitoring and management tools
