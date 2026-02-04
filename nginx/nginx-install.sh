@@ -20,12 +20,10 @@ NGINX_STABLE_VER=$(echo $NGINX_VERSIONS | cut -d' ' -f1 | cut -d'-' -f2)
 # SSL
 LIBRESSL_VER=$(curl -s https://www.libressl.org/releases.html | grep -oP 'LibreSSL \d+\.\d+\.\d+' | sort -V | uniq | tail -n1 | cut -d' ' -f2)
 OPENSSL_VER=$(curl -s https://openssl-library.org/source/index.html | grep -oP 'openssl-\d+\.\d+\.\d+' | sort -V | uniq | tail -n1 | cut -d'-' -f2)
-# Google Pagespeed
-NPS_VER=1.14.33.1-RC1
 # NGINX MOD's
-HEADERMOD_VER=0.37
-LIBMAXMINDDB_VER=1.10.0
-PCRE_NGINX_VER=10.44
+HEADERMOD_VER=0.39
+LIBMAXMINDDB_VER=1.12.2
+PCRE_NGINX_VER=10.47
 ZLIB_NGINX_VER=1.3.1
 
 cores=$(nproc)
@@ -75,9 +73,6 @@ case $OPTION in
 		echo "If you select none, Nginx will be installed with its default modules."
 		echo ""
 		echo "Modules to install :"
-		while [[ $PAGESPEED != "y" && $PAGESPEED != "n" ]]; do
-			read -p "       PageSpeed $NPS_VER [y/n]: " -e PAGESPEED
-		done
 		while [[ $CACHEPURGE != "y" && $CACHEPURGE != "n" ]]; do
 			read -p "       ngx_cache_purge [y/n]: " -e CACHEPURGE
 		done
@@ -118,7 +113,24 @@ case $OPTION in
             read -p "       ZLIB [y/n]: " -e ZLIB_NGINX
         done
 
-        if [[ "$NGINX_VER" == *"1.25.1" ]] || [[ "$NGINX_VER" == *"1.26"* ]] ||  [[ "$NGINX_VER" == *"1.27"* ]]; then
+        # Additional Modules
+        while [[ $IMAGE_FILTER != "y" && $IMAGE_FILTER != "n" ]]; do
+            read -p "       Image Filter Module (CPU Intensive) [y/n]: " -e IMAGE_FILTER
+        done
+        while [[ $SUBSTITUTIONS != "y" && $SUBSTITUTIONS != "n" ]]; do
+            read -p "       Substitutions Filter Module [y/n]: " -e SUBSTITUTIONS
+        done
+        while [[ $PROMETHEUS != "y" && $PROMETHEUS != "n" ]]; do
+            read -p "       Prometheus Exporter [y/n]: " -e PROMETHEUS
+        done
+        while [[ $PERL_MODULE != "y" && $PERL_MODULE != "n" ]]; do
+            read -p "       Perl Module [y/n]: " -e PERL_MODULE
+        done
+        while [[ $XSLT_MODULE != "y" && $XSLT_MODULE != "n" ]]; do
+            read -p "       XSLT Module [y/n]: " -e XSLT_MODULE
+        done
+
+        if [[ "$NGINX_VER" == *"1.28"* ]] || [[ "$NGINX_VER" == *"1.29"* ]]; then
             while [[ $TLSPATCH != "y" && $TLSPATCH != "n" ]]; do
                 read -p "       Cloudflare's TLS Dynamic Record Resizing patch [y/n]: " -e TLSPATCH
             done
@@ -181,7 +193,7 @@ case $OPTION in
         # Dependencies
         echo -ne "       Installing dependencies        [..]\r"
         apt-get update >> /tmp/nginx-install.log 2>&1
-        INSTALL_PKGS="build-essential ca-certificates wget curl apt-utils pkgconf libpcre3 libpcre3-dev libldap2-dev autoconf libcurl4-openssl-dev libgeoip-dev libpcre2-dev pcre2-utils pcregrep unzip automake libtool tar git libssl-dev zlib1g-dev uuid-dev"
+        INSTALL_PKGS="build-essential ca-certificates wget curl apt-utils pkgconf libpcre3 libpcre3-dev libldap2-dev autoconf libcurl4-openssl-dev libgeoip-dev libpcre2-dev pcre2-utils pcregrep unzip automake libtool tar git libssl-dev zlib1g-dev uuid-dev libbrotli-dev libperl-dev libxslt1-dev"
         if [[ "$MODSEC" = 'y' ]]; then
             INSTALL_PKGS=$(echo $INSTALL_PKGS; echo liblmdb-dev libyajl-dev libmodsecurity3 libmodsecurity-dev)
         fi
@@ -240,31 +252,6 @@ case $OPTION in
             ldconfig  >> /tmp/nginx-install.log 2>&1
         fi
 
-		# PageSpeed
-		if [[ "$PAGESPEED" = 'y' ]]; then
-			cd /usr/local/src/nginx/modules
-			# Download and extract of PageSpeed module
-			echo -ne "       Downloading ngx_pagespeed      [..]\r"
-			wget https://github.com/apache/incubator-pagespeed-ngx/archive/refs/tags/v${NPS_VER}.zip >> /tmp/nginx-install.log 2>&1
-			#wget https://github.com/pagespeed/ngx_pagespeed/archive/v${NPS_VER}-stable.zip >> /tmp/nginx-install.log 2>&1
-			unzip v${NPS_VER}.zip >> /tmp/nginx-install.log 2>&1
-			cd incubator-pagespeed-ngx-${NPS_VER}
-			psol_url=https://dl.google.com/dl/page-speed/psol/${NPS_VER}.tar.gz
-			[ -e scripts/format_binary_url.sh ] && psol_url=$(scripts/format_binary_url.sh PSOL_BINARY_URL)
-			wget ${psol_url} >> /tmp/nginx-install.log 2>&1
-			tar -xzvf $(basename ${psol_url}) >> /tmp/nginx-install.log 2>&1
-
-			if [ $? -eq 0 ]; then
-			echo -ne "       Downloading ngx_pagespeed      [${CGREEN}OK${CEND}]\r"
-				echo -ne "\n"
-			else
-				echo -e "       Downloading ngx_pagespeed      [${CRED}FAIL${CEND}]"
-				echo ""
-				echo "Please look at /tmp/nginx-install.log"
-				echo ""
-				exit 1
-			fi
-		fi
 
 		#Brotli
 		if [[ "$BROTLI" = 'y' ]]; then
@@ -742,9 +729,32 @@ case $OPTION in
             if [[ "$TLSPATCH" == "y" ]]; then
                 sed -i '/ssl_dyn_rec_enable/s/#//g' nginx.conf
             fi
-            if [[ "$GEOIP" != 'y' ]]; then
+            if [[ "$GEOIP2" != 'y' ]]; then
                 sed -i '/geoip_/d' nginx.conf
             fi
+            
+            # Download additional configuration files
+            echo -ne "       Downloading additional configs   [..]\r"
+            wget -O /etc/nginx/conf.d/status.conf https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/conf/status.conf >> /tmp/nginx-install.log 2>&1
+            wget -O /etc/nginx/conf.d/security-hardening.conf https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/conf/security-hardening.conf >> /tmp/nginx-install.log 2>&1
+            # Download new module configurations
+            if [[ "$IMAGE_FILTER" = 'y' ]]; then
+                wget -O /etc/nginx/conf.d/image-filter.conf https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/conf/image-filter.conf >> /tmp/nginx-install.log 2>&1
+            fi
+            if [[ "$SUBSTITUTIONS" = 'y' ]]; then
+                wget -O /etc/nginx/conf.d/substitutions.conf https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/conf/substitutions.conf >> /tmp/nginx-install.log 2>&1
+            fi
+            if [[ "$PROMETHEUS" = 'y' ]]; then
+                wget -O /etc/nginx/conf.d/prometheus.conf https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/conf/prometheus.conf >> /tmp/nginx-install.log 2>&1
+            fi
+            if [[ "$PERL_MODULE" = 'y' ]]; then
+                wget -O /etc/nginx/conf.d/perl.conf https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/conf/perl.conf >> /tmp/nginx-install.log 2>&1
+            fi
+            if [[ "$XSLT_MODULE" = 'y' ]]; then
+                wget -O /etc/nginx/conf.d/xslt.conf https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/conf/xslt.conf >> /tmp/nginx-install.log 2>&1
+            fi
+            echo -ne "       Downloading additional configs   [${CGREEN}OK${CEND}]\r"
+            echo -ne "\n"
 		fi
 		cd /usr/local/src/nginx/nginx-${NGINX_VER}
 
@@ -813,10 +823,6 @@ case $OPTION in
 
 		fi
 
-		# PageSpeed
-		if [[ "$PAGESPEED" = 'y' ]]; then
-			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--add-module=/usr/local/src/nginx/modules/incubator-pagespeed-ngx-${NPS_VER}")
-		fi
 
 		# Brotli
 		if [[ "$BROTLI" = 'y' ]]; then
@@ -899,11 +905,63 @@ case $OPTION in
 			NGINX_MODULES=$(echo "$NGINX_MODULES"; echo "--with-zlib=/usr/local/src/nginx/modules/zlib-${ZLIB_NGINX_VER}")
 		fi
 
+		# Additional Modules
+		# Image Filter Module (Built-in)
+		if [[ "$IMAGE_FILTER" = 'y' ]]; then
+			NGINX_MODULES=$(echo "$NGINX_MODULES"; echo "--with-http_image_filter_module")
+		fi
+
+		# Substitutions Filter Module
+		if [[ "$SUBSTITUTIONS" = 'y' ]]; then
+			cd /usr/local/src/nginx/modules
+			echo -ne "       Downloading Substitutions Filter [..]\r"
+			git clone https://github.com/yaoweibin/nginx_http_substitutions_filter_module >> /tmp/nginx-install.log 2>&1
+			if [ $? -eq 0 ]; then
+				echo -ne "       Downloading Substitutions Filter [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Downloading Substitutions Filter [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/nginx-install.log"
+				echo ""
+				exit 1
+			fi
+			NGINX_MODULES=$(echo "$NGINX_MODULES"; echo "--add-module=/usr/local/src/nginx/modules/nginx_http_substitutions_filter_module")
+		fi
+
+		# Prometheus Exporter
+		if [[ "$PROMETHEUS" = 'y' ]]; then
+			cd /usr/local/src/nginx/modules
+			echo -ne "       Downloading Prometheus Exporter   [..]\r"
+			git clone https://github.com/nginxinc/nginx-prometheus-exporter >> /tmp/nginx-install.log 2>&1
+			if [ $? -eq 0 ]; then
+				echo -ne "       Downloading Prometheus Exporter   [${CGREEN}OK${CEND}]\r"
+				echo -ne "\n"
+			else
+				echo -e "       Downloading Prometheus Exporter   [${CRED}FAIL${CEND}]"
+				echo ""
+				echo "Please look at /tmp/nginx-install.log"
+				echo ""
+				exit 1
+			fi
+			NGINX_MODULES=$(echo "$NGINX_MODULES"; echo "--add-module=/usr/local/src/nginx/modules/nginx-prometheus-exporter")
+		fi
+
+		# Perl Module (Built-in)
+		if [[ "$PERL_MODULE" = 'y' ]]; then
+			NGINX_MODULES=$(echo "$NGINX_MODULES"; echo "--with-http_perl_module")
+		fi
+
+		# XSLT Module (Built-in)
+		if [[ "$XSLT_MODULE" = 'y' ]]; then
+			NGINX_MODULES=$(echo "$NGINX_MODULES"; echo "--with-http_xslt_module")
+		fi
+
 		# Cloudflare's TLS Dynamic Record Resizing patch
 		if [[ "$TLSPATCH" = 'y' ]]; then
 			echo -ne "       TLS Dynamic Records support    [..]\r"
 
-	    wget -O nginx.patch https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/nginx-dynamic-tls-1.27.patch >> /tmp/nginx-install.log 2>&1
+	    wget -O nginx.patch https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/nginx_dynamic_tls_records.patch >> /tmp/nginx-install.log 2>&1
             patch -p1 < nginx.patch >> /tmp/nginx-install.log 2>&1
 		        
 			if [ $? -eq 0 ]; then
