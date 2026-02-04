@@ -1,0 +1,525 @@
+# MySQL/MariaDB Monitoring and Management Scripts
+# Localhost MySQL/MariaDB deployment monitoring tools
+
+#!/bin/bash
+
+# MySQL Monitoring Script
+# File: /usr/local/bin/mysql-monitor
+
+# Colors
+CSI="\033["
+CEND="${CSI}0m"
+CRED="${CSI}1;31m"
+CGREEN="${CSI}1;32m"
+CBLUE="${CSI}1;34m"
+CMAGENTA="${CSI}1;35m"
+CCYAN="${CSI}1;36m"
+
+function show_header() {
+    echo -e "${CBLUE}========================================${CEND}"
+    echo -e "${CBLUE}    MySQL/MariaDB Monitoring${CEND}"
+    echo -e "${CBLUE}========================================${CEND}"
+    echo ""
+}
+
+function get_mysql_password() {
+    if [ -f "/etc/mysql/mysql.root.passwd" ]; then
+        cat "/etc/mysql/mysql.root.passwd"
+    else
+        echo ""
+    fi
+}
+
+function check_mysql_status() {
+    echo -e "${CGREEN}MySQL Service Status:${CEND}"
+    
+    if systemctl is-active --quiet mysql; then
+        echo -e "  MySQL Service: ${CGREEN}Running${CEND}"
+    else
+        echo -e "  MySQL Service: ${CRED}Stopped${CEND}"
+    fi
+    
+    if systemctl is-enabled --quiet mysql; then
+        echo -e "  MySQL Service: ${CGREEN}Enabled${CEND}"
+    else
+        echo -e "  MySQL Service: ${CRED}Disabled${CEND}"
+    fi
+    
+    echo ""
+}
+
+function show_mysql_info() {
+    echo -e "${CGREEN}MySQL Information:${CEND}"
+    
+    local password=$(get_mysql_password)
+    local auth_cmd=""
+    if [ -n "$password" ]; then
+        auth_cmd="-p$password"
+    fi
+    
+    # Get MySQL version
+    local mysql_version=$(mysql $auth_cmd -e "SELECT VERSION();" -s -N 2>/dev/null)
+    if [ $? -eq 0 ]; then
+        echo -e "  MySQL Version: $mysql_version"
+    else
+        echo -e "  ${CRED}Cannot connect to MySQL${CEND}"
+        return
+    fi
+    
+    # Get uptime
+    local uptime=$(mysql $auth_cmd -e "SHOW STATUS LIKE 'Uptime';" -s -N 2>/dev/null | awk '{print $2}')
+    echo -e "  Uptime: $uptime seconds"
+    
+    # Get connections
+    local connections=$(mysql $auth_cmd -e "SHOW STATUS LIKE 'Connections';" -s -N 2>/dev/null | awk '{print $2}')
+    echo -e "  Total Connections: $connections"
+    
+    # Get current connections
+    local threads_connected=$(mysql $auth_cmd -e "SHOW STATUS LIKE 'Threads_connected';" -s -N 2>/dev/null | awk '{print $2}')
+    echo -e "  Current Connections: $threads_connected"
+    
+    # Get max connections
+    local max_connections=$(mysql $auth_cmd -e "SHOW VARIABLES LIKE 'max_connections';" -s -N 2>/dev/null | awk '{print $2}')
+    echo -e "  Max Connections: $max_connections"
+    
+    # Get connection usage percentage
+    local connection_usage=$((threads_connected * 100 / max_connections))
+    echo -e "  Connection Usage: $connection_usage%"
+    
+    echo ""
+}
+
+function show_mysql_memory() {
+    echo -e "${CGREEN}Memory Usage:${CEND}"
+    
+    local password=$(get_mysql_password)
+    local auth_cmd=""
+    if [ -n "$password" ]; then
+        auth_cmd="-p$password"
+    fi
+    
+    # Get buffer pool size
+    local innodb_buffer_pool=$(mysql $auth_cmd -e "SHOW VARIABLES LIKE 'innodb_buffer_pool_size';" -s -N 2>/dev/null | awk '{print $2}')
+    if [ -n "$innodb_buffer_pool" ]; then
+        local buffer_pool_mb=$((innodb_buffer_pool / 1024 / 1024))
+        echo -e "  InnoDB Buffer Pool: ${buffer_pool_mb}MB"
+    fi
+    
+    # Get key buffer size
+    local key_buffer_size=$(mysql $auth_cmd -e "SHOW VARIABLES LIKE 'key_buffer_size';" -s -N 2>/dev/null | awk '{print $2}')
+    if [ -n "$key_buffer_size" ]; then
+        local key_buffer_mb=$((key_buffer_size / 1024 / 1024))
+        echo -e "  Key Buffer Size: ${key_buffer_mb}MB"
+    fi
+    
+    # Get query cache size
+    local query_cache_size=$(mysql $auth_cmd -e "SHOW VARIABLES LIKE 'query_cache_size';" -s -N 2>/dev/null | awk '{print $2}')
+    if [ -n "$query_cache_size" ] && [ "$query_cache_size" != "0" ]; then
+        local query_cache_mb=$((query_cache_size / 1024 / 1024))
+        echo -e "  Query Cache Size: ${query_cache_mb}MB"
+    fi
+    
+    # Get memory usage from status
+    local memory_usage=$(mysql $auth_cmd -e "SHOW STATUS LIKE 'Memory_used';" -s -N 2>/dev/null | awk '{print $2}')
+    if [ -n "$memory_usage" ]; then
+        local memory_mb=$((memory_usage / 1024 / 1024))
+        echo -e "  Current Memory Usage: ${memory_mb}MB"
+    fi
+    
+    echo ""
+}
+
+function show_mysql_performance() {
+    echo -e "${CGREEN}Performance Statistics:${CEND}"
+    
+    local password=$(get_mysql_password)
+    local auth_cmd=""
+    if [ -n "$password" ]; then
+        auth_cmd="-p$password"
+    fi
+    
+    # Get queries per second
+    local queries=$(mysql $auth_cmd -e "SHOW STATUS LIKE 'Queries';" -s -N 2>/dev/null | awk '{print $2}')
+    local uptime=$(mysql $auth_cmd -e "SHOW STATUS LIKE 'Uptime';" -s -N 2>/dev/null | awk '{print $2}')
+    if [ -n "$queries" ] && [ -n "$uptime" ] && [ "$uptime" != "0" ]; then
+        local qps=$((queries / uptime))
+        echo -e "  Queries per Second: $qps"
+    fi
+    
+    # Get slow queries
+    local slow_queries=$(mysql $auth_cmd -e "SHOW STATUS LIKE 'Slow_queries';" -s -N 2>/dev/null | awk '{print $2}')
+    echo -e "  Slow Queries: $slow_queries"
+    
+    # Get table locks
+    local table_locks_waited=$(mysql $auth_cmd -e "SHOW STATUS LIKE 'Table_locks_waited';" -s -N 2>/dev/null | awk '{print $2}')
+    echo -e "  Table Locks Waited: $table_locks_waited"
+    
+    # Get select operations
+    local com_select=$(mysql $auth_cmd -e "SHOW STATUS LIKE 'Com_select';" -s -N 2>/dev/null | awk '{print $2}')
+    echo -e "  SELECT Operations: $com_select"
+    
+    # Get insert operations
+    local com_insert=$(mysql $auth_cmd -e "SHOW STATUS LIKE 'Com_insert';" -s -N 2>/dev/null | awk '{print $2}')
+    echo -e "  INSERT Operations: $com_insert"
+    
+    # Get update operations
+    local com_update=$(mysql $auth_cmd -e "SHOW STATUS LIKE 'Com_update';" -s -N 2>/dev/null | awk '{print $2}')
+    echo -e "  UPDATE Operations: $com_update"
+    
+    # Get delete operations
+    local com_delete=$(mysql $auth_cmd -e "SHOW STATUS LIKE 'Com_delete';" -s -N 2>/dev/null | awk '{print $2}')
+    echo -e "  DELETE Operations: $com_delete"
+    
+    echo ""
+}
+
+function show_mysql_databases() {
+    echo -e "${CGREEN}Database Information:${CEND}"
+    
+    local password=$(get_mysql_password)
+    local auth_cmd=""
+    if [ -n "$password" ]; then
+        auth_cmd="-p$password"
+    fi
+    
+    # Get database list
+    local databases=$(mysql $auth_cmd -e "SHOW DATABASES;" -s -N 2>/dev/null | grep -v -E "information_schema|performance_schema|mysql|sys")
+    
+    if [ -n "$databases" ]; then
+        echo -e "  User Databases:"
+        for db in $databases; do
+            # Get database size
+            local size=$(mysql $auth_cmd -e "SELECT ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) FROM information_schema.tables WHERE table_schema='$db';" -s -N 2>/dev/null)
+            # Get table count
+            local tables=$(mysql $auth_cmd -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$db';" -s -N 2>/dev/null)
+            echo -e "    $db: ${size}MB, $tables tables"
+        done
+    else
+        echo -e "  No user databases found"
+    fi
+    
+    echo ""
+}
+
+function show_mysql_processes() {
+    echo -e "${CGREEN}Active Processes:${CEND}"
+    
+    local password=$(get_mysql_password)
+    local auth_cmd=""
+    if [ -n "$password" ]; then
+        auth_cmd="-p$password"
+    fi
+    
+    # Get process list
+    mysql $auth_cmd -e "SHOW PROCESSLIST;" 2>/dev/null | while IFS=$'\t' read -r id user host db command time state info; do
+        if [ "$id" != "Id" ]; then
+            echo -e "  ID: $id, User: $user, Host: $host, DB: $db, Command: $command, Time: ${time}s, State: $state"
+            if [ -n "$info" ] && [ "$info" != "NULL" ]; then
+                echo -e "    Query: $info"
+            fi
+            echo ""
+        fi
+    done
+}
+
+function show_mysql_replication() {
+    echo -e "${CGREEN}Replication Status:${CEND}"
+    
+    local password=$(get_mysql_password)
+    local auth_cmd=""
+    if [ -n "$password" ]; then
+        auth_cmd="-p$password"
+    fi
+    
+    # Check if replication is configured
+    local slave_status=$(mysql $auth_cmd -e "SHOW SLAVE STATUS\G" 2>/dev/null)
+    
+    if [ -n "$slave_status" ]; then
+        echo -e "  Replication is configured"
+        local slave_io_running=$(echo "$slave_status" | grep "Slave_IO_Running:" | awk '{print $2}')
+        local slave_sql_running=$(echo "$slave_status" | grep "Slave_SQL_Running:" | awk '{print $2}')
+        local seconds_behind_master=$(echo "$slave_status" | grep "Seconds_Behind_Master:" | awk '{print $2}')
+        
+        echo -e "    Slave IO Running: $slave_io_running"
+        echo -e "    Slave SQL Running: $slave_sql_running"
+        echo -e "    Seconds Behind Master: $seconds_behind_master"
+    else
+        echo -e "  Replication not configured"
+    fi
+    
+    echo ""
+}
+
+function test_mysql_connection() {
+    echo -e "${CGREEN}Testing MySQL Connection...${CEND}"
+    
+    local password=$(get_mysql_password)
+    local auth_cmd=""
+    if [ -n "$password" ]; then
+        auth_cmd="-p$password"
+    fi
+    
+    # Test basic connection
+    if mysql $auth_cmd -e "SELECT 1;" >/dev/null 2>&1; then
+        echo -e "  ${CGREEN}MySQL connection: OK${CEND}"
+        
+        # Test database operations
+        if mysql $auth_cmd -e "CREATE DATABASE IF NOT EXISTS test_db; USE test_db; CREATE TABLE IF NOT EXISTS test_table (id INT); INSERT INTO test_table VALUES (1); SELECT COUNT(*) FROM test_table; DROP TABLE test_table; DROP DATABASE test_db;" >/dev/null 2>&1; then
+            echo -e "  ${CGREEN}MySQL operations: OK${CEND}"
+        else
+            echo -e "  ${CRED}MySQL operations: FAILED${CEND}"
+        fi
+        
+        # Test authentication
+        local version=$(mysql $auth_cmd -e "SELECT VERSION();" -s -N 2>/dev/null)
+        if [ -n "$version" ]; then
+            echo -e "  ${CGREEN}Authentication: OK (Version: $version)${CEND}"
+        else
+            echo -e "  ${CRED}Authentication: FAILED${CEND}"
+        fi
+    else
+        echo -e "  ${CRED}MySQL connection: FAILED${CEND}"
+    fi
+    
+    echo ""
+}
+
+function show_mysql_security() {
+    echo -e "${CGREEN}Security Status:${CEND}"
+    
+    # Check MySQL configuration
+    if [ -f "/etc/mysql/my.cnf" ]; then
+        echo -e "  Configuration file: ${CGREEN}Found${CEND}"
+        
+        # Check bind configuration
+        if grep -q "bind-address = 127.0.0.1" /etc/mysql/my.cnf; then
+            echo -e "  Localhost binding: ${CGREEN}Enabled${CEND}"
+        else
+            echo -e "  Localhost binding: ${CRED}Disabled${CEND}"
+        fi
+        
+        # Check security settings
+        if grep -q "skip-show-database = 1" /etc/mysql/my.cnf; then
+            echo -e "  Skip show database: ${CGREEN}Enabled${CEND}"
+        else
+            echo -e "  Skip show database: ${CRED}Disabled${CEND}"
+        fi
+        
+        if grep -q "local-infile = 0" /etc/mysql/my.cnf; then
+            echo -e "  Local infile disabled: ${CGREEN}Enabled${CEND}"
+        else
+            echo -e "  Local infile disabled: ${CRED}Disabled${CEND}"
+        fi
+    else
+        echo -e "  Configuration file: ${CRED}Not found${CEND}"
+    fi
+    
+    # Check firewall status
+    if command -v ufw >/dev/null 2>&1; then
+        echo -e "  Firewall status: $(ufw status | head -1)"
+        if ufw status | grep -q "3306"; then
+            echo -e "  MySQL port 3306: ${CGREEN}Configured${CEND}"
+        else
+            echo -e "  MySQL port 3306: ${CRED}Not configured${CEND}"
+        fi
+    else
+        echo -e "  Firewall: ${CYAN}UFW not installed${CEND}"
+    fi
+    
+    # Check password file
+    if [ -f "/etc/mysql/mysql.root.passwd" ]; then
+        local perms=$(stat -c "%a" /etc/mysql/mysql.root.passwd)
+        if [ "$perms" = "600" ]; then
+            echo -e "  Password file permissions: ${CGREEN}Secure (600)${CEND}"
+        else
+            echo -e "  Password file permissions: ${CRED}Insecure ($perms)${CEND}"
+        fi
+    else
+        echo -e "  Password file: ${CRED}Not found${CEND}"
+    fi
+    
+    # Check for anonymous users
+    local password=$(get_mysql_password)
+    local auth_cmd=""
+    if [ -n "$password" ]; then
+        auth_cmd="-p$password"
+    fi
+    
+    local anonymous_users=$(mysql $auth_cmd -e "SELECT User, Host FROM mysql.user WHERE User='';" -s -N 2>/dev/null)
+    if [ -n "$anonymous_users" ]; then
+        echo -e "  Anonymous users: ${CRED}Found${CEND}"
+    else
+        echo -e "  Anonymous users: ${CGREEN}None found${CEND}"
+    fi
+    
+    echo ""
+}
+
+function show_mysql_logs() {
+    echo -e "${CGREEN}Recent MySQL Logs:${CEND}"
+    
+    if [ -f "/var/log/mysql/error.log" ]; then
+        echo -e "${CBLUE}Last 20 lines of MySQL error log:${CEND}"
+        tail -20 /var/log/mysql/error.log | sed 's/^/  /'
+    else
+        echo -e "  ${CYAN}MySQL error log file not found${CEND}"
+    fi
+    
+    echo ""
+    
+    if [ -f "/var/log/mysql/slow.log" ]; then
+        echo -e "${CBLUE}Last 10 slow queries:${CEND}"
+        tail -10 /var/log/mysql/slow.log | sed 's/^/  /'
+    else
+        echo -e "  ${CYAN}MySQL slow query log not found${CEND}"
+    fi
+    
+    echo ""
+    
+    echo -e "${CBLUE}MySQL systemd journal (last 10 lines):${CEND}"
+    journalctl -u mysql -n 10 --no-pager | sed 's/^/  /'
+    
+    echo ""
+}
+
+function generate_report() {
+    local report_file="/tmp/mysql-monitor-report-$(date +%Y%m%d_%H%M%S).txt"
+    
+    echo "MySQL Monitoring Report" > "$report_file"
+    echo "Generated: $(date)" >> "$report_file"
+    echo "Hostname: $(hostname)" >> "$report_file"
+    echo "================================" >> "$report_file"
+    echo "" >> "$report_file"
+    
+    echo "=== MySQL Service Status ===" >> "$report_file"
+    systemctl status mysql --no-pager >> "$report_file" 2>&1
+    echo "" >> "$report_file"
+    
+    echo "=== MySQL Variables ===" >> "$report_file"
+    local password=$(get_mysql_password)
+    local auth_cmd=""
+    if [ -n "$password" ]; then
+        auth_cmd="-p$password"
+    fi
+    mysql $auth_cmd -e "SHOW VARIABLES;" >> "$report_file" 2>&1
+    echo "" >> "$report_file"
+    
+    echo "=== MySQL Status ===" >> "$report_file"
+    mysql $auth_cmd -e "SHOW STATUS;" >> "$report_file" 2>&1
+    echo "" >> "$report_file"
+    
+    echo "=== Security Configuration ===" >> "$report_file"
+    if [ -f "/etc/mysql/my.cnf" ]; then
+        grep -E "(bind-address|skip-show-database|local-infile)" /etc/mysql/my.cnf >> "$report_file" 2>&1
+    fi
+    echo "" >> "$report_file"
+    
+    echo "=== Recent Logs ===" >> "$report_file"
+    if [ -f "/var/log/mysql/error.log" ]; then
+        tail -50 /var/log/mysql/error.log >> "$report_file" 2>&1
+    fi
+    echo "" >> "$report_file"
+    
+    echo -e "${CGREEN}Report saved to: $report_file${CEND}"
+}
+
+function show_help() {
+    echo -e "${CGREEN}MySQL Monitoring Tool${CEND}"
+    echo ""
+    echo "Usage: $0 [option]"
+    echo ""
+    echo "Options:"
+    echo "  status      Show MySQL service status"
+    echo "  info        Show MySQL information"
+    echo "  memory      Show memory usage"
+    echo "  performance Show performance statistics"
+    echo "  databases   Show database information"
+    echo "  processes   Show active processes"
+    echo "  replication Show replication status"
+    echo "  security    Show security status"
+    echo "  logs        Show recent logs"
+    echo "  test        Test MySQL connection"
+    echo "  report      Generate detailed report"
+    echo "  all         Show all information"
+    echo "  help        Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0 status    # Show MySQL status"
+    echo "  $0 all       # Show complete overview"
+    echo "  $0 report    # Generate detailed report"
+}
+
+function main() {
+    case "${1:-all}" in
+        "status")
+            show_header
+            check_mysql_status
+            ;;
+        "info")
+            show_header
+            show_mysql_info
+            ;;
+        "memory")
+            show_header
+            show_mysql_memory
+            ;;
+        "performance")
+            show_header
+            show_mysql_performance
+            ;;
+        "databases")
+            show_header
+            show_mysql_databases
+            ;;
+        "processes")
+            show_header
+            show_mysql_processes
+            ;;
+        "replication")
+            show_header
+            show_mysql_replication
+            ;;
+        "security")
+            show_header
+            show_mysql_security
+            ;;
+        "logs")
+            show_header
+            show_mysql_logs
+            ;;
+        "test")
+            show_header
+            test_mysql_connection
+            ;;
+        "report")
+            generate_report
+            ;;
+        "all")
+            show_header
+            check_mysql_status
+            show_mysql_info
+            show_mysql_memory
+            show_mysql_performance
+            show_mysql_databases
+            show_mysql_security
+            test_mysql_connection
+            ;;
+        "help"|"-h"|"--help")
+            show_help
+            ;;
+        *)
+            echo -e "${CRED}Unknown option: $1${CEND}"
+            show_help
+            exit 1
+            ;;
+    esac
+}
+
+# Check if MySQL CLI is available
+if ! command -v mysql >/dev/null 2>&1; then
+    echo -e "${CRED}MySQL CLI is not installed or not in PATH${CEND}"
+    exit 1
+fi
+
+# Run main function with all arguments
+main "$@"

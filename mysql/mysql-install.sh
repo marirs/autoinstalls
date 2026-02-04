@@ -1,0 +1,990 @@
+# MySQL/MariaDB Auto-Installation Script
+# Localhost-only MySQL/MariaDB deployment with comprehensive security hardening
+
+#!/bin/bash
+
+# MySQL/MariaDB Installation Script
+# Secure MySQL/MariaDB installation with security hardening and localhost-only configuration
+
+set -e
+
+# Colors
+CSI="\033["
+CEND="${CSI}0m"
+CRED="${CSI}1;31m"
+CGREEN="${CSI}1;32m"
+CBLUE="${CSI}1;34b"
+CMAGENTA="${CSI}1;35m"
+CCYAN="${CSI}1;36m"
+
+# MySQL/MariaDB Configuration
+MYSQL_VERSION="8.0"
+MARIADB_VERSION="10.11"
+DB_TYPE="mysql"  # Default to MySQL, can be changed to mariadb
+DB_USER="mysql"
+DB_GROUP="mysql"
+DB_DATA_DIR="/var/lib/mysql"
+DB_LOG_DIR="/var/log/mysql"
+DB_CONF_DIR="/etc/mysql"
+DB_PORT="3306"
+DB_ROOT_PASSWORD_FILE="/etc/mysql/mysql.root.passwd"
+DB_SOCKET="/var/run/mysqld/mysqld.sock"
+
+# System Information
+ARCH=$(uname -m)
+OS=$(lsb_release -si 2>/dev/null || echo "Unknown")
+OS_VERSION=$(lsb_release -sr 2>/dev/null || echo "Unknown")
+
+# Logging
+LOG_FILE="/tmp/mysql-install.log"
+APT_LOG="/tmp/apt-packages.log"
+
+function show_header() {
+    echo -e "${CBLUE}========================================${CEND}"
+    echo -e "${CBLUE}    MySQL/MariaDB Auto-Installation${CEND}"
+    echo -e "${CBLUE}========================================${CEND}"
+    echo -e "${CCYAN}DB Type: ${DB_TYPE}${CEND}"
+    echo -e "${CCYAN}Version: ${MYSQL_VERSION}${CEND}"
+    echo -e "${CCYAN}Architecture: ${ARCH}${CEND}"
+    echo -e "${CCYAN}OS: ${OS} ${OS_VERSION}${CEND}"
+    echo ""
+}
+
+function check_root() {
+    if [ "$EUID" -ne 0 ]; then
+        echo -e "${CRED}Please run as root or with sudo${CEND}"
+        exit 1
+    fi
+}
+
+function choose_database() {
+    echo -e "${CGREEN}Choose database type:${CEND}"
+    echo "1) MySQL 8.0 (Oracle)"
+    echo "2) MariaDB 10.11 (Community)"
+    echo "3) MariaDB Latest"
+    read -p "Enter choice [1-3]: " -n 1 -r
+    echo
+    
+    case $REPLY in
+        1)
+            DB_TYPE="mysql"
+            echo -e "${CCYAN}Selected: MySQL 8.0${CEND}"
+            ;;
+        2)
+            DB_TYPE="mariadb"
+            MARIADB_VERSION="10.11"
+            echo -e "${CCYAN}Selected: MariaDB 10.11${CEND}"
+            ;;
+        3)
+            DB_TYPE="mariadb"
+            MARIADB_VERSION="latest"
+            echo -e "${CCYAN}Selected: MariaDB Latest${CEND}"
+            ;;
+        *)
+            echo -e "${CRED}Invalid choice. Using default: MySQL 8.0${CEND}"
+            DB_TYPE="mysql"
+            ;;
+    esac
+}
+
+function check_system() {
+    echo -e "${CGREEN}Checking system compatibility...${CEND}"
+    
+    # Check OS
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        echo -e "${CCYAN}Operating System: $NAME $VERSION${CEND}"
+    else
+        echo -e "${CRED}Cannot determine OS version${CEND}"
+        exit 1
+    fi
+    
+    # Check architecture
+    echo -e "${CCYAN}Architecture: $ARCH${CEND}"
+    
+    # Check if MySQL/MariaDB is already installed
+    if command -v mysql >/dev/null 2>&1 || command -v mysqld >/dev/null 2>&1; then
+        echo -e "${CYAN}MySQL/MariaDB is already installed${CEND}"
+        read -p "Do you want to reinstall? (y/N): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            echo -e "${CYAN}Installation cancelled${CEND}"
+            exit 0
+        fi
+        
+        # Stop existing service
+        systemctl stop mysql 2>/dev/null || systemctl stop mariadb 2>/dev/null || true
+    fi
+    
+    echo -e "${CGREEN}System compatibility check completed${CEND}"
+}
+
+function install_dependencies() {
+    echo -e "${CGREEN}Installing dependencies...${CEND}"
+    
+    # Update package lists
+    apt update >> "$LOG_FILE" 2>&1
+    
+    # Install dependencies
+    apt install -y \
+        software-properties-common \
+        apt-transport-https \
+        ca-certificates \
+        gnupg \
+        wget \
+        curl \
+        lsb-release \
+        ufw \
+        systemd \
+        logrotate \
+        bc \
+        >> "$LOG_FILE" 2>&1
+    
+    if [ $? -ne 0 ]; then
+        echo -e "${CRED}Failed to install dependencies${CEND}"
+        exit 1
+    fi
+    
+    echo -e "${CGREEN}Dependencies installed successfully${CEND}"
+}
+
+function add_repository() {
+    echo -e "${CGREEN}Adding ${DB_TYPE} repository...${CEND}"
+    
+    if [ "$DB_TYPE" = "mysql" ]; then
+        # Add MySQL APT repository
+        wget https://dev.mysql.com/get/mysql-apt-config_0.8.24-1_all.deb >> "$LOG_FILE" 2>&1
+        echo "mysql-apt-config mysql-apt-config/select-server select mysql-8.0" | debconf-set-selections
+        DEBIAN_FRONTEND=noninteractive dpkg -i mysql-apt-config_0.8.24-1_all.deb >> "$LOG_FILE" 2>&1
+        apt update >> "$LOG_FILE" 2>&1
+        
+    elif [ "$DB_TYPE" = "mariadb" ]; then
+        # Add MariaDB repository
+        curl -LsS https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | bash -s -- --mariadb-server-version="$MARIADB_VERSION" >> "$LOG_FILE" 2>&1
+        apt update >> "$LOG_FILE" 2>&1
+    fi
+    
+    if [ $? -ne 0 ]; then
+        echo -e "${CRED}Failed to add repository${CEND}"
+        exit 1
+    fi
+    
+    echo -e "${CGREEN}Repository added successfully${CEND}"
+}
+
+function install_database() {
+    echo -e "${CGREEN}Installing ${DB_TYPE}...${CEND}"
+    
+    if [ "$DB_TYPE" = "mysql" ]; then
+        # Install MySQL
+        DEBIAN_FRONTEND=noninteractive apt install -y \
+            mysql-server \
+            mysql-client \
+            libmysqlclient-dev \
+            >> "$LOG_FILE" 2>&1
+            
+    elif [ "$DB_TYPE" = "mariadb" ]; then
+        # Install MariaDB
+        DEBIAN_FRONTEND=noninteractive apt install -y \
+            mariadb-server \
+            mariadb-client \
+            libmariadb-dev \
+            >> "$LOG_FILE" 2>&1
+    fi
+    
+    if [ $? -ne 0 ]; then
+        echo -e "${CRED}Failed to install ${DB_TYPE}${CEND}"
+        exit 1
+    fi
+    
+    echo -e "${CGREEN}${DB_TYPE} installed successfully${CEND}"
+}
+
+function create_mysql_user() {
+    echo -e "${CGREEN}Creating MySQL user and directories...${CEND}"
+    
+    # Create group if it doesn't exist
+    if ! getent group "$DB_GROUP" >/dev/null 2>&1; then
+        groupadd "$DB_GROUP"
+        echo -e "${CCYAN}Created MySQL group: $DB_GROUP${CEND}"
+    fi
+    
+    # Create user if it doesn't exist
+    if ! getent passwd "$DB_USER" >/dev/null 2>&1; then
+        useradd -r -g "$DB_GROUP" -s /bin/false -d "$DB_DATA_DIR" "$DB_USER"
+        echo -e "${CCYAN}Created MySQL user: $DB_USER${CEND}"
+    fi
+    
+    # Create directories
+    mkdir -p "$DB_DATA_DIR"
+    mkdir -p "$DB_LOG_DIR"
+    mkdir -p "$DB_CONF_DIR"
+    mkdir -p "/var/run/mysqld"
+    
+    # Set permissions
+    chown -R "$DB_USER:$DB_GROUP" "$DB_DATA_DIR"
+    chown -R "$DB_USER:$DB_GROUP" "$DB_LOG_DIR"
+    chown -R "$DB_USER:$DB_GROUP" "/var/run/mysqld"
+    chown -R root:root "$DB_CONF_DIR"
+    
+    chmod 750 "$DB_DATA_DIR"
+    chmod 750 "$DB_LOG_DIR"
+    chmod 755 "/var/run/mysqld"
+    
+    echo -e "${CGREEN}MySQL user and directories setup completed${CEND}"
+}
+
+function generate_password() {
+    echo -e "${CGREEN}Generating secure MySQL passwords...${CEND}"
+    
+    # Generate root password
+    DB_ROOT_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
+    echo "$DB_ROOT_PASSWORD" > "$DB_ROOT_PASSWORD_FILE"
+    chmod 600 "$DB_ROOT_PASSWORD_FILE"
+    
+    # Generate debian-sys-maint password
+    DB_DEBIAN_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
+    
+    echo -e "${CGREEN}Passwords generated and saved${CEND}"
+}
+
+function create_mysql_config() {
+    echo -e "${CGREEN}Creating MySQL configuration...${CEND}"
+    
+    cat > "$DB_CONF_DIR/my.cnf" << EOF
+# MySQL/MariaDB Configuration
+# Localhost-only deployment with security hardening
+
+[client]
+port = $DB_PORT
+socket = $DB_SOCKET
+default-character-set = utf8mb4
+
+[mysql]
+default-character-set = utf8mb4
+
+[mysqld]
+# Basic Settings
+user = $DB_USER
+pid-file = /var/run/mysqld/mysqld.pid
+socket = $DB_SOCKET
+port = $DB_PORT
+basedir = /usr
+datadir = $DB_DATA_DIR
+tmpdir = /tmp
+lc-messages-dir = /usr/share/mysql
+skip-external-locking
+
+# Network Security
+bind-address = 127.0.0.1
+skip-networking = false
+skip-name-resolve
+
+# Character Set
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci
+init_connect = 'SET NAMES utf8mb4'
+
+# Security Settings
+skip-show-database = 1
+local-infile = 0
+
+# Logging
+log-error = $DB_LOG_DIR/error.log
+slow-query-log = 1
+slow-query-log-file = $DB_LOG_DIR/slow.log
+long_query_time = 2
+log-queries-not-using-indexes = 1
+
+# Performance Settings
+key_buffer_size = 32M
+max_allowed_packet = 64M
+table_open_cache = 256
+sort_buffer_size = 1M
+read_buffer_size = 1M
+read_rnd_buffer_size = 4M
+myisam_sort_buffer_size = 64M
+thread_cache_size = 8
+query_cache_size = 16M
+query_cache_type = 1
+
+# InnoDB Settings
+innodb_buffer_pool_size = 128M
+innodb_log_file_size = 32M
+innodb_flush_method = O_DIRECT
+innodb_file_per_table = 1
+innodb_flush_log_at_trx_commit = 1
+
+# Connection Settings
+max_connections = 100
+max_connect_errors = 1000
+wait_timeout = 28800
+interactive_timeout = 28800
+
+# Memory Settings
+max_heap_table_size = 16M
+tmp_table_size = 16M
+
+# Binary Logging (for backups/replication)
+log-bin = mysql-bin
+binlog_format = ROW
+expire_logs_days = 7
+max_binlog_size = 100M
+
+[mysqldump]
+quick
+quote-names
+max_allowed_packet = 64M
+
+[mysqlhotcopy]
+interactive-timeout
+
+[isamchk]
+key_buffer_size = 16M
+sort_buffer_size = 20M
+read_buffer = 2M
+write_buffer = 2M
+
+[myisamchk]
+key_buffer_size = 20M
+sort_buffer_size = 20M
+read_buffer = 2M
+write_buffer = 2M
+EOF
+    
+    # Set permissions
+    chmod 640 "$DB_CONF_DIR/my.cnf"
+    chown root:root "$DB_CONF_DIR/my.cnf"
+    
+    echo -e "${CGREEN}MySQL configuration created${CEND}"
+}
+
+function secure_mysql() {
+    echo -e "${CGREEN}Securing MySQL installation...${CEND}"
+    
+    # Start MySQL service
+    systemctl start mysql
+    sleep 5
+    
+    # Check if service is running
+    if ! systemctl is-active --quiet mysql; then
+        echo -e "${CRED}Failed to start MySQL service${CEND}"
+        exit 1
+    fi
+    
+    # Get temporary root password if MySQL 8.0
+    if [ "$DB_TYPE" = "mysql" ]; then
+        TEMP_PASSWORD=$(grep 'temporary password' "$DB_LOG_DIR/error.log" | tail -1 | awk '{print $NF}')
+        if [ -n "$TEMP_PASSWORD" ]; then
+            echo -e "${CCYAN}Using temporary password for initial setup${CEND}"
+        fi
+    fi
+    
+    # Secure MySQL
+    mysql -u root << EOF
+-- Set root password
+ALTER USER 'root'@'localhost' IDENTIFIED BY '$DB_ROOT_PASSWORD';
+
+-- Remove anonymous users
+DELETE FROM mysql.user WHERE User='';
+
+-- Remove remote root access
+DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
+
+-- Remove test database
+DROP DATABASE IF EXISTS test;
+DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';
+
+-- Create debian-sys-maint user if it doesn't exist
+CREATE USER IF NOT EXISTS 'debian-sys-maint'@'localhost' IDENTIFIED BY '$DB_DEBIAN_PASSWORD';
+GRANT ALL PRIVILEGES ON *.* TO 'debian-sys-maint'@'localhost' WITH GRANT OPTION;
+
+-- Reload privileges
+FLUSH PRIVILEGES;
+EOF
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}MySQL secured successfully${CEND}"
+    else
+        echo -e "${CRED}Failed to secure MySQL${CEND}"
+        exit 1
+    fi
+}
+
+function create_systemd_service() {
+    echo -e "${CGREEN}Creating systemd service...${CEND}"
+    
+    # MySQL usually comes with systemd service, but we ensure it's properly configured
+    if [ -f "/lib/systemd/system/mysql.service" ]; then
+        # Create override for additional security
+        mkdir -p /etc/systemd/system/mysql.service.d
+        
+        cat > /etc/systemd/system/mysql.service.d/override.conf << EOF
+[Service]
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=$DB_DATA_DIR $DB_LOG_DIR $DB_CONF_DIR /var/run/mysqld
+ProtectHome=true
+RemoveIPC=true
+
+# Network settings
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+IPAddressDeny=any
+IPAddressAllow=localhost
+IPAddressAllow=127.0.0.1/8
+IPAddressAllow=::1/128
+
+# File system settings
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# Memory settings
+MemoryMax=1G
+
+# User settings
+User=$DB_USER
+Group=$DB_GROUP
+EOF
+        
+        # Reload systemd
+        systemctl daemon-reload
+        
+        # Enable MySQL service
+        systemctl enable mysql
+        
+        echo -e "${CGREEN}Systemd service configured and enabled${CEND}"
+    else
+        echo -e "${CYAN}MySQL systemd service not found, using default configuration${CEND}"
+    fi
+}
+
+function configure_firewall() {
+    echo -e "${CGREEN}Configuring firewall for MySQL...${CEND}"
+    
+    # Check if UFW is available
+    if command -v ufw >/dev/null 2>&1; then
+        echo -e "${CCYAN}Using UFW firewall...${CEND}"
+        
+        # Allow MySQL from localhost only
+        ufw allow from 127.0.0.1 to any port "$DB_PORT" >> "$LOG_FILE" 2>&1
+        ufw allow from ::1 to any port "$DB_PORT" >> "$LOG_FILE" 2>&1
+        
+        # Explicitly deny external MySQL access
+        ufw deny "$DB_PORT"/tcp >> "$LOG_FILE" 2>&1
+        
+        if [ $? -eq 0 ]; then
+            echo -e "${CGREEN}UFW firewall configured successfully${CEND}"
+        else
+            echo -e "${CRED}Failed to configure UFW firewall${CEND}"
+        fi
+        
+    # Check if iptables is available
+    elif command -v iptables >/dev/null 2>&1; then
+        echo -e "${CCYAN}Using iptables firewall...${CEND}"
+        
+        # Allow MySQL from localhost only
+        iptables -A INPUT -p tcp --dport "$DB_PORT" -s 127.0.0.1 -j ACCEPT >> "$LOG_FILE" 2>&1
+        iptables -A INPUT -p tcp --dport "$DB_PORT" -s ::1 -j ACCEPT >> "$LOG_FILE" 2>&1
+        
+        # Deny external MySQL access
+        iptables -A INPUT -p tcp --dport "$DB_PORT" -j DROP >> "$LOG_FILE" 2>&1
+        
+        # Save iptables rules
+        if command -v iptables-save >/dev/null 2>&1; then
+            iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
+        fi
+        
+        if [ $? -eq 0 ]; then
+            echo -e "${CGREEN}iptables firewall configured successfully${CEND}"
+        else
+            echo -e "${CRED}Failed to configure iptables firewall${CEND}"
+        fi
+        
+    else
+        echo -e "${CYAN}No firewall (UFW or iptables) detected${CEND}"
+        echo -e "${CYAN}Skipping firewall configuration${CEND}"
+        echo -e "${CYAN}Note: MySQL is still configured for localhost-only binding${CEND}"
+    fi
+}
+
+function setup_logrotate() {
+    echo -e "${CGREEN}Setting up log rotation...${CEND}"
+    
+    cat > /etc/logrotate.d/mysql-server << EOF
+$DB_LOG_DIR/*.log {
+    daily
+    missingok
+    rotate 30
+    compress
+    delaycompress
+    notifempty
+    create 640 $DB_USER $DB_GROUP
+    sharedscripts
+    postrotate
+        systemctl reload mysql >/dev/null 2>&1 || true
+    endscript
+}
+EOF
+    
+    echo -e "${CGREEN}Log rotation configured${CEND}"
+}
+
+function create_monitoring_scripts() {
+    echo -e "${CGREEN}Creating monitoring scripts...${CEND}"
+    
+    # Create MySQL monitoring script
+    cat > /usr/local/bin/mysql-monitor << 'EOF'
+#!/bin/bash
+
+# MySQL Monitoring Script
+
+MYSQL_CLI="/usr/bin/mysql"
+MYSQL_CONF="/etc/mysql/my.cnf"
+MYSQL_ROOT_PASSWORD_FILE="/etc/mysql/mysql.root.passwd"
+
+# Colors
+CSI="\033["
+CEND="${CSI}0m"
+CRED="${CSI}1;31m"
+CGREEN="${CSI}1;32m"
+CBLUE="${CSI}1;34m"
+CMAGENTA="${CSI}1;35m"
+CCYAN="${CSI}1;36m"
+
+function show_header() {
+    echo -e "${CBLUE}========================================${CEND}"
+    echo -e "${CBLUE}    MySQL Monitoring${CEND}"
+    echo -e "${CBLUE}========================================${CEND}"
+    echo ""
+}
+
+function get_mysql_password() {
+    if [ -f "$MYSQL_ROOT_PASSWORD_FILE" ]; then
+        cat "$MYSQL_ROOT_PASSWORD_FILE"
+    else
+        echo ""
+    fi
+}
+
+function check_mysql_status() {
+    echo -e "${CGREEN}MySQL Service Status:${CEND}"
+    
+    if systemctl is-active --quiet mysql; then
+        echo -e "  MySQL Service: ${CGREEN}Running${CEND}"
+    else
+        echo -e "  MySQL Service: ${CRED}Stopped${CEND}"
+    fi
+    
+    if systemctl is-enabled --quiet mysql; then
+        echo -e "  MySQL Service: ${CGREEN}Enabled${CEND}"
+    else
+        echo -e "  MySQL Service: ${CRED}Disabled${CEND}"
+    fi
+    
+    echo ""
+}
+
+function show_mysql_info() {
+    echo -e "${CGREEN}MySQL Information:${CEND}"
+    
+    local password=$(get_mysql_password)
+    local auth_cmd=""
+    if [ -n "$password" ]; then
+        auth_cmd="-p$password"
+    fi
+    
+    # Get MySQL version
+    local mysql_version=$(mysql $auth_cmd -e "SELECT VERSION();" -s -N 2>/dev/null)
+    if [ $? -eq 0 ]; then
+        echo -e "  MySQL Version: $mysql_version"
+    else
+        echo -e "  ${CRED}Cannot connect to MySQL${CEND}"
+        return
+    fi
+    
+    # Get uptime
+    local uptime=$(mysql $auth_cmd -e "SHOW STATUS LIKE 'Uptime';" -s -N 2>/dev/null | awk '{print $2}')
+    echo -e "  Uptime: $uptime seconds"
+    
+    # Get connections
+    local connections=$(mysql $auth_cmd -e "SHOW STATUS LIKE 'Connections';" -s -N 2>/dev/null | awk '{print $2}')
+    echo -e "  Total Connections: $connections"
+    
+    # Get current connections
+    local threads_connected=$(mysql $auth_cmd -e "SHOW STATUS LIKE 'Threads_connected';" -s -N 2>/dev/null | awk '{print $2}')
+    echo -e "  Current Connections: $threads_connected"
+    
+    echo ""
+}
+
+function test_mysql_connection() {
+    echo -e "${CGREEN}Testing MySQL Connection...${CEND}"
+    
+    local password=$(get_mysql_password)
+    local auth_cmd=""
+    if [ -n "$password" ]; then
+        auth_cmd="-p$password"
+    fi
+    
+    # Test basic connection
+    if mysql $auth_cmd -e "SELECT 1;" >/dev/null 2>&1; then
+        echo -e "  ${CGREEN}MySQL connection: OK${CEND}"
+        
+        # Test database operations
+        if mysql $auth_cmd -e "CREATE DATABASE IF NOT EXISTS test_db; USE test_db; CREATE TABLE IF NOT EXISTS test_table (id INT); DROP TABLE test_table; DROP DATABASE test_db;" >/dev/null 2>&1; then
+            echo -e "  ${CGREEN}MySQL operations: OK${CEND}"
+        else
+            echo -e "  ${CRED}MySQL operations: FAILED${CEND}"
+        fi
+    else
+        echo -e "  ${CRED}MySQL connection: FAILED${CEND}"
+    fi
+    
+    echo ""
+}
+
+function main() {
+    case "${1:-all}" in
+        "status")
+            show_header
+            check_mysql_status
+            ;;
+        "info")
+            show_header
+            show_mysql_info
+            ;;
+        "test")
+            show_header
+            test_mysql_connection
+            ;;
+        "all")
+            show_header
+            check_mysql_status
+            show_mysql_info
+            test_mysql_connection
+            ;;
+        *)
+            echo -e "${CRED}Unknown option: $1${CEND}"
+            echo "Usage: $0 [status|info|test|all]"
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"
+EOF
+    
+    # Make monitoring script executable
+    chmod +x /usr/local/bin/mysql-monitor
+    
+    echo -e "${CGREEN}Monitoring script created${CEND}"
+}
+
+function create_backup_script() {
+    echo -e "${CGREEN}Creating backup script...${CEND}"
+    
+    cat > /usr/local/bin/mysql-backup << 'EOF'
+#!/bin/bash
+
+# MySQL Backup Script
+
+MYSQL_ROOT_PASSWORD_FILE="/etc/mysql/mysql.root.passwd"
+MYSQL_DATA_DIR="/var/lib/mysql"
+BACKUP_DIR="/var/backups/mysql"
+DATE=$(date +%Y%m%d_%H%M%S)
+
+# Create backup directory
+mkdir -p "$BACKUP_DIR"
+
+function get_mysql_password() {
+    if [ -f "$MYSQL_ROOT_PASSWORD_FILE" ]; then
+        cat "$MYSQL_ROOT_PASSWORD_FILE"
+    else
+        echo ""
+    fi
+}
+
+function create_backup() {
+    echo "Creating MySQL backup..."
+    
+    local password=$(get_mysql_password)
+    local auth_cmd=""
+    if [ -n "$password" ]; then
+        auth_cmd="-p$password"
+    fi
+    
+    # Get list of databases
+    local databases=$(mysql $auth_cmd -e "SHOW DATABASES;" -s -N 2>/dev/null | grep -v -E "information_schema|performance_schema|mysql|sys")
+    
+    if [ $? -ne 0 ]; then
+        echo "Cannot connect to MySQL"
+        return 1
+    fi
+    
+    # Backup each database
+    for db in $databases; do
+        echo "  Backing up database: $db"
+        mysqldump $auth_cmd --single-transaction --routines --triggers "$db" | gzip > "$BACKUP_DIR/${db}_$DATE.sql.gz"
+    done
+    
+    # Backup all databases
+    echo "  Backing up all databases..."
+    mysqldump $auth_cmd --single-transaction --routines --triggers --all-databases | gzip > "$BACKUP_DIR/all_databases_$DATE.sql.gz"
+    
+    echo "Backup completed: $BACKUP_DIR"
+    echo "Files created:"
+    ls -la "$BACKUP_DIR"/*_$DATE.sql.gz
+}
+
+function list_backups() {
+    echo "Available MySQL Backups:"
+    ls -lh "$BACKUP_DIR"/*.sql.gz 2>/dev/null || echo "No backups found"
+}
+
+function cleanup_old_backups() {
+    echo "Cleaning up old backups (older than 30 days)..."
+    find "$BACKUP_DIR" -name "*.sql.gz" -mtime +30 -delete
+    echo "Cleanup completed"
+}
+
+case "${1:-create}" in
+    "create")
+        create_backup
+        ;;
+    "list")
+        list_backups
+        ;;
+    "cleanup")
+        cleanup_old_backups
+        ;;
+    *)
+        echo "Usage: $0 [create|list|cleanup]"
+        exit 1
+        ;;
+esac
+EOF
+    
+    # Make backup script executable
+    chmod +x /usr/local/bin/mysql-backup
+    
+    echo -e "${CGREEN}Backup script created${CEND}"
+}
+
+function start_mysql() {
+    echo -e "${CGREEN}Starting MySQL service...${CEND}"
+    
+    # Restart MySQL to apply configuration
+    systemctl restart mysql
+    
+    # Wait for MySQL to start
+    sleep 5
+    
+    # Check if MySQL is running
+    if systemctl is-active --quiet mysql; then
+        echo -e "${CGREEN}MySQL service started successfully${CEND}"
+    else
+        echo -e "${CRED}Failed to start MySQL service${CEND}"
+        systemctl status mysql
+        exit 1
+    fi
+}
+
+function verify_installation() {
+    echo -e "${CGREEN}Verifying MySQL installation...${CEND}"
+    
+    # Test MySQL connection
+    local password=$(cat "$DB_ROOT_PASSWORD_FILE" 2>/dev/null || echo "")
+    local auth_cmd=""
+    if [ -n "$password" ]; then
+        auth_cmd="-p$password"
+    fi
+    
+    if mysql $auth_cmd -e "SELECT 1;" >/dev/null 2>&1; then
+        echo -e "${CGREEN}MySQL connection: OK${CEND}"
+    else
+        echo -e "${CRED}MySQL connection: FAILED${CEND}"
+        exit 1
+    fi
+    
+    # Test basic operations
+    if mysql $auth_cmd -e "CREATE DATABASE IF NOT EXISTS test_verification; USE test_verification; CREATE TABLE IF NOT EXISTS test_table (id INT); INSERT INTO test_table VALUES (1); SELECT COUNT(*) FROM test_table; DROP TABLE test_table; DROP DATABASE test_verification;" >/dev/null 2>&1; then
+        echo -e "${CGREEN}MySQL operations: OK${CEND}"
+    else
+        echo -e "${CRED}MySQL operations: FAILED${CEND}"
+        exit 1
+    fi
+    
+    # Check MySQL version
+    local mysql_version=$(mysql $auth_cmd -e "SELECT VERSION();" -s -N 2>/dev/null)
+    echo -e "${CGREEN}MySQL version: $mysql_version${CEND}"
+    
+    # Verify localhost-only binding
+    if netstat -tlnp 2>/dev/null | grep ":$DB_PORT" | grep "127.0.0.1" >/dev/null 2>&1; then
+        echo -e "${CGREEN}Localhost binding: OK${CEND}"
+    else
+        echo -e "${CRED}Localhost binding: FAILED${CEND}"
+        exit 1
+    fi
+    
+    # Verify firewall rules
+    if command -v ufw >/dev/null 2>&1; then
+        if ufw status | grep -q "$DB_PORT.*ALLOW.*127.0.0.1" && ufw status | grep -q "$DB_PORT.*DENY"; then
+            echo -e "${CGREEN}UFW firewall rules: OK${CEND}"
+        else
+            echo -e "${CRED}UFW firewall rules: FAILED${CEND}"
+            exit 1
+        fi
+    elif command -v iptables >/dev/null 2>&1; then
+        if iptables -L INPUT | grep -q "$DB_PORT.*127.0.0.1.*ACCEPT" && iptables -L INPUT | grep -q "$DB_PORT.*DROP"; then
+            echo -e "${CGREEN}iptables firewall rules: OK${CEND}"
+        else
+            echo -e "${CRED}iptables firewall rules: FAILED${CEND}"
+            exit 1
+        fi
+    else
+        echo -e "${CYAN}No firewall detected - skipping firewall verification${CEND}"
+    fi
+    
+    # Verify MySQL configuration
+    if grep -q "bind-address = 127.0.0.1" "$DB_CONF_DIR/my.cnf"; then
+        echo -e "${CGREEN}MySQL configuration: OK${CEND}"
+    else
+        echo -e "${CRED}MySQL configuration: FAILED${CEND}"
+        exit 1
+    fi
+    
+    echo -e "${CGREEN}MySQL installation verified successfully${CEND}"
+    echo -e "${CCYAN}MySQL is configured for localhost-only access${CEND}"
+}
+
+function show_success_message() {
+    echo ""
+    echo -e "${CBLUE}========================================${CEND}"
+    echo -e "${CBLUE}    MySQL/MariaDB Installation Complete!${CEND}"
+    echo -e "${CBLUE}========================================${CEND}"
+    echo ""
+    echo -e "${CCYAN}Installation Summary:${CEND}"
+    echo -e "  Database Type: $DB_TYPE"
+    echo -e "  Port: $DB_PORT"
+    echo -e "  Data Directory: $DB_DATA_DIR"
+    echo -e "  Config Directory: $DB_CONF_DIR"
+    echo -e "  Log Directory: $DB_LOG_DIR"
+    echo ""
+    echo -e "${CCYAN}Security Features:${CEND}"
+    echo -e "  ✓ Localhost-only binding (127.0.0.1)"
+    echo -e "  ✓ Root password authentication"
+    echo -e "  ✓ Anonymous users removed"
+    echo -e "  ✓ Test database removed"
+    echo -e "  ✓ Remote root access disabled"
+    echo -e "  ✓ Firewall rules configured"
+    echo -e "  ✓ Systemd security hardening"
+    echo ""
+    echo -e "${CCYAN}MySQL Credentials:${CEND}"
+    echo -e "  Root Password: $(cat "$DB_ROOT_PASSWORD_FILE")"
+    echo -e "  Root Password file: $DB_ROOT_PASSWORD_FILE"
+    echo ""
+    echo -e "${CCYAN}Management Commands:${CEND}"
+    echo -e "  Service status: systemctl status mysql"
+    echo -e "  Start service: systemctl start mysql"
+    echo -e "  Stop service: systemctl stop mysql"
+    echo -e "  Restart service: systemctl restart mysql"
+    echo ""
+    echo -e "${CCYAN}MySQL CLI Usage:${CEND}"
+    echo -e "  Connect: mysql -u root -p$(cat "$DB_ROOT_PASSWORD_FILE")"
+    echo -e "  Test: mysql -u root -p$(cat "$DB_ROOT_PASSWORD_FILE") -e 'SELECT VERSION();'"
+    echo ""
+    echo -e "${CCYAN}Monitoring:${CEND}"
+    echo -e "  MySQL status: mysql-monitor status"
+    echo -e "  MySQL info: mysql-monitor info"
+    echo -e "  Full overview: mysql-monitor"
+    echo ""
+    echo -e "${CCYAN}Backup:${CEND}"
+    echo -e "  Create backup: mysql-backup create"
+    echo -e "  List backups: mysql-backup list"
+    echo -e "  Cleanup old: mysql-backup cleanup"
+    echo ""
+    echo -e "${CCYAN}Logs:${CEND}"
+    echo -e "  MySQL logs: tail -f $DB_LOG_DIR/error.log"
+    echo -e "  System logs: journalctl -u mysql -f"
+    echo ""
+    echo -e "${CCYAN}Installation Log:${CEND}"
+    echo -e "  $LOG_FILE"
+    echo ""
+    echo -e "${CMAGENTA}Important Security Notes:${CEND}"
+    echo -e "  • MySQL is configured for localhost access only"
+    echo -e "  • External connections are blocked by firewall"
+    echo -e "  • Root password authentication is required"
+    echo -e "  • Anonymous users and test database removed"
+    echo -e "  • Regular backups are recommended"
+    echo ""
+}
+
+function cleanup() {
+    echo -e "${CGREEN}Cleaning up temporary files...${CEND}"
+    
+    # Remove temporary files
+    rm -f /tmp/mysql-apt-config_*.deb 2>/dev/null || true
+    
+    echo -e "${CGREEN}Cleanup completed${CEND}"
+}
+
+function main() {
+    show_header
+    check_root
+    
+    # Choose database type
+    choose_database
+    
+    # Check system compatibility
+    check_system
+    
+    # Install dependencies
+    install_dependencies
+    
+    # Add repository
+    add_repository
+    
+    # Install database
+    install_database
+    
+    # Create MySQL user and directories
+    create_mysql_user
+    
+    # Generate password and create configuration
+    generate_password
+    create_mysql_config
+    
+    # Secure MySQL
+    secure_mysql
+    
+    # Create systemd service
+    create_systemd_service
+    
+    # Configure firewall
+    configure_firewall
+    
+    # Setup log rotation
+    setup_logrotate
+    
+    # Create monitoring and backup scripts
+    create_monitoring_scripts
+    create_backup_script
+    
+    # Start MySQL service
+    start_mysql
+    
+    # Verify installation
+    verify_installation
+    
+    # Cleanup
+    cleanup
+    
+    # Show success message
+    show_success_message
+}
+
+# Run main function
+main

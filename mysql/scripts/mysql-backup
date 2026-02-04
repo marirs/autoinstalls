@@ -1,0 +1,628 @@
+# MySQL/MariaDB Backup and Restore Scripts
+# Localhost MySQL/MariaDB deployment backup utilities
+
+#!/bin/bash
+
+# MySQL Backup Script
+# File: /usr/local/bin/mysql-backup
+
+# Colors
+CSI="\033["
+CEND="${CSI}0m"
+CRED="${CSI}1;31m"
+CGREEN="${CSI}1;32m"
+CBLUE="${CSI}1;34m"
+CMAGENTA="${CSI}1;35m"
+CCYAN="${CSI}1;36m"
+
+# Configuration
+MYSQL_CLI="/usr/bin/mysql"
+MYSQLDUMP="/usr/bin/mysqldump"
+MYSQL_PASSWORD_FILE="/etc/mysql/mysql.root.passwd"
+MYSQL_DATA_DIR="/var/lib/mysql"
+BACKUP_DIR="/var/backups/mysql"
+DATE=$(date +%Y%m%d_%H%M%S)
+RETENTION_DAYS=30
+
+# Create backup directory
+mkdir -p "$BACKUP_DIR"
+
+function show_header() {
+    echo -e "${CBLUE}========================================${CEND}"
+    echo -e "${CBLUE}    MySQL Backup Tool${CEND}"
+    echo -e "${CBLUE}========================================${CEND}"
+    echo ""
+}
+
+function get_mysql_password() {
+    if [ -f "$MYSQL_PASSWORD_FILE" ]; then
+        cat "$MYSQL_PASSWORD_FILE"
+    else
+        echo ""
+    fi
+}
+
+function check_mysql_connection() {
+    local password=$(get_mysql_password)
+    local auth_cmd=""
+    if [ -n "$password" ]; then
+        auth_cmd="-p$password"
+    fi
+    
+    if ! mysql $auth_cmd -e "SELECT 1;" >/dev/null 2>&1; then
+        echo -e "${CRED}Cannot connect to MySQL${CEND}"
+        return 1
+    fi
+    
+    return 0
+}
+
+function create_backup() {
+    echo -e "${CGREEN}Creating MySQL backup...${CEND}"
+    
+    # Check MySQL connection
+    if ! check_mysql_connection; then
+        return 1
+    fi
+    
+    local password=$(get_mysql_password)
+    local auth_cmd=""
+    if [ -n "$password" ]; then
+        auth_cmd="-p$password"
+    fi
+    
+    # Create backup directory
+    mkdir -p "$BACKUP_DIR"
+    
+    # Get list of databases
+    local databases=$(mysql $auth_cmd -e "SHOW DATABASES;" -s -N 2>/dev/null | grep -v -E "information_schema|performance_schema|mysql|sys")
+    
+    if [ -z "$databases" ]; then
+        echo -e "  ${CYAN}No user databases found${CEND}"
+    else
+        echo -e "  Backing up user databases..."
+        for db in $databases; do
+            echo -e "    Backing up: $db"
+            mysqldump $auth_cmd --single-transaction --routines --triggers --events --hex-blob "$db" | gzip > "$BACKUP_DIR/${db}_$DATE.sql.gz"
+            
+            if [ $? -eq 0 ]; then
+                echo -e "      ${CGREEN}✓ $db backed up${CEND}"
+            else
+                echo -e "      ${CRED}✗ Failed to backup $db${CEND}"
+            fi
+        done
+    fi
+    
+    # Backup all databases
+    echo -e "  Backing up all databases..."
+    mysqldump $auth_cmd --single-transaction --routines --triggers --events --hex-blob --all-databases | gzip > "$BACKUP_DIR/all_databases_$DATE.sql.gz"
+    
+    if [ $? -eq 0 ]; then
+        echo -e "    ${CGREEN}✓ All databases backed up${CEND}"
+    else
+        echo -e "    ${CRED}✗ Failed to backup all databases${CEND}"
+    fi
+    
+    # Backup users and privileges
+    echo -e "  Backing up users and privileges..."
+    mysql $auth_cmd -e "
+        SELECT CONCAT('CREATE USER IF NOT EXISTS ''',user,'''@''',host,''' IDENTIFIED BY ''',password,''';') 
+        FROM mysql.user 
+        WHERE user NOT IN ('root','debian-sys-maint','mysql.sys','mysql.session');
+    " | sed 's/password/***/' > "$BACKUP_DIR/users_$DATE.sql"
+    
+    mysql $auth_cmd -e "
+        SELECT CONCAT('GRANT ',privilege_type,' ON ',table_schema,'.',table_name,' TO ''',user,'''@''',host,''';') 
+        FROM information_schema.user_privileges 
+        WHERE grantee LIKE '''%'%''' AND grantee NOT LIKE '''root%''' AND grantee NOT LIKE '''debian-sys-maint%''';
+    " >> "$BACKUP_DIR/users_$DATE.sql"
+    
+    gzip "$BACKUP_DIR/users_$DATE.sql"
+    
+    # Backup configuration
+    if [ -f "/etc/mysql/my.cnf" ]; then
+        cp "/etc/mysql/my.cnf" "$BACKUP_DIR/my.cnf_$DATE"
+        echo -e "  ${CGREEN}✓ Configuration backed up${CEND}"
+    fi
+    
+    # Backup password file
+    if [ -f "$MYSQL_PASSWORD_FILE" ]; then
+        cp "$MYSQL_PASSWORD_FILE" "$BACKUP_DIR/mysql.root.passwd_$DATE"
+        chmod 600 "$BACKUP_DIR/mysql.root.passwd_$DATE"
+        echo -e "  ${CGREEN}✓ Password file backed up${CEND}"
+    fi
+    
+    # Create backup info
+    cat > "$BACKUP_DIR/backup_info_$DATE.txt" << EOF
+MySQL Backup Information
+=======================
+Date: $(date)
+Hostname: $(hostname)
+MySQL Version: $(mysql $auth_cmd -e "SELECT VERSION();" -s -N 2>/dev/null)
+Backup Type: Full Backup
+Files Created:
+- all_databases_$DATE.sql.gz (All databases)
+- users_$DATE.sql.gz (Users and privileges)
+- my.cnf_$DATE (Configuration)
+- mysql.root.passwd_$DATE (Root password)
+
+Database Statistics:
+- Total Databases: $(echo "$databases" | wc -w)
+- Database List: $databases
+
+Backup Options:
+- Single transaction: Enabled
+- Routines: Included
+- Triggers: Included
+- Events: Included
+- Hex blob: Enabled
+- Compression: Enabled
+EOF
+    
+    echo -e "${CGREEN}Backup completed successfully${CEND}"
+    echo -e "${CCYAN}Backup location: $BACKUP_DIR${CEND}"
+    echo -e "${CCYAN}Backup info: $BACKUP_DIR/backup_info_$DATE.txt${CEND}"
+}
+
+function restore_backup() {
+    if [ -z "$1" ]; then
+        echo -e "${CRED}Usage: $0 restore <backup_date>${CEND}"
+        echo -e "${CCYAN}Available backups:${CEND}"
+        list_backups
+        return 1
+    fi
+    
+    local backup_date="$1"
+    echo -e "${CGREEN}Restoring MySQL backup from $backup_date...${CEND}"
+    
+    # Check if backup files exist
+    local all_db_file="$BACKUP_DIR/all_databases_$backup_date.sql.gz"
+    local users_file="$BACKUP_DIR/users_$backup_date.sql.gz"
+    local conf_file="$BACKUP_DIR/my.cnf_$backup_date"
+    local passwd_file="$BACKUP_DIR/mysql.root.passwd_$backup_date"
+    
+    if [ ! -f "$all_db_file" ]; then
+        echo -e "${CRED}No backup files found for date: $backup_date${CEND}"
+        return 1
+    fi
+    
+    # Check MySQL connection
+    if ! check_mysql_connection; then
+        return 1
+    fi
+    
+    local password=$(get_mysql_password)
+    local auth_cmd=""
+    if [ -n "$password" ]; then
+        auth_cmd="-p$password"
+    fi
+    
+    # Backup current data
+    echo -e "  Backing up current data..."
+    local current_date=$(date +%Y%m%d_%H%M%S)
+    
+    # Create pre-restore backup
+    local current_databases=$(mysql $auth_cmd -e "SHOW DATABASES;" -s -N 2>/dev/null | grep -v -E "information_schema|performance_schema|mysql|sys")
+    for db in $current_databases; do
+        mysqldump $auth_cmd --single-transaction "$db" | gzip > "$BACKUP_DIR/pre_restore_${db}_$current_date.sql.gz"
+    done
+    
+    # Restore configuration
+    if [ -f "$conf_file" ]; then
+        echo -e "  Restoring configuration..."
+        cp "$conf_file" "/etc/mysql/my.cnf"
+        chown root:root "/etc/mysql/my.cnf"
+        chmod 640 "/etc/mysql/my.cnf"
+        echo -e "    ${CGREEN}Configuration restored${CEND}"
+    fi
+    
+    # Restore password file
+    if [ -f "$passwd_file" ]; then
+        echo -e "  Restoring password file..."
+        cp "$passwd_file" "$MYSQL_PASSWORD_FILE"
+        chmod 600 "$MYSQL_PASSWORD_FILE"
+        chown root:root "$MYSQL_PASSWORD_FILE"
+        echo -e "    ${CGREEN}Password file restored${CEND}"
+        
+        # Update password variable
+        password=$(cat "$MYSQL_PASSWORD_FILE")
+        auth_cmd="-p$password"
+    fi
+    
+    # Drop existing databases (except system databases)
+    echo -e "  Dropping existing databases..."
+    for db in $current_databases; do
+        mysql $auth_cmd -e "DROP DATABASE IF EXISTS \`$db\`;" 2>/dev/null
+        echo -e "    Dropped: $db"
+    done
+    
+    # Restore all databases
+    echo -e "  Restoring databases..."
+    if gunzip -c "$all_db_file" | mysql $auth_cmd; then
+        echo -e "    ${CGREEN}✓ All databases restored${CEND}"
+    else
+        echo -e "    ${CRED}✗ Failed to restore databases${CEND}"
+        return 1
+    fi
+    
+    # Restore users and privileges
+    if [ -f "$users_file" ]; then
+        echo -e "  Restoring users and privileges..."
+        if gunzip -c "$users_file" | mysql $auth_cmd; then
+            echo -e "    ${CGREEN}✓ Users and privileges restored${CEND}"
+        else
+            echo -e "    ${CRED}✗ Failed to restore users and privileges${CEND}"
+        fi
+    fi
+    
+    # Flush privileges
+    mysql $auth_cmd -e "FLUSH PRIVILEGES;"
+    
+    echo -e "${CGREEN}Restore completed successfully${CEND}"
+    echo -e "${CCYAN}Current data backed up with suffix: pre_restore_$current_date${CEND}"
+}
+
+function restore_single_database() {
+    if [ -z "$1" ] || [ -z "$2" ]; then
+        echo -e "${CRED}Usage: $0 restore-db <backup_date> <database_name>${CEND}"
+        return 1
+    fi
+    
+    local backup_date="$1"
+    local database_name="$2"
+    echo -e "${CGREEN}Restoring database '$database_name' from $backup_date...${CEND}"
+    
+    # Check if backup file exists
+    local db_file="$BACKUP_DIR/${database_name}_$backup_date.sql.gz"
+    
+    if [ ! -f "$db_file" ]; then
+        echo -e "${CRED}No backup file found for database '$database_name' on date: $backup_date${CEND}"
+        return 1
+    fi
+    
+    # Check MySQL connection
+    if ! check_mysql_connection; then
+        return 1
+    fi
+    
+    local password=$(get_mysql_password)
+    local auth_cmd=""
+    if [ -n "$password" ]; then
+        auth_cmd="-p$password"
+    fi
+    
+    # Backup current database
+    echo -e "  Backing up current database..."
+    local current_date=$(date +%Y%m%d_%H%M%S)
+    mysqldump $auth_cmd --single-transaction "$database_name" | gzip > "$BACKUP_DIR/pre_restore_${database_name}_$current_date.sql.gz" 2>/dev/null
+    
+    # Drop existing database
+    echo -e "  Dropping existing database..."
+    mysql $auth_cmd -e "DROP DATABASE IF EXISTS \`$database_name\`;" 2>/dev/null
+    
+    # Restore database
+    echo -e "  Restoring database..."
+    if gunzip -c "$db_file" | mysql $auth_cmd; then
+        echo -e "    ${CGREEN}✓ Database '$database_name' restored${CEND}"
+    else
+        echo -e "    ${CRED}✗ Failed to restore database '$database_name'${CEND}"
+        return 1
+    fi
+    
+    echo -e "${CGREEN}Database restore completed successfully${CEND}"
+    echo -e "${CCYAN}Current database backed up with suffix: pre_restore_${database_name}_$current_date${CEND}"
+}
+
+function list_backups() {
+    echo -e "${CGREEN}Available MySQL Backups:${CEND}"
+    echo ""
+    
+    if [ ! -d "$BACKUP_DIR" ]; then
+        echo -e "  ${CYAN}No backups found${CEND}"
+        return
+    fi
+    
+    echo -e "${CBLUE}Full Database Backups:${CEND}"
+    ls -lh "$BACKUP_DIR"/all_databases_*.sql.gz 2>/dev/null | awk '{print $9, $5, $6, $7, $8}' | while read -r line; do
+        local date=$(echo "$line" | awk '{print $1}' | sed 's/.*all_databases_\(.*\)\.sql\.gz/\1/')
+        local size=$(echo "$line" | awk '{print $2}')
+        local date_str=$(echo "$line" | awk '{print $3, $4, $5}')
+        echo -e "  $date: $size ($date_str)"
+    done
+    
+    if ! ls "$BACKUP_DIR"/all_databases_*.sql.gz >/dev/null 2>&1; then
+        echo -e "  No full database backups found"
+    fi
+    
+    echo ""
+    echo -e "${CBLUE}Individual Database Backups:${CEND}"
+    ls -lh "$BACKUP_DIR"/*_*.sql.gz 2>/dev/null | grep -v "all_databases_" | awk '{print $9, $5, $6, $7, $8}' | while read -r line; do
+        local db_name=$(echo "$line" | awk '{print $1}' | sed "s|$BACKUP_DIR/||" | sed 's/_[0-9]\{8\}_[0-9]\{6\}\.sql\.gz//')
+        local date=$(echo "$line" | awk '{print $1}' | sed 's/.*_\(.*\)\.sql\.gz/\1/')
+        local size=$(echo "$line" | awk '{print $2}')
+        local date_str=$(echo "$line" | awk '{print $3, $4, $5}')
+        echo -e "  $db_name ($date): $size ($date_str)"
+    done
+    
+    if ! ls "$BACKUP_DIR"/*_*.sql.gz 2>/dev/null | grep -v "all_databases_" >/dev/null 2>&1; then
+        echo -e "  No individual database backups found"
+    fi
+    
+    echo ""
+    echo -e "${CBLUE}Configuration Backups:${CEND}"
+    ls -lh "$BACKUP_DIR"/my.cnf_* 2>/dev/null | awk '{print $9, $5, $6, $7, $8}' | while read -r line; do
+        local date=$(echo "$line" | awk '{print $1}' | sed 's/.*my\.cnf_\(.*\)/\1/')
+        local size=$(echo "$line" | awk '{print $2}')
+        local date_str=$(echo "$line" | awk '{print $3, $4, $5}')
+        echo -e "  $date: $size ($date_str)"
+    done
+    
+    if ! ls "$BACKUP_DIR"/my.cnf_* >/dev/null 2>&1; then
+        echo -e "  No configuration backups found"
+    fi
+    
+    echo ""
+}
+
+function verify_backup() {
+    if [ -z "$1" ]; then
+        echo -e "${CRED}Usage: $0 verify <backup_date>${CEND}"
+        return 1
+    fi
+    
+    local backup_date="$1"
+    echo -e "${CGREEN}Verifying backup: $backup_date${CEND}"
+    
+    local all_db_file="$BACKUP_DIR/all_databases_$backup_date.sql.gz"
+    local users_file="$BACKUP_DIR/users_$backup_date.sql.gz"
+    local conf_file="$BACKUP_DIR/my.cnf_$backup_date"
+    local info_file="$BACKUP_DIR/backup_info_$backup_date.txt"
+    
+    # Check file integrity
+    echo -e "${CBLUE}File Integrity:${CEND}"
+    
+    if [ -f "$all_db_file" ]; then
+        if gzip -t "$all_db_file" 2>/dev/null; then
+            echo -e "  Full database backup: ${CGREEN}Valid${CEND}"
+        else
+            echo -e "  Full database backup: ${CRED}Corrupted${CEND}"
+            return 1
+        fi
+    else
+        echo -e "  Full database backup: ${CYAN}Not found${CEND}"
+    fi
+    
+    if [ -f "$users_file" ]; then
+        if gzip -t "$users_file" 2>/dev/null; then
+            echo -e "  Users backup: ${CGREEN}Valid${CEND}"
+        else
+            echo -e "  Users backup: ${CRED}Corrupted${CEND}"
+            return 1
+        fi
+    else
+        echo -e "  Users backup: ${CYAN}Not found${CEND}"
+    fi
+    
+    if [ -f "$conf_file" ]; then
+        echo -e "  Configuration file: ${CGREEN}Found${CEND}"
+    else
+        echo -e "  Configuration file: ${CYAN}Not found${CEND}"
+    fi
+    
+    # Show backup info if available
+    if [ -f "$info_file" ]; then
+        echo -e ""
+        echo -e "${CBLUE}Backup Information:${CEND}"
+        cat "$info_file" | sed 's/^/  /'
+    fi
+    
+    echo -e ""
+    echo -e "${CGREEN}Backup verification completed${CEND}"
+}
+
+function cleanup_old_backups() {
+    echo -e "${CGREEN}Cleaning up old backups (older than $RETENTION_DAYS days)...${CEND}"
+    
+    # Remove old backup files
+    local removed_files=0
+    
+    # Remove database backups
+    local db_count=$(find "$BACKUP_DIR" -name "*.sql.gz" -mtime +$RETENTION_DAYS | wc -l)
+    if [ $db_count -gt 0 ]; then
+        find "$BACKUP_DIR" -name "*.sql.gz" -mtime +$RETENTION_DAYS -delete
+        echo -e "  Removed $db_count old database backups"
+        removed_files=$((removed_files + db_count))
+    fi
+    
+    # Remove configuration backups
+    local conf_count=$(find "$BACKUP_DIR" -name "my.cnf_*" -mtime +$RETENTION_DAYS | wc -l)
+    if [ $conf_count -gt 0 ]; then
+        find "$BACKUP_DIR" -name "my.cnf_*" -mtime +$RETENTION_DAYS -delete
+        echo -e "  Removed $conf_count old configuration backups"
+        removed_files=$((removed_files + conf_count))
+    fi
+    
+    # Remove password backups
+    local passwd_count=$(find "$BACKUP_DIR" -name "mysql.root.passwd_*" -mtime +$RETENTION_DAYS | wc -l)
+    if [ $passwd_count -gt 0 ]; then
+        find "$BACKUP_DIR" -name "mysql.root.passwd_*" -mtime +$RETENTION_DAYS -delete
+        echo -e "  Removed $passwd_count old password backups"
+        removed_files=$((removed_files + passwd_count))
+    fi
+    
+    # Remove info files
+    local info_count=$(find "$BACKUP_DIR" -name "backup_info_*.txt" -mtime +$RETENTION_DAYS | wc -l)
+    if [ $info_count -gt 0 ]; then
+        find "$BACKUP_DIR" -name "backup_info_*.txt" -mtime +$RETENTION_DAYS -delete
+        echo -e "  Removed $info_count old info files"
+        removed_files=$((removed_files + info_count))
+    fi
+    
+    if [ $removed_files -gt 0 ]; then
+        echo -e "  ${CGREEN}Cleanup completed: $removed_files files removed${CEND}"
+    else
+        echo -e "  ${CYAN}No old files to remove${CEND}"
+    fi
+}
+
+function schedule_backup() {
+    echo -e "${CGREEN}Setting up automatic backup schedule...${CEND}"
+    
+    # Create cron job for daily backup
+    local cron_file="/etc/cron.d/mysql-backup"
+    
+    cat > "$cron_file" << EOF
+# MySQL automatic backup
+0 2 * * * root /usr/local/bin/mysql-backup create >/dev/null 2>&1
+0 3 * * 0 root /usr/local/bin/mysql-backup cleanup >/dev/null 2>&1
+EOF
+    
+    # Restart cron service
+    systemctl restart cron
+    
+    echo -e "  ${CGREEN}Automatic backup scheduled:${CEND}"
+    echo -e "    Daily backup at 2:00 AM"
+    echo -e "    Weekly cleanup on Sunday at 3:00 AM"
+    echo -e "    Cron file: $cron_file"
+}
+
+function unschedule_backup() {
+    echo -e "${CGREEN}Removing automatic backup schedule...${CEND}"
+    
+    local cron_file="/etc/cron.d/mysql-backup"
+    
+    if [ -f "$cron_file" ]; then
+        rm "$cron_file"
+        systemctl restart cron
+        echo -e "  ${CGREEN}Automatic backup schedule removed${CEND}"
+    else
+        echo -e "  ${CYAN}No automatic backup schedule found${CEND}"
+    fi
+}
+
+function show_backup_status() {
+    echo -e "${CGREEN}Backup Status:${CEND}"
+    
+    # Check backup directory
+    if [ ! -d "$BACKUP_DIR" ]; then
+        echo -e "  ${CYAN}Backup directory not found${CEND}"
+        return
+    fi
+    
+    # Show backup statistics
+    local full_count=$(ls "$BACKUP_DIR"/all_databases_*.sql.gz 2>/dev/null | wc -l)
+    local db_count=$(ls "$BACKUP_DIR"/*_*.sql.gz 2>/dev/null | grep -v "all_databases_" | wc -l)
+    local conf_count=$(ls "$BACKUP_DIR"/my.cnf_* 2>/dev/null | wc -l)
+    
+    echo -e "  Full database backups: $full_count"
+    echo -e "  Individual database backups: $db_count"
+    echo -e "  Configuration backups: $conf_count"
+    
+    # Show disk usage
+    local backup_size=$(du -sh "$BACKUP_DIR" 2>/dev/null | cut -f1)
+    echo -e "  Total backup size: $backup_size"
+    
+    # Show latest backup
+    local latest_full=$(ls -t "$BACKUP_DIR"/all_databases_*.sql.gz 2>/dev/null | head -1)
+    if [ -n "$latest_full" ]; then
+        local latest_date=$(basename "$latest_full" | sed 's/all_databases_\(.*\)\.sql\.gz/\1/')
+        echo -e "  Latest full backup: $latest_date"
+    else
+        echo -e "  Latest full backup: None"
+    fi
+    
+    # Check cron schedule
+    if [ -f "/etc/cron.d/mysql-backup" ]; then
+        echo -e "  Automatic backup: ${CGREEN}Enabled${CEND}"
+    else
+        echo -e "  Automatic backup: ${CRED}Disabled${CEND}"
+    fi
+    
+    echo ""
+}
+
+function show_help() {
+    echo -e "${CGREEN}MySQL Backup Tool${CEND}"
+    echo ""
+    echo "Usage: $0 [command] [options]"
+    echo ""
+    echo "Commands:"
+    echo "  create              Create full backup"
+    echo "  restore <date>      Restore full backup from specified date"
+    echo "  restore-db <date> <db>  Restore specific database"
+    echo "  list                List available backups"
+    echo "  verify <date>       Verify backup integrity"
+    echo "  cleanup             Remove old backups"
+    echo "  schedule            Set up automatic backup schedule"
+    echo "  unschedule          Remove automatic backup schedule"
+    echo "  status              Show backup status"
+    echo "  help                Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0 create           # Create backup"
+    echo "  $0 restore 20240204_120000  # Restore from backup"
+    echo "  $0 restore-db 20240204_120000 mydb  # Restore specific database"
+    echo "  $0 list             # List backups"
+    echo "  $0 verify 20240204_120000  # Verify backup"
+    echo "  $0 schedule         # Set up automatic backups"
+    echo ""
+    echo "Backup location: $BACKUP_DIR"
+    echo "Retention period: $RETENTION_DAYS days"
+}
+
+function main() {
+    case "${1}" in
+        "create")
+            show_header
+            create_backup
+            ;;
+        "restore")
+            show_header
+            restore_backup "$2"
+            ;;
+        "restore-db")
+            show_header
+            restore_single_database "$2" "$3"
+            ;;
+        "list")
+            list_backups
+            ;;
+        "verify")
+            show_header
+            verify_backup "$2"
+            ;;
+        "cleanup")
+            show_header
+            cleanup_old_backups
+            ;;
+        "schedule")
+            show_header
+            schedule_backup
+            ;;
+        "unschedule")
+            show_header
+            unschedule_backup
+            ;;
+        "status")
+            show_header
+            show_backup_status
+            ;;
+        "help"|"-h"|"--help")
+            show_help
+            ;;
+        *)
+            echo -e "${CRED}Unknown command: $1${CEND}"
+            show_help
+            exit 1
+            ;;
+    esac
+}
+
+# Check if MySQL CLI is available
+if ! command -v mysql >/dev/null 2>&1; then
+    echo -e "${CRED}MySQL CLI is not installed or not in PATH${CEND}"
+    exit 1
+fi
+
+# Run main function with all arguments
+main "$@"
