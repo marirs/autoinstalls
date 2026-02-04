@@ -1,0 +1,321 @@
+# Docker Monitoring and Management Scripts
+# Internal Docker deployment monitoring tools
+
+#!/bin/bash
+
+# Docker Monitoring Script
+# File: /usr/local/bin/docker-monitor
+
+# Colors
+CSI="\033["
+CEND="${CSI}0m"
+CRED="${CSI}1;31m"
+CGREEN="${CSI}1;32m"
+CBLUE="${CSI}1;34m"
+CMAGENTA="${CSI}1;35m"
+CCYAN="${CSI}1;36m"
+
+function show_header() {
+    echo -e "${CBLUE}========================================${CEND}"
+    echo -e "${CBLUE}    Docker Internal Monitoring${CEND}"
+    echo -e "${CBLUE}========================================${CEND}"
+    echo ""
+}
+
+function check_docker_status() {
+    echo -e "${CGREEN}Docker Service Status:${CEND}"
+    
+    if systemctl is-active --quiet docker; then
+        echo -e "  Docker Daemon: ${CGREEN}Running${CEND}"
+    else
+        echo -e "  Docker Daemon: ${CRED}Stopped${CEND}"
+    fi
+    
+    if systemctl is-active --quiet containerd; then
+        echo -e "  Containerd: ${CGREEN}Running${CEND}"
+    else
+        echo -e "  Containerd: ${CRED}Stopped${CEND}"
+    fi
+    
+    echo ""
+}
+
+function show_containers() {
+    echo -e "${CGREEN}Running Containers:${CEND}"
+    
+    if [ $(docker ps -q | wc -l) -eq 0 ]; then
+        echo -e "  ${CYAN}No containers running${CEND}"
+    else
+        docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
+    fi
+    
+    echo ""
+}
+
+function show_networks() {
+    echo -e "${CGREEN}Docker Networks:${CEND}"
+    
+    docker network ls --format "table {{.Name}}\t{{.Driver}}\t{{.Scope}}"
+    echo ""
+    
+    echo -e "${CGREEN}Internal Network Details:${CEND}"
+    if docker network ls | grep -q "internal-net"; then
+        docker network inspect internal-net --format='{{range .IPAM.Config}}Subnet: {{.Subnet}}{{end}}'
+    else
+        echo -e "  ${CYAN}Internal network not found${CEND}"
+    fi
+    
+    echo ""
+}
+
+function show_resource_usage() {
+    echo -e "${CGREEN}Resource Usage:${CEND}"
+    
+    echo -e "${CBLUE}Container Statistics:${CEND}"
+    docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}\t{{.BlockIO}}"
+    
+    echo ""
+    echo -e "${CBLUE}System Resources:${CEND}"
+    echo -e "  Docker Data Usage: $(docker system df --format '{{.Type}}\t{{.TotalCount}}\t{{.Size}}' | grep -E 'Images|Containers|Local Volumes')"
+    echo ""
+}
+
+function show_security_status() {
+    echo -e "${CGREEN}Security Status:${CEND}"
+    
+    echo -e "${CBLUE}Firewall Status:${CEND}"
+    if command -v ufw >/dev/null 2>&1; then
+        ufw status | head -5
+    else
+        echo -e "  ${CYAN}UFW not installed${CEND}"
+    fi
+    
+    echo ""
+    echo -e "${CBLUE}Docker Security Configuration:${CEND}"
+    
+    # Check if security options are enabled
+    if [ -f /etc/docker/daemon.json ]; then
+        echo -e "  User namespace remapping: $(grep -q 'userns-remap' /etc/docker/daemon.json && echo "${CGREEN}Enabled${CEND}" || echo "${CRED}Disabled${CEND}")"
+        echo -e "  No new privileges: $(grep -q 'no-new-privileges' /etc/docker/daemon.json && echo "${CGREEN}Enabled${CEND}" || echo "${CRED}Disabled${CEND}")"
+        echo -e "  Seccomp profile: $(grep -q 'seccomp-profile' /etc/docker/daemon.json && echo "${CGREEN}Enabled${CEND}" || echo "${CRED}Disabled${CEND}")"
+        echo -e "  IP forwarding disabled: $(grep -q '"ip-forward": false' /etc/docker/daemon.json && echo "${CGREEN}Enabled${CEND}" || echo "${CRED}Disabled${CEND}")"
+    else
+        echo -e "  ${CRED}Docker daemon configuration not found${CEND}"
+    fi
+    
+    echo ""
+}
+
+function show_logs() {
+    echo -e "${CGREEN}Recent Docker Logs:${CEND}"
+    
+    echo -e "${CBLUE}Docker Daemon Logs (last 10 lines):${CEND}"
+    journalctl -u docker.service -n 10 --no-pager
+    
+    echo ""
+    echo -e "${CBLUE}Container Logs (last 5 lines each):${CEND}"
+    for container in $(docker ps -q); do
+        name=$(docker inspect --format='{{.Name}}' $container | sed 's/\///')
+        echo -e "${CMAGENTA}$name:${CEND}"
+        docker logs --tail 5 $container 2>/dev/null | sed 's/^/  /'
+        echo ""
+    done
+}
+
+function show_image_info() {
+    echo -e "${CGREEN}Docker Images:${CEND}"
+    
+    echo -e "${CBLUE}Image Summary:${CEND}"
+    docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.Created}}"
+    
+    echo ""
+    echo -e "${CBLUE}Image Security Scan (basic):${CEND}"
+    
+    # Check for images with root user
+    for image in $(docker images --format "{{.Repository}}:{{.Tag}}" | grep -v "<none>"); do
+        root_check=$(docker run --rm --user root --entrypoint "whoami" $image 2>/dev/null || echo "non-root")
+        if [ "$root_check" = "root" ]; then
+            echo -e "  ${CRED}$image: Runs as root${CEND}"
+        else
+            echo -e "  ${CGREEN}$image: Runs as non-root${CEND}"
+        fi
+    done
+    
+    echo ""
+}
+
+function show_network_activity() {
+    echo -e "${CGREEN}Network Activity:${CEND}"
+    
+    echo -e "${CBLUE}Container Network Connections:${CEND}"
+    
+    for container in $(docker ps -q); do
+        name=$(docker inspect --format='{{.Name}}' $container | sed 's/\///')
+        pid=$(docker inspect --format='{{.State.Pid}}' $container)
+        
+        if [ -n "$pid" ] && [ -d "/proc/$pid" ]; then
+            echo -e "${CMAGENTA}$name (PID: $pid):${CEND}"
+            # Show network connections (internal only)
+            netstat -tulpn 2>/dev/null | grep "$pid" | sed 's/^/  /' || echo "  No network connections"
+        fi
+    done
+    
+    echo ""
+}
+
+function generate_report() {
+    local report_file="/tmp/docker-monitor-report-$(date +%Y%m%d_%H%M%S).txt"
+    
+    echo "Docker Internal Monitoring Report" > "$report_file"
+    echo "Generated: $(date)" >> "$report_file"
+    echo "================================" >> "$report_file"
+    echo "" >> "$report_file"
+    
+    echo "=== Docker Service Status ===" >> "$report_file"
+    systemctl status docker --no-pager >> "$report_file" 2>&1
+    echo "" >> "$report_file"
+    
+    echo "=== Running Containers ===" >> "$report_file"
+    docker ps -a >> "$report_file" 2>&1
+    echo "" >> "$report_file"
+    
+    echo "=== Resource Usage ===" >> "$report_file"
+    docker stats --no-stream >> "$report_file" 2>&1
+    echo "" >> "$report_file"
+    
+    echo "=== Network Configuration ===" >> "$report_file"
+    docker network ls >> "$report_file" 2>&1
+    echo "" >> "$report_file"
+    
+    echo "=== System Resources ===" >> "$report_file"
+    docker system df >> "$report_file" 2>&1
+    echo "" >> "$report_file"
+    
+    echo -e "${CGREEN}Report saved to: $report_file${CEND}"
+}
+
+function cleanup_docker() {
+    echo -e "${CGREEN}Docker Cleanup:${CEND}"
+    
+    echo -e "${CBLUE}Removing stopped containers...${CEND}"
+    stopped_containers=$(docker ps -aq --filter "status=exited")
+    if [ -n "$stopped_containers" ]; then
+        docker rm $stopped_containers
+        echo -e "  Removed $(echo $stopped_containers | wc -w) stopped containers"
+    else
+        echo -e "  No stopped containers to remove"
+    fi
+    
+    echo -e "${CBLUE}Removing unused images...${CEND}"
+    docker image prune -f
+    echo -e "  Unused images removed"
+    
+    echo -e "${CBLUE}Removing unused networks...${CEND}"
+    docker network prune -f
+    echo -e "  Unused networks removed"
+    
+    echo -e "${CBLUE}Removing unused volumes (dangerous)...${CEND}"
+    read -p "Remove unused volumes? This may delete data! [y/N]: " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        docker volume prune -f
+        echo -e "  Unused volumes removed"
+    else
+        echo -e "  Volumes not removed"
+    fi
+    
+    echo ""
+}
+
+function show_help() {
+    echo -e "${CGREEN}Docker Internal Monitoring Tool${CEND}"
+    echo ""
+    echo "Usage: $0 [option]"
+    echo ""
+    echo "Options:"
+    echo "  status      Show Docker service status"
+    echo "  containers  Show running containers"
+    echo "  networks    Show Docker networks"
+    echo "  resources   Show resource usage"
+    echo "  security    Show security status"
+    echo "  logs        Show recent logs"
+    echo "  images      Show Docker images"
+    echo "  network     Show network activity"
+    echo "  report      Generate full report"
+    echo "  cleanup     Clean up unused Docker resources"
+    echo "  all         Show all information"
+    echo "  help        Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0 status    # Show Docker status"
+    echo "  $0 all       # Show complete overview"
+    echo "  $0 report    # Generate detailed report"
+}
+
+function main() {
+    case "${1:-all}" in
+        "status")
+            show_header
+            check_docker_status
+            ;;
+        "containers")
+            show_header
+            show_containers
+            ;;
+        "networks")
+            show_header
+            show_networks
+            ;;
+        "resources")
+            show_header
+            show_resource_usage
+            ;;
+        "security")
+            show_header
+            show_security_status
+            ;;
+        "logs")
+            show_header
+            show_logs
+            ;;
+        "images")
+            show_header
+            show_image_info
+            ;;
+        "network")
+            show_header
+            show_network_activity
+            ;;
+        "report")
+            generate_report
+            ;;
+        "cleanup")
+            cleanup_docker
+            ;;
+        "all")
+            show_header
+            check_docker_status
+            show_containers
+            show_networks
+            show_resource_usage
+            show_security_status
+            ;;
+        "help"|"-h"|"--help")
+            show_help
+            ;;
+        *)
+            echo -e "${CRED}Unknown option: $1${CEND}"
+            show_help
+            exit 1
+            ;;
+    esac
+}
+
+# Check if Docker is installed
+if ! command -v docker >/dev/null 2>&1; then
+    echo -e "${CRED}Docker is not installed or not in PATH${CEND}"
+    exit 1
+fi
+
+# Run main function with all arguments
+main "$@"

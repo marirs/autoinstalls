@@ -1,0 +1,520 @@
+# Docker Backup and Restore Scripts
+# Internal Docker deployment backup utilities
+
+#!/bin/bash
+
+# Docker Backup Script
+# File: /usr/local/bin/docker-backup
+
+# Colors
+CSI="\033["
+CEND="${CSI}0m"
+CRED="${CSI}1;31m"
+CGREEN="${CSI}1;32m"
+CBLUE="${CSI}1;34m"
+CMAGENTA="${CSI}1;35m"
+CCYAN="${CSI}1;36m"
+
+# Configuration
+BACKUP_DIR="/var/backups/docker"
+DATE=$(date +%Y%m%d_%H%M%S)
+RETENTION_DAYS=30
+
+# Create backup directory
+mkdir -p "$BACKUP_DIR"
+
+function show_header() {
+    echo -e "${CBLUE}========================================${CEND}"
+    echo -e "${CBLUE}    Docker Internal Backup Tool${CEND}"
+    echo -e "${CBLUE}========================================${CEND}"
+    echo ""
+}
+
+function backup_containers() {
+    echo -e "${CGREEN}Backing up containers...${CEND}"
+    
+    local backup_path="$BACKUP_DIR/containers_$DATE"
+    mkdir -p "$backup_path"
+    
+    # Get list of running containers
+    local containers=$(docker ps -q)
+    
+    if [ -z "$containers" ]; then
+        echo -e "  ${CYAN}No running containers to backup${CEND}"
+        return
+    fi
+    
+    for container in $containers; do
+        local name=$(docker inspect --format='{{.Name}}' $container | sed 's/\///')
+        local image=$(docker inspect --format='{{.Config.Image}}' $container)
+        
+        echo -e "  Backing up container: $name"
+        
+        # Export container configuration
+        docker inspect $container > "$backup_path/${name}_config.json"
+        
+        # Commit container as image
+        docker commit $container "${name}_backup_$DATE" >> "$backup_path/backup.log" 2>&1
+        
+        # Save container image
+        docker save "${name}_backup_$DATE" | gzip > "$backup_path/${name}_image.tar.gz" >> "$backup_path/backup.log" 2>&1
+        
+        # Remove temporary image
+        docker rmi "${name}_backup_$DATE" >> "$backup_path/backup.log" 2>&1
+        
+        # Backup volumes if any
+        local volumes=$(docker inspect --format='{{range .Mounts}}{{.Name}} {{end}}' $container)
+        if [ -n "$volumes" ]; then
+            echo -e "    Backing up volumes: $volumes"
+            for volume in $volumes; do
+                if [ "$volume" != "" ]; then
+                    docker run --rm -v "$volume":/volume -v "$backup_path":/backup alpine tar czf "/backup/${name}_volume_${volume}.tar.gz" -C /volume . >> "$backup_path/backup.log" 2>&1
+                fi
+            done
+        fi
+    done
+    
+    echo -e "  ${CGREEN}Container backup completed${CEND}"
+}
+
+function backup_images() {
+    echo -e "${CGREEN}Backing up Docker images...${CEND}"
+    
+    local backup_path="$BACKUP_DIR/images_$DATE"
+    mkdir -p "$backup_path"
+    
+    # Get list of images (excluding intermediate images)
+    local images=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep -v "<none>")
+    
+    if [ -z "$images" ]; then
+        echo -e "  ${CYAN}No images to backup${CEND}"
+        return
+    fi
+    
+    for image in $images; do
+        echo -e "  Backing up image: $image"
+        
+        # Create safe filename
+        local safe_name=$(echo "$image" | sed 's/[\/:]/_/g')
+        
+        # Save image
+        docker save "$image" | gzip > "$backup_path/${safe_name}.tar.gz" >> "$backup_path/backup.log" 2>&1
+        
+        # Save image metadata
+        docker inspect "$image" > "$backup_path/${safe_name}_metadata.json"
+    done
+    
+    echo -e "  ${CGREEN}Image backup completed${CEND}"
+}
+
+function backup_volumes() {
+    echo -e "${CGREEN}Backing up Docker volumes...${CEND}"
+    
+    local backup_path="$BACKUP_DIR/volumes_$DATE"
+    mkdir -p "$backup_path"
+    
+    # Get list of volumes
+    local volumes=$(docker volume ls -q)
+    
+    if [ -z "$volumes" ]; then
+        echo -e "  ${CYAN}No volumes to backup${CEND}"
+        return
+    fi
+    
+    for volume in $volumes; do
+        echo -e "  Backing up volume: $volume"
+        
+        # Create backup of volume
+        docker run --rm -v "$volume":/volume -v "$backup_path":/backup alpine tar czf "/backup/${volume}.tar.gz" -C /volume . >> "$backup_path/backup.log" 2>&1
+        
+        # Save volume metadata
+        docker volume inspect "$volume" > "$backup_path/${volume}_metadata.json"
+    done
+    
+    echo -e "  ${CGREEN}Volume backup completed${CEND}"
+}
+
+function backup_compose() {
+    echo -e "${CGREEN}Backing up Docker Compose projects...${CEND}"
+    
+    local backup_path="$BACKUP_DIR/compose_$DATE"
+    mkdir -p "$backup_path"
+    
+    # Find docker-compose.yml files
+    local compose_files=$(find /opt /home /root -name "docker-compose.yml" 2>/dev/null)
+    
+    if [ -z "$compose_files" ]; then
+        echo -e "  ${CYAN}No Docker Compose files found${CEND}"
+        return
+    fi
+    
+    for compose_file in $compose_files; do
+        local project_dir=$(dirname "$compose_file")
+        local project_name=$(basename "$project_dir")
+        
+        echo -e "  Backing up compose project: $project_name"
+        
+        # Backup compose file
+        cp "$compose_file" "$backup_path/${project_name}_docker-compose.yml"
+        
+        # Backup .env file if exists
+        if [ -f "$project_dir/.env" ]; then
+            cp "$project_dir/.env" "$backup_path/${project_name}_.env"
+        fi
+        
+        # Backup project directory structure
+        tar czf "$backup_path/${project_name}_project.tar.gz" -C "$project_dir" . >> "$backup_path/backup.log" 2>&1
+    done
+    
+    echo -e "  ${CGREEN}Docker Compose backup completed${CEND}"
+}
+
+function backup_configuration() {
+    echo -e "${CGREEN}Backing up Docker configuration...${CEND}"
+    
+    local backup_path="$BACKUP_DIR/config_$DATE"
+    mkdir -p "$backup_path"
+    
+    # Backup Docker daemon configuration
+    if [ -f /etc/docker/daemon.json ]; then
+        cp /etc/docker/daemon.json "$backup_path/"
+        echo -e "  Backed up daemon.json"
+    fi
+    
+    # Backup seccomp profile
+    if [ -f /etc/docker/seccomp.json ]; then
+        cp /etc/docker/seccomp.json "$backup_path/"
+        echo -e "  Backed up seccomp.json"
+    fi
+    
+    # Backup Docker networks configuration
+    docker network ls > "$backup_path/networks.txt"
+    docker network inspect $(docker network ls -q) > "$backup_path/networks_config.json"
+    
+    # Backup user namespace mappings
+    if [ -f /etc/subuid ]; then
+        cp /etc/subuid "$backup_path/"
+    fi
+    if [ -f /etc/subgid ]; then
+        cp /etc/subgid "$backup_path/"
+    fi
+    
+    # Backup firewall rules
+    if command -v ufw >/dev/null 2>&1; then
+        ufw status verbose > "$backup_path/ufw_status.txt"
+    fi
+    
+    echo -e "  ${CGREEN}Configuration backup completed${CEND}"
+}
+
+function create_full_backup() {
+    echo -e "${CGREEN}Creating full Docker backup...${CEND}"
+    
+    local backup_path="$BACKUP_DIR/full_backup_$DATE"
+    mkdir -p "$backup_path"
+    
+    # Create backup info
+    cat > "$backup_path/backup_info.txt" << EOF
+Docker Full Backup
+================
+Date: $(date)
+Hostname: $(hostname)
+Docker Version: $(docker --version)
+Docker Compose Version: $(docker-compose --version)
+Running Containers: $(docker ps -q | wc -l)
+Total Images: $(docker images -q | wc -l)
+Total Volumes: $(docker volume ls -q | wc -l)
+Total Networks: $(docker network ls -q | wc -l)
+
+Backup Contents:
+- Container configurations and images
+- Docker images
+- Docker volumes
+- Docker Compose projects
+- Docker configuration files
+- Firewall rules
+EOF
+    
+    # Run all backup functions
+    backup_containers
+    backup_images
+    backup_volumes
+    backup_compose
+    backup_configuration
+    
+    # Create compressed archive
+    echo -e "  Creating compressed archive..."
+    tar czf "$BACKUP_DIR/docker_full_backup_$DATE.tar.gz" -C "$BACKUP_DIR" "full_backup_$DATE" >> "$backup_path/backup.log" 2>&1
+    
+    # Remove uncompressed backup
+    rm -rf "$backup_path"
+    
+    echo -e "  ${CGREEN}Full backup completed: docker_full_backup_$DATE.tar.gz${CEND}"
+}
+
+function restore_containers() {
+    if [ -z "$1" ]; then
+        echo -e "${CRED}Usage: $0 restore-containers <backup_date>${CEND}"
+        return
+    fi
+    
+    local backup_date="$1"
+    local backup_path="$BACKUP_DIR/containers_$backup_date"
+    
+    if [ ! -d "$backup_path" ]; then
+        echo -e "${CRED}Backup not found: $backup_path${CEND}"
+        return
+    fi
+    
+    echo -e "${CGREEN}Restoring containers from $backup_date...${CEND}"
+    
+    # Restore container images
+    for image_file in "$backup_path"/*_image.tar.gz; do
+        if [ -f "$image_file" ]; then
+            echo -e "  Restoring image: $(basename "$image_file")"
+            gunzip -c "$image_file" | docker load >> "$backup_path/restore.log" 2>&1
+        fi
+    done
+    
+    # Restore volumes
+    for volume_file in "$backup_path"/*_volume_*.tar.gz; do
+        if [ -f "$volume_file" ]; then
+            local volume_name=$(basename "$volume_file" | sed 's/_volume_.*//' | sed 's/\.tar\.gz//')
+            echo -e "  Restoring volume: $volume_name"
+            
+            # Create volume if it doesn't exist
+            docker volume create "$volume_name" 2>/dev/null
+            
+            # Restore volume data
+            docker run --rm -v "$volume_name":/volume -v "$backup_path":/backup alpine tar xzf "/backup/$(basename "$volume_file")" -C /volume >> "$backup_path/restore.log" 2>&1
+        fi
+    done
+    
+    echo -e "  ${CGREEN}Container restore completed${CEND}"
+    echo -e "  ${CYAN}Note: Container configurations are in $backup_path/*.json${CEND}"
+}
+
+function restore_images() {
+    if [ -z "$1" ]; then
+        echo -e "${CRED}Usage: $0 restore-images <backup_date>${CEND}"
+        return
+    fi
+    
+    local backup_date="$1"
+    local backup_path="$BACKUP_DIR/images_$backup_date"
+    
+    if [ ! -d "$backup_path" ]; then
+        echo -e "${CRED}Backup not found: $backup_path${CEND}"
+        return
+    fi
+    
+    echo -e "${CGREEN}Restoring images from $backup_date...${CEND}"
+    
+    for image_file in "$backup_path"/*.tar.gz; do
+        if [ -f "$image_file" ]; then
+            echo -e "  Restoring image: $(basename "$image_file")"
+            gunzip -c "$image_file" | docker load >> "$backup_path/restore.log" 2>&1
+        fi
+    done
+    
+    echo -e "  ${CGREEN}Image restore completed${CEND}"
+}
+
+function restore_volumes() {
+    if [ -z "$1" ]; then
+        echo -e "${CRED}Usage: $0 restore-volumes <backup_date>${CEND}"
+        return
+    fi
+    
+    local backup_date="$1"
+    local backup_path="$BACKUP_DIR/volumes_$backup_date"
+    
+    if [ ! -d "$backup_path" ]; then
+        echo -e "${CRED}Backup not found: $backup_path${CEND}"
+        return
+    fi
+    
+    echo -e "${CGREEN}Restoring volumes from $backup_date...${CEND}"
+    
+    for volume_file in "$backup_path"/*.tar.gz; do
+        if [ -f "$volume_file" ]; then
+            local volume_name=$(basename "$volume_file" .tar.gz)
+            echo -e "  Restoring volume: $volume_name"
+            
+            # Create volume if it doesn't exist
+            docker volume create "$volume_name" 2>/dev/null
+            
+            # Restore volume data
+            docker run --rm -v "$volume_name":/volume -v "$backup_path":/backup alpine tar xzf "/backup/$volume_name.tar.gz" -C /volume >> "$backup_path/restore.log" 2>&1
+        fi
+    done
+    
+    echo -e "  ${CGREEN}Volume restore completed${CEND}"
+}
+
+function list_backups() {
+    echo -e "${CGREEN}Available Docker Backups:${CEND}"
+    echo ""
+    
+    echo -e "${CBLUE}Full Backups:${CEND}"
+    ls -lh "$BACKUP_DIR"/docker_full_backup_*.tar.gz 2>/dev/null | awk '{print $9, $5, $6, $7, $8}' || echo "  No full backups found"
+    
+    echo ""
+    echo -e "${CBLUE}Container Backups:${CEND}"
+    ls -d "$BACKUP_DIR"/containers_* 2>/dev/null | xargs -I {} basename {} | sort || echo "  No container backups found"
+    
+    echo ""
+    echo -e "${CBLUE}Image Backups:${CEND}"
+    ls -d "$BACKUP_DIR"/images_* 2>/dev/null | xargs -I {} basename {} | sort || echo "  No image backups found"
+    
+    echo ""
+    echo -e "${CBLUE}Volume Backups:${CEND}"
+    ls -d "$BACKUP_DIR"/volumes_* 2>/dev/null | xargs -I {} basename {} | sort || echo "  No volume backups found"
+    
+    echo ""
+}
+
+function cleanup_old_backups() {
+    echo -e "${CGREEN}Cleaning up old backups (older than $RETENTION_DAYS days)...${CEND}"
+    
+    # Remove old full backups
+    find "$BACKUP_DIR" -name "docker_full_backup_*.tar.gz" -mtime +$RETENTION_DAYS -delete
+    echo -e "  Removed old full backups"
+    
+    # Remove old partial backups
+    find "$BACKUP_DIR" -type d -name "*_*" -mtime +$RETENTION_DAYS -exec rm -rf {} + 2>/dev/null
+    echo -e "  Removed old partial backups"
+    
+    echo -e "  ${CGREEN}Cleanup completed${CEND}"
+}
+
+function verify_backup() {
+    if [ -z "$1" ]; then
+        echo -e "${CRED}Usage: $0 verify <backup_file>${CEND}"
+        return
+    fi
+    
+    local backup_file="$1"
+    
+    if [ ! -f "$backup_file" ]; then
+        echo -e "${CRED}Backup file not found: $backup_file${CEND}"
+        return
+    fi
+    
+    echo -e "${CGREEN}Verifying backup: $backup_file${CEND}"
+    
+    # Test archive integrity
+    if tar -tzf "$backup_file" >/dev/null 2>&1; then
+        echo -e "  ${CGREEN}Archive integrity: OK${CEND}"
+    else
+        echo -e "  ${CRED}Archive integrity: FAILED${CEND}"
+        return
+    fi
+    
+    # Show backup info if available
+    local temp_dir="/tmp/docker_verify_$(date +%s)"
+    mkdir -p "$temp_dir"
+    
+    tar -xzf "$backup_file" -C "$temp_dir" 2>/dev/null
+    
+    if [ -f "$temp_dir/full_backup_*/backup_info.txt" ]; then
+        echo -e "  ${CBLUE}Backup Information:${CEND}"
+        cat "$temp_dir"/full_backup_*/backup_info.txt | sed 's/^/    /'
+    fi
+    
+    rm -rf "$temp_dir"
+    
+    echo -e "  ${CGREEN}Backup verification completed${CEND}"
+}
+
+function show_help() {
+    echo -e "${CGREEN}Docker Internal Backup Tool${CEND}"
+    echo ""
+    echo "Usage: $0 [command] [options]"
+    echo ""
+    echo "Commands:"
+    echo "  full                    Create full backup of all Docker data"
+    echo "  containers              Backup running containers"
+    echo "  images                  Backup Docker images"
+    echo "  volumes                 Backup Docker volumes"
+    echo "  compose                 Backup Docker Compose projects"
+    echo "  config                  Backup Docker configuration"
+    echo "  restore-containers <date> Restore containers from backup"
+    echo "  restore-images <date>    Restore images from backup"
+    echo "  restore-volumes <date>   Restore volumes from backup"
+    echo "  list                    List available backups"
+    echo "  verify <backup_file>     Verify backup integrity"
+    echo "  cleanup                 Remove old backups"
+    echo "  help                    Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0 full                 # Create full backup"
+    echo "  $0 restore-containers 20240204_120000 # Restore containers"
+    echo "  $0 verify /var/backups/docker/docker_full_backup_20240204_120000.tar.gz"
+    echo ""
+    echo "Backup location: $BACKUP_DIR"
+}
+
+function main() {
+    case "${1}" in
+        "full")
+            show_header
+            create_full_backup
+            ;;
+        "containers")
+            show_header
+            backup_containers
+            ;;
+        "images")
+            show_header
+            backup_images
+            ;;
+        "volumes")
+            show_header
+            backup_volumes
+            ;;
+        "compose")
+            show_header
+            backup_compose
+            ;;
+        "config")
+            show_header
+            backup_configuration
+            ;;
+        "restore-containers")
+            restore_containers "$2"
+            ;;
+        "restore-images")
+            restore_images "$2"
+            ;;
+        "restore-volumes")
+            restore_volumes "$2"
+            ;;
+        "list")
+            list_backups
+            ;;
+        "verify")
+            verify_backup "$2"
+            ;;
+        "cleanup")
+            cleanup_old_backups
+            ;;
+        "help"|"-h"|"--help")
+            show_help
+            ;;
+        *)
+            echo -e "${CRED}Unknown command: $1${CEND}"
+            show_help
+            exit 1
+            ;;
+    esac
+}
+
+# Check if Docker is installed
+if ! command -v docker >/dev/null 2>&1; then
+    echo -e "${CRED}Docker is not installed or not in PATH${CEND}"
+    exit 1
+fi
+
+# Run main function with all arguments
+main "$@"
