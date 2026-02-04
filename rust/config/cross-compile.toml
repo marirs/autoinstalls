@@ -14,6 +14,17 @@ ar = "aarch64-linux-gnu-ar"
 linker = "arm-linux-gnueabihf-gcc"
 ar = "arm-linux-gnueabihf-ar"
 
+# macOS cross-compilation using OSXCross
+[target.x86_64-apple-darwin]
+# Linker for macOS x64 target (using OSXCross)
+linker = "o64-clang"
+ar = "o64-ar"
+
+[target.aarch64-apple-darwin]
+# Linker for macOS ARM64 target (using OSXCross)
+linker = "oa64-clang"
+ar = "oa64-ar"
+
 [env]
 # Set environment variables for cross-compilation
 CC_x86_64-pc-windows-gnu = "x86_64-w64-mingw32-gcc"
@@ -24,6 +35,17 @@ CXX_aarch64-unknown-linux-gnu = "aarch64-linux-gnu-g++"
 
 CC_armv7-unknown-linux-gnueabihf = "arm-linux-gnueabihf-gcc"
 CXX_armv7-unknown-linux-gnueabihf = "arm-linux-gnueabihf-g++"
+
+# macOS cross-compilation environment variables
+CC_x86_64-apple-darwin = "o64-clang"
+CXX_x86_64-apple-darwin = "o64-clang++"
+
+CC_aarch64-apple-darwin = "oa64-clang"
+CXX_aarch64-apple-darwin = "oa64-clang++"
+
+# OSXCross SDK path
+OSXCROSS_SDK_x86_64-apple-darwin = "$HOME/osxcross/target/SDK/MacOSX10.15.sdk"
+OSXCROSS_SDK_aarch64-apple-darwin = "$HOME/osxcross/target/SDK/MacOSX10.15.sdk"
 
 # Basic library paths for cross-compilation
 PKG_CONFIG_PATH_x86_64-unknown-linux-gnu = "/usr/lib/x86_64-linux-gnu/pkgconfig"

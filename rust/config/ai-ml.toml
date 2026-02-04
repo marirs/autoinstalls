@@ -62,19 +62,96 @@ PROTOBUF_ROOT = "/usr"
 PROTOBUF_INCLUDE_DIR = "/usr/include/google/protobuf"
 PROTOBUF_LIB = "/usr/lib/arm-linux-gnueabihf/libprotobuf.so"
 
-# AI/ML Environment Variables
+# macOS cross-compilation targets
+[target.x86_64-apple-darwin]
+# OpenBLAS configuration for macOS Intel
+OPENBLAS_ROOT = "/usr/local"
+OPENBLAS_INCLUDE_DIR = "/usr/local/include/openblas"
+OPENBLAS_LIB = "/usr/local/lib/libopenblas.dylib"
+
+# HDF5 configuration for macOS Intel
+HDF5_DIR = "/usr/local"
+HDF5_INCLUDE_DIR = "/usr/local/include/hdf5"
+HDF5_LIB = "/usr/local/lib/libhdf5.dylib"
+
+# LightGBM configuration for macOS Intel
+LIGHTGBM_DIR = "/usr/local"
+LIGHTGBM_INCLUDE_DIR = "/usr/local/include/LightGBM"
+LIGHTGBM_LIB = "/usr/local/lib/liblightgbm.dylib"
+
+# Protocol Buffers configuration for macOS Intel
+PROTOBUF_ROOT = "/usr/local"
+PROTOBUF_INCLUDE_DIR = "/usr/local/include/google/protobuf"
+PROTOBUF_LIB = "/usr/local/lib/libprotobuf.dylib"
+
+[target.aarch64-apple-darwin]
+# OpenBLAS configuration for macOS ARM64
+OPENBLAS_ROOT = "/opt/homebrew"
+OPENBLAS_INCLUDE_DIR = "/opt/homebrew/include/openblas"
+OPENBLAS_LIB = "/opt/homebrew/lib/libopenblas.dylib"
+
+# HDF5 configuration for macOS ARM64
+HDF5_DIR = "/opt/homebrew"
+HDF5_INCLUDE_DIR = "/opt/homebrew/include/hdf5"
+HDF5_LIB = "/opt/homebrew/lib/libhdf5.dylib"
+
+# LightGBM configuration for macOS ARM64
+LIGHTGBM_DIR = "/opt/homebrew"
+LIGHTGBM_INCLUDE_DIR = "/opt/homebrew/include/LightGBM"
+LIGHTGBM_LIB = "/opt/homebrew/lib/liblightgbm.dylib"
+
+# Protocol Buffers configuration for macOS ARM64
+PROTOBUF_ROOT = "/opt/homebrew"
+PROTOBUF_INCLUDE_DIR = "/opt/homebrew/include/google/protobuf"
+PROTOBUF_LIB = "/opt/homebrew/lib/libprotobuf.dylib"
+
+# Windows cross-compilation target
+[target.x86_64-pc-windows-gnu]
+# OpenBLAS configuration for Windows
+OPENBLAS_ROOT = "/usr/x86_64-w64-mingw32"
+OPENBLAS_INCLUDE_DIR = "/usr/x86_64-w64-mingw32/include/openblas"
+OPENBLAS_LIB = "/usr/x86_64-w64-mingw32/lib/libopenblas.dll.a"
+
+# HDF5 configuration for Windows
+HDF5_DIR = "/usr/x86_64-w64-mingw32"
+HDF5_INCLUDE_DIR = "/usr/x86_64-w64-mingw32/include/hdf5"
+HDF5_LIB = "/usr/x86_64-w64-mingw32/lib/libhdf5.dll.a"
+
+# LightGBM configuration for Windows
+LIGHTGBM_DIR = "/usr/x86_64-w64-mingw32"
+LIGHTGBM_INCLUDE_DIR = "/usr/x86_64-w64-mingw32/include/LightGBM"
+LIGHTGBM_LIB = "/usr/x86_64-w64-mingw32/lib/liblightgbm.dll.a"
+
+# Protocol Buffers configuration for Windows
+PROTOBUF_ROOT = "/usr/x86_64-w64-mingw32"
+PROTOBUF_INCLUDE_DIR = "/usr/x86_64-w64-mingw32/include/google/protobuf"
+PROTOBUF_LIB = "/usr/x86_64-w64-mingw32/lib/libprotobuf.dll.a"
+
+# AI/ML Environment Variables for all targets
 OPENBLAS_ROOT_x86_64-unknown-linux-gnu = "/usr"
 OPENBLAS_ROOT_aarch64-unknown-linux-gnu = "/usr"
 OPENBLAS_ROOT_armv7-unknown-linux-gnueabihf = "/usr"
+OPENBLAS_ROOT_x86_64-apple-darwin = "/usr/local"
+OPENBLAS_ROOT_aarch64-apple-darwin = "/opt/homebrew"
+OPENBLAS_ROOT_x86_64-pc-windows-gnu = "/usr/x86_64-w64-mingw32"
 
 HDF5_DIR_x86_64-unknown-linux-gnu = "/usr"
 HDF5_DIR_aarch64-unknown-linux-gnu = "/usr"
 HDF5_DIR_armv7-unknown-linux-gnueabihf = "/usr"
+HDF5_DIR_x86_64-apple-darwin = "/usr/local"
+HDF5_DIR_aarch64-apple-darwin = "/opt/homebrew"
+HDF5_DIR_x86_64-pc-windows-gnu = "/usr/x86_64-w64-mingw32"
 
 LIGHTGBM_DIR_x86_64-unknown-linux-gnu = "/usr"
 LIGHTGBM_DIR_aarch64-unknown-linux-gnu = "/usr"
 LIGHTGBM_DIR_armv7-unknown-linux-gnueabihf = "/usr"
+LIGHTGBM_DIR_x86_64-apple-darwin = "/usr/local"
+LIGHTGBM_DIR_aarch64-apple-darwin = "/opt/homebrew"
+LIGHTGBM_DIR_x86_64-pc-windows-gnu = "/usr/x86_64-w64-mingw32"
 
 PROTOBUF_ROOT_x86_64-unknown-linux-gnu = "/usr"
 PROTOBUF_ROOT_aarch64-unknown-linux-gnu = "/usr"
 PROTOBUF_ROOT_armv7-unknown-linux-gnueabihf = "/usr"
+PROTOBUF_ROOT_x86_64-apple-darwin = "/usr/local"
+PROTOBUF_ROOT_aarch64-apple-darwin = "/opt/homebrew"
+PROTOBUF_ROOT_x86_64-pc-windows-gnu = "/usr/x86_64-w64-mingw32"

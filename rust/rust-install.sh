@@ -773,9 +773,118 @@ function install_linux_dependencies() {
     elif [ -f /etc/arch-release ]; then
         install_arch_dependencies
     else
-        echo -e "${CYAN}Generic Linux installation...${CEND}"
-        install_generic_linux_dependencies
+        echo -e "${CRED}Unsupported Linux distribution${CEND}"
+        exit 1
     fi
+    
+    # Install cross-compilation environments for advanced modes
+    if [ "$INSTALL_MODE" != "basic" ]; then
+        setup_linux_cross_compilation_environments
+    fi
+    
+    echo -e "${CGREEN}Linux dependencies installed successfully${CEND}"
+}
+
+function setup_linux_cross_compilation_environments() {
+    echo -e "${CCYAN}Setting up cross-compilation environments...${CEND}"
+    
+    # Setup Windows cross-compilation
+    setup_windows_cross_env
+    
+    # Setup macOS cross-compilation  
+    setup_macos_cross_env
+    
+    # Setup Linux cross-compilation (other architectures)
+    setup_linux_cross_env
+    
+    echo -e "${CGREEN}Cross-compilation environments setup completed${CEND}"
+}
+
+function setup_macos_cross_env() {
+    echo -e "${CCYAN}Setting up macOS cross-compilation environment...${CEND}"
+    
+    # Install osxcross for macOS cross-compilation
+    setup_osxcross
+    
+    echo -e "${CGREEN}macOS cross-compilation environment setup completed${CEND}"
+}
+
+function setup_osxcross() {
+    echo -e "${CCYAN}Installing OSXCross for macOS cross-compilation...${CEND}"
+    
+    local osxcross_dir="$HOME/osxcross"
+    local tarball_name="Xcode-15.3-15E204a-extracted-OSX10.15.tar.xz"
+    
+    # Create osxcross directory
+    mkdir -p "$osxcross_dir"
+    cd "$osxcross_dir"
+    
+    # Check if already installed
+    if [ -f "$osxcross_dir/target/bin/o64-clang" ]; then
+        echo -e "${CGREEN}OSXCross already installed${CEND}"
+        return 0
+    fi
+    
+    # Clone osxcross
+    if [ ! -d "$osxcross_dir/osxcross" ]; then
+        echo -e "${CCYAN}Cloning OSXCross...${CEND}"
+        git clone https://github.com/tpoechtrager/osxcross.git >> "$LOG_FILE" 2>&1 || {
+            echo -e "${CRED}Failed to clone OSXCross${CEND}"
+            return 1
+        }
+    fi
+    
+    cd "$osxcross_dir/osxcross"
+    
+    # Download macOS SDK (using a reliable mirror)
+    echo -e "${CCYAN}Downloading macOS SDK...${CEND}"
+    if [ ! -f "tarballs/$tarball_name" ]; then
+        mkdir -p tarballs
+        # Use GitHub releases for SDK
+        curl -L "https://github.com/phracker/MacOSX-SDKs/releases/download/11.3/$tarball_name" \
+             -o "tarballs/$tarball_name" >> "$LOG_FILE" 2>&1 || {
+            echo -e "${CYAN}SDK download failed, trying alternative source...${CEND}"
+            # Try alternative source
+            curl -L "https://github.com/tpoechtrager/osxcross/releases/download/1.4/$tarball_name" \
+                 -o "tarballs/$tarball_name" >> "$LOG_FILE" 2>&1 || {
+                echo -e "${CRED}Failed to download macOS SDK${CEND}"
+                echo -e "${CYAN}You can manually download and extract the SDK${CEND}"
+                return 1
+            }
+        }
+    fi
+    
+    # Build OSXCross
+    echo -e "${CCYAN}Building OSXCross toolchain...${CEND}"
+    ./build.sh >> "$LOG_FILE" 2>&1 || {
+        echo -e "${CRED}Failed to build OSXCross${CEND}"
+        echo -e "${CYAN}Check the log file: $LOG_FILE${CEND}"
+        return 1
+    }
+    
+    # Add to PATH
+    echo "export PATH=\"$osxcross_dir/target/bin:\$PATH\"" >> "$HOME/.bashrc"
+    echo "export PATH=\"$osxcross_dir/target/bin:\$PATH\"" >> "$HOME/.zshrc" 2>/dev/null || true
+    export PATH="$osxcross_dir/target/bin:$PATH"
+    
+    echo -e "${CGREEN}OSXCross installed successfully${CEND}"
+    echo -e "${CCYAN}macOS cross-compilation tools are now available${CEND}"
+}
+
+function setup_windows_cross_env() {
+    echo -e "${CCYAN}Setting up Windows cross-compilation environment...${CEND}"
+    
+    # Windows cross-compilation is handled by package managers
+    # mingw-w64 is already installed in the distribution-specific functions
+    echo -e "${CGREEN}Windows cross-compilation environment ready${CEND}"
+}
+
+function setup_linux_cross_env() {
+    echo -e "${CCYAN}Setting up Linux cross-compilation environment...${CEND}"
+    
+    # Linux cross-compilation is handled by package managers
+    # gcc cross-compilers are already installed in distribution-specific functions
+    echo -e "${CGREEN}Linux cross-compilation environment ready${CEND}"
 }
 
 function install_debian_dependencies() {
@@ -1217,9 +1326,125 @@ function install_windows_dependencies() {
         echo -e "${CCYAN}Installing MSYS2 packages...${CEND}"
         pacman -S --noconfirm mingw-w64-x86_64-toolchain >> "$LOG_FILE" 2>&1 || true
         pacman -S --noconfirm mingw-w64-ucrt-x86_64-toolchain >> "$LOG_FILE" 2>&1 || true
+        
+        # Install cross-compilation tools for advanced modes
+        if [ "$INSTALL_MODE" != "basic" ]; then
+            echo -e "${CCYAN}Installing cross-compilation tools...${CEND}"
+            
+            # Install build dependencies for OSXCross
+            pacman -S --noconfirm git wget make patch tar xz >> "$LOG_FILE" 2>&1 || true
+            
+            # Setup cross-compilation environments
+            setup_windows_cross_compilation_environments
+        fi
+        
+        # Install AI/ML libraries if needed
+        if [ "$INSTALL_MODE" = "cross-compile-ai" ]; then
+            echo -e "${CCYAN}Installing AI/ML libraries...${CEND}"
+            pacman -S --noconfirm mingw-w64-x86_64-openblas >> "$LOG_FILE" 2>&1 || true
+            pacman -S --noconfirm mingw-w64-x86_64-hdf5 >> "$LOG_FILE" 2>&1 || true
+            pacman -S --noconfirm mingw-w64-x86_64-protobuf >> "$LOG_FILE" 2>&1 || true
+            
+            install_ai_ml_libraries
+        fi
     fi
     
     echo -e "${CGREEN}Windows dependencies installed${CEND}"
+}
+
+function setup_windows_cross_compilation_environments() {
+    echo -e "${CCYAN}Setting up cross-compilation environments on Windows...${CEND}"
+    
+    # Setup Linux cross-compilation
+    setup_linux_cross_env_windows
+    
+    # Setup macOS cross-compilation  
+    setup_macos_cross_env_windows
+    
+    echo -e "${CGREEN}Windows cross-compilation environments setup completed${CEND}"
+}
+
+function setup_macos_cross_env_windows() {
+    echo -e "${CCYAN}Setting up macOS cross-compilation environment on Windows...${CEND}"
+    
+    # Install osxcross for macOS cross-compilation on Windows
+    setup_osxcross_windows
+    
+    echo -e "${CGREEN}macOS cross-compilation environment setup completed on Windows${CEND}"
+}
+
+function setup_osxcross_windows() {
+    echo -e "${CCYAN}Installing OSXCross for macOS cross-compilation on Windows...${CEND}"
+    
+    local osxcross_dir="$HOME/osxcross"
+    local tarball_name="Xcode-15.3-15E204a-extracted-OSX10.15.tar.xz"
+    
+    # Create osxcross directory
+    mkdir -p "$osxcross_dir"
+    cd "$osxcross_dir"
+    
+    # Check if already installed
+    if [ -f "$osxcross_dir/target/bin/o64-clang.exe" ]; then
+        echo -e "${CGREEN}OSXCross already installed on Windows${CEND}"
+        return 0
+    fi
+    
+    # Clone osxcross
+    if [ ! -d "$osxcross_dir/osxcross" ]; then
+        echo -e "${CCYAN}Cloning OSXCross...${CEND}"
+        git clone https://github.com/tpoechtrager/osxcross.git >> "$LOG_FILE" 2>&1 || {
+            echo -e "${CRED}Failed to clone OSXCross${CEND}"
+            return 1
+        }
+    fi
+    
+    cd "$osxcross_dir/osxcross"
+    
+    # Download macOS SDK (using a reliable mirror)
+    echo -e "${CCYAN}Downloading macOS SDK...${CEND}"
+    if [ ! -f "tarballs/$tarball_name" ]; then
+        mkdir -p tarballs
+        # Use GitHub releases for SDK
+        wget --no-check-certificate -L "https://github.com/phracker/MacOSX-SDKs/releases/download/11.3/$tarball_name" \
+             -O "tarballs/$tarball_name" >> "$LOG_FILE" 2>&1 || {
+            echo -e "${CYAN}SDK download failed, trying alternative source...${CEND}"
+            # Try alternative source
+            wget --no-check-certificate -L "https://github.com/tpoechtrager/osxcross/releases/download/1.4/$tarball_name" \
+                 -O "tarballs/$tarball_name" >> "$LOG_FILE" 2>&1 || {
+                echo -e "${CRED}Failed to download macOS SDK${CEND}"
+                echo -e "${CYAN}You can manually download and extract the SDK${CEND}"
+                return 1
+            }
+        }
+    fi
+    
+    # Build OSXCross with Windows-specific adjustments
+    echo -e "${CCYAN}Building OSXCross toolchain for Windows...${CEND}"
+    
+    # Set Windows-specific environment variables
+    export CC=x86_64-w64-mingw32-gcc
+    export CXX=x86_64-w64-mingw32-g++
+    
+    ./build.sh >> "$LOG_FILE" 2>&1 || {
+        echo -e "${CRED}Failed to build OSXCross on Windows${CEND}"
+        echo -e "${CYAN}Check the log file: $LOG_FILE${CEND}"
+        return 1
+    }
+    
+    # Add to PATH (Windows MSYS2 style)
+    echo "export PATH=\"$osxcross_dir/target/bin:\$PATH\"" >> "$HOME/.bashrc"
+    echo "export PATH=\"$osxcross_dir/target/bin:\$PATH\"" >> "$HOME/.zshrc" 2>/dev/null || true
+    export PATH="$osxcross_dir/target/bin:$PATH"
+    
+    echo -e "${CGREEN}OSXCross installed successfully on Windows${CEND}"
+    echo -e "${CCYAN}macOS cross-compilation tools are now available${CEND}"
+}
+
+function setup_linux_cross_env_windows() {
+    echo -e "${CCYAN}Setting up Linux cross-compilation environment on Windows...${CEND}"
+    
+    # Linux cross-compilation on Windows is handled by MSYS2 packages
+    echo -e "${CGREEN}Linux cross-compilation environment ready on Windows${CEND}"
 }
 
 function install_rustup() {

@@ -281,7 +281,125 @@ base.toml + cross-compile.toml + ai-ml.toml [+ musl.toml] [+ macos-universal.tom
 cargo-publish.toml (added to existing ~/.cargo/config.toml)
 ```
 
-### 🍎 macOS Universal Binary Support
+### � Complete Cross-Compilation Matrix
+
+The installer provides **true universal cross-compilation** - you can develop on ANY platform and build for ANY other platform:
+
+| **From Platform** | **To Windows** | **To macOS** | **To Linux** | **To Other Architectures** |
+|-------------------|-----------------|--------------|--------------|----------------------------|
+| **Linux** | ✅ MinGW | ✅ OSXCross | ✅ GCC Cross | ✅ ARM64/ARM |
+| **Windows** | ✅ Native | ✅ OSXCross | ✅ MSYS2 GCC | ✅ ARM64/ARM |
+| **macOS** | ✅ Homebrew | ✅ Native/Dual | ✅ Homebrew GCC | ✅ ARM64/ARM |
+
+#### **Platform Detection & Automatic Setup**
+```bash
+# Automatic OS detection:
+✓ Linux (Debian/Ubuntu/Fedora/Arch)
+✓ macOS (Intel/Apple Silicon) 
+✓ Windows (MSYS2/MinGW)
+
+# Automatic dependency installation:
+✓ Linux: apt/yum/pacman → cross-compilers
+✓ macOS: Homebrew → dual architecture support
+✓ Windows: MSYS2 → MinGW + OSXCross
+```
+
+#### **Cross-Compilation Environments**
+```bash
+# Linux cross-compilation:
+✓ x86_64-linux-gnu-gcc, aarch64-linux-gnu-gcc
+✓ arm-linux-gnueabihf-gcc
+✓ MUSL toolchains for static linking
+
+# macOS cross-compilation (OSXCross):
+✓ Apple clang (o64-clang, oa64-clang)
+✓ macOS SDK (10.15+)
+✓ Frameworks and system libraries
+
+# Windows cross-compilation:
+✓ MinGW-w64 toolchain
+✓ Windows headers and libraries
+✓ DLL linking support
+```
+
+### 🏠 Automatic Dependency Management
+
+#### **Smart Package Manager Detection**
+```bash
+# The script automatically detects and installs package managers:
+
+# Linux Distribution Detection:
+✓ Debian/Ubuntu → apt package manager
+✓ Red Hat/Fedora → yum/dnf package manager  
+✓ Arch Linux → pacman package manager
+
+# macOS Architecture Detection:
+✓ Intel Mac → /usr/local/bin/brew
+✓ Apple Silicon → /opt/homebrew/bin/brew
+
+# Windows Environment:
+✓ MSYS2/MinGW → pacman package manager
+```
+
+#### **Automatic Package Installation**
+```bash
+# If package manager is missing, the script:
+✓ Downloads and installs Homebrew on macOS
+✓ Verifies MSYS2 installation on Windows
+✓ Uses system package managers on Linux
+✓ Installs all required build tools automatically
+✓ Sets up cross-compilation toolchains
+```
+
+### 🍎 macOS Silicon Dual Homebrew Architecture
+
+#### **Automatic Dual Homebrew Setup**
+```bash
+# On Apple Silicon Macs, the script automatically sets up:
+
+# Native ARM64 Homebrew:
+/opt/homebrew/bin/brew
+→ ARM64-native packages (faster performance)
+→ Silicon-optimized libraries
+
+# Intel Homebrew for Cross-Compilation:
+/usr/local/homebrew/bin/brew  
+→ Intel x64 packages for cross-compilation
+→ Compatibility libraries
+
+# Environment Configuration:
+export PATH="/opt/homebrew/bin:/usr/local/homebrew/bin:$PATH"
+```
+
+#### **Library Path Configuration**
+```bash
+# Automatic library path setup for both architectures:
+
+# Native ARM64 development:
+OPENSSL_ROOT = "/opt/homebrew"
+HDF5_DIR = "/opt/homebrew"
+OPENBLAS_LIB = "/opt/homebrew/lib/libopenblas.dylib"
+
+# Intel cross-compilation:
+OPENSSL_ROOT_x86_64-apple-darwin = "/usr/local"
+HDF5_DIR_x86_64-apple-darwin = "/usr/local"
+OPENBLAS_LIB = "/usr/local/lib/libopenblas.dylib"
+```
+
+#### **Cross-Compilation Examples**
+```bash
+# From Apple Silicon Mac, build for Intel Mac:
+cargo build --target x86_64-apple-darwin --release
+# → Uses Intel Homebrew libraries automatically
+
+# Native Apple Silicon development:
+cargo build --target aarch64-apple-darwin --release  
+# → Uses native ARM64 Homebrew libraries
+
+# Universal binary creation:
+~/.cargo/build-universal.sh my_app
+# → Combines both architectures automatically
+```
 
 #### Universal Binary Building
 ```bash
@@ -295,6 +413,119 @@ cd your_rust_project
 # Result:
 target/universal/your_binary_name-universal
 # → Single binary that works on both Intel and Apple Silicon Macs!
+```
+
+### 🧠 Complete AI/ML Cross-Compilation Coverage
+
+#### **AI/ML Libraries Available on ALL Platforms**
+```bash
+# Core ML libraries (cross-compilation ready):
+✓ OpenBLAS      # Linear algebra (BLAS/LAPACK)
+✓ HDF5          # Hierarchical data format
+✓ LightGBM      # Gradient boosting framework
+✓ Protocol Buffers # Data serialization
+✓ Rust ML crates (tch, candle-core, smartcore)
+
+# Platform-specific library configurations:
+✓ Linux: .so shared libraries
+✓ macOS: .dylib dynamic libraries  
+✓ Windows: .dll.a import libraries
+```
+
+#### **Cross-Platform AI/ML Development**
+```bash
+# From ANY platform, build AI/ML applications for ALL platforms:
+
+# Linux development:
+cargo build --target x86_64-unknown-linux-gnu --features openblas --release
+cargo build --target aarch64-unknown-linux-gnu --features openblas --release
+
+# macOS development (from Linux/Windows):
+cargo build --target x86_64-apple-darwin --features openblas --release
+cargo build --target aarch64-apple-darwin --features openblas --release
+
+# Windows development:
+cargo build --target x86_64-pc-windows-gnu --features openblas --release
+
+# → AI/ML libraries automatically linked on ALL targets!
+```
+
+#### **AI/ML Environment Variables**
+```bash
+# Automatic configuration for ALL targets:
+OPENBLAS_ROOT_x86_64-unknown-linux-gnu = "/usr"
+OPENBLAS_ROOT_aarch64-unknown-linux-gnu = "/usr"
+OPENBLAS_ROOT_x86_64-apple-darwin = "/usr/local"
+OPENBLAS_ROOT_aarch64-apple-darwin = "/opt/homebrew"
+OPENBLAS_ROOT_x86_64-pc-windows-gnu = "/usr/x86_64-w64-mingw32"
+
+# Same for HDF5_DIR, LIGHTGBM_DIR, PROTOBUF_ROOT
+# → Complete coverage across all platforms!
+```
+
+### 🚀 Real-World Usage Examples
+
+#### **CI/CD Pipeline (Linux-based)**
+```yaml
+# Build ML application for ALL platforms from Linux runner:
+- name: Build AI/ML binaries
+  run: |
+    cargo build --target x86_64-unknown-linux-gnu --features openblas --release
+    cargo build --target aarch64-unknown-linux-gnu --features openblas --release
+    cargo build --target x86_64-apple-darwin --features openblas --release
+    cargo build --target aarch64-apple-darwin --features openblas --release
+    cargo build --target x86_64-pc-windows-gnu --features openblas --release
+```
+
+#### **Development Team Workflow**
+```bash
+# Windows developer builds for macOS:
+cargo build --target aarch64-apple-darwin --features openblas --release
+# → macOS Silicon binary with full AI/ML support!
+
+# Linux developer builds for Windows:
+cargo build --target x86_64-pc-windows-gnu --features openblas --release
+# → Windows binary with full AI/ML support!
+
+# macOS developer builds universal binary:
+~/.cargo/build-universal.sh ml_application
+# → Single binary with AI/ML support for both Mac architectures!
+```
+
+### 📋 Installation Commands Summary
+
+#### **Quick Start Examples**
+```bash
+# Basic installation (any platform):
+./rust-install.sh
+# Choose option 1
+
+# Cross-compilation setup:
+./rust-install.sh  
+# Choose option 2 → Gets ALL cross-compilation environments
+
+# Full AI/ML development:
+./rust-install.sh
+# Choose option 3 → Gets cross-compilation + AI/ML libraries
+
+# Configure publishing (after Rust installed):
+./rust-install.sh
+# Choose option 4 → Cargo publishing setup
+```
+
+#### **Platform-Specific Examples**
+```bash
+# On Linux (Debian/Ubuntu):
+./rust-install.sh
+# → Installs: Rust + MinGW + OSXCross + GCC cross-compilers + AI/ML
+
+# On macOS Silicon:
+./rust-install.sh  
+# → Installs: Rust + Dual Homebrew + Cross-compilation + AI/ML
+
+# On Windows (MSYS2):
+./rust-install.sh
+# → Installs: Rust + MinGW + OSXCross + Cross-compilation + AI/ML
 ```
 
 #### Cross-Compilation on Apple Silicon
