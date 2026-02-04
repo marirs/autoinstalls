@@ -1,0 +1,174 @@
+# MongoDB Backup Script
+# Automated MongoDB backup with compression and rotation
+
+#!/bin/bash
+
+# Configuration
+BACKUP_DIR="/var/backups/mongodb"
+DATE=$(date +%Y%m%d_%H%M%S)
+RETENTION_DAYS=7
+DB_NAME="your_database"
+MONGO_HOST="localhost"
+MONGO_PORT="27017"
+
+# Create backup directory if it doesn't exist
+mkdir -p "$BACKUP_DIR"
+
+# Function to perform backup
+backup_mongodb() {
+    echo "Starting MongoDB backup..."
+    
+    # Create backup directory for this run
+    BACKUP_PATH="$BACKUP_DIR/backup_$DATE"
+    mkdir -p "$BACKUP_PATH"
+    
+    # Backup all databases
+    mongodump --host $MONGO_HOST --port $MONGO_PORT --out "$BACKUP_PATH" --gzip
+    
+    if [ $? -eq 0 ]; then
+        echo "Backup completed successfully: $BACKUP_PATH"
+        
+        # Create backup info file
+        echo "Backup Info" > "$BACKUP_PATH/backup_info.txt"
+        echo "Date: $DATE" >> "$BACKUP_PATH/backup_info.txt"
+        echo "Host: $MONGO_HOST:$MONGO_PORT" >> "$BACKUP_PATH/backup_info.txt"
+        echo "Size: $(du -sh $BACKUP_PATH | cut -f1)" >> "$BACKUP_PATH/backup_info.txt"
+        
+        # Compress the backup
+        tar -czf "$BACKUP_DIR/backup_$DATE.tar.gz" -C "$BACKUP_DIR" "backup_$DATE"
+        rm -rf "$BACKUP_PATH"
+        
+        echo "Backup compressed: backup_$DATE.tar.gz"
+    else
+        echo "Backup failed!"
+        exit 1
+    fi
+}
+
+# Function to restore backup
+restore_mongodb() {
+    if [ -z "$1" ]; then
+        echo "Usage: $0 restore <backup_file>"
+        exit 1
+    fi
+    
+    BACKUP_FILE="$1"
+    
+    if [ ! -f "$BACKUP_FILE" ]; then
+        echo "Backup file not found: $BACKUP_FILE"
+        exit 1
+    fi
+    
+    echo "Restoring from backup: $BACKUP_FILE"
+    
+    # Extract backup
+    TEMP_DIR="/tmp/mongodb_restore_$(date +%s)"
+    mkdir -p "$TEMP_DIR"
+    tar -xzf "$BACKUP_FILE" -C "$TEMP_DIR"
+    
+    # Find the backup directory
+    BACKUP_DIR_NAME=$(ls "$TEMP_DIR" | grep "backup_")
+    RESTORE_PATH="$TEMP_DIR/$BACKUP_DIR_NAME"
+    
+    # Restore database
+    mongorestore --host $MONGO_HOST --port $MONGO_PORT --gzip --drop "$RESTORE_PATH"
+    
+    if [ $? -eq 0 ]; then
+        echo "Restore completed successfully"
+    else
+        echo "Restore failed!"
+        rm -rf "$TEMP_DIR"
+        exit 1
+    fi
+    
+    # Clean up
+    rm -rf "$TEMP_DIR"
+}
+
+# Function to clean old backups
+cleanup_old_backups() {
+    echo "Cleaning up backups older than $RETENTION_DAYS days..."
+    find "$BACKUP_DIR" -name "backup_*.tar.gz" -mtime +$RETENTION_DAYS -delete
+    echo "Cleanup completed"
+}
+
+# Function to list backups
+list_backups() {
+    echo "Available MongoDB backups:"
+    ls -lh "$BACKUP_DIR"/backup_*.tar.gz 2>/dev/null | awk '{print $9, $5, $6, $7, $8}'
+}
+
+# Function to verify backup integrity
+verify_backup() {
+    if [ -z "$1" ]; then
+        echo "Usage: $0 verify <backup_file>"
+        exit 1
+    fi
+    
+    BACKUP_FILE="$1"
+    
+    if [ ! -f "$BACKUP_FILE" ]; then
+        echo "Backup file not found: $BACKUP_FILE"
+        exit 1
+    fi
+    
+    echo "Verifying backup integrity: $BACKUP_FILE"
+    
+    # Test tar file integrity
+    if tar -tzf "$BACKUP_FILE" >/dev/null 2>&1; then
+        echo "Backup file integrity: OK"
+        
+        # Show backup info if available
+        TEMP_DIR="/tmp/mongodb_verify_$(date +%s)"
+        mkdir -p "$TEMP_DIR"
+        tar -xzf "$BACKUP_FILE" -C "$TEMP_DIR" 2>/dev/null
+        
+        BACKUP_DIR_NAME=$(ls "$TEMP_DIR" 2>/dev/null | grep "backup_")
+        if [ -f "$TEMP_DIR/$BACKUP_DIR_NAME/backup_info.txt" ]; then
+            echo "Backup info:"
+            cat "$TEMP_DIR/$BACKUP_DIR_name/backup_info.txt"
+        fi
+        
+        rm -rf "$TEMP_DIR"
+    else
+        echo "Backup file integrity: FAILED"
+        exit 1
+    fi
+}
+
+# Main script logic
+case "$1" in
+    "backup")
+        backup_mongodb
+        cleanup_old_backups
+        ;;
+    "restore")
+        restore_mongodb "$2"
+        ;;
+    "cleanup")
+        cleanup_old_backups
+        ;;
+    "list")
+        list_backups
+        ;;
+    "verify")
+        verify_backup "$2"
+        ;;
+    *)
+        echo "MongoDB Backup Script"
+        echo "Usage: $0 {backup|restore|cleanup|list|verify} [backup_file]"
+        echo ""
+        echo "Commands:"
+        echo "  backup    - Create a new backup"
+        echo "  restore   - Restore from backup file"
+        echo "  cleanup   - Remove old backups"
+        echo "  list      - List available backups"
+        echo "  verify    - Verify backup integrity"
+        echo ""
+        echo "Examples:"
+        echo "  $0 backup"
+        echo "  $0 restore /var/backups/mongodb/backup_20250204_120000.tar.gz"
+        echo "  $0 verify /var/backups/mongodb/backup_20250204_120000.tar.gz"
+        exit 1
+        ;;
+esac

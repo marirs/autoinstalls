@@ -1,0 +1,123 @@
+# MongoDB Service Configuration
+# Systemd service file for MongoDB
+
+[Unit]
+Description=MongoDB Database Server
+Documentation=https://docs.mongodb.org/manual
+After=network.target
+Wants=network.target
+
+[Service]
+Type=forking
+User=mongodb
+Group=mongodb
+RuntimeDirectory=mongodb
+RuntimeDirectoryMode=0755
+SyslogTarget=mongodb-mongod.log
+SyslogFacility=local0
+SyslogLevel=info
+TimeoutStartSec=infinity
+TimeoutStopSec=infinity
+PermissionsStartOnly=true
+PIDFile=/var/run/mongodb/mongod.pid
+EnvironmentFile=-/etc/default/mongod
+LimitNOFILE=64000
+LimitNPROC=64000
+
+# Start MongoDB as a service
+ExecStart=/usr/bin/mongod --config /etc/mongod.conf
+
+# Restart MongoDB
+ExecReload=/bin/kill -HUP $MAINPID
+
+# Send SIGTERM signal to gracefully stop MongoDB
+KillSignal=SIGTERM
+KillMode=process
+KillTimeout=300
+
+# Send SIGKILL if MongoDB doesn't stop after timeout
+KillSignal=SIGKILL
+KillMode=process
+KillTimeout=300
+
+# Restart policy
+Restart=on-failure
+RestartSec=10
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/mongodb /var/log/mongodb /var/run/mongodb
+ReadWriteDirectories=/var/lib/mongodb /var/log/mongodb /var/run/mongodb
+
+# Capability bounding set (remove unnecessary capabilities)
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FSET CAP_FOWNER CAP_SETGID CAP_SETUID CAP_SETPCAP
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FSET CAP_FOWNER CAP_IPC_LOCK CAP_SETGID CAP_SETUID CAP_SETPCAP
+
+# Memory usage limits
+MemoryLimit=infinity
+MemoryMax=infinity
+
+# CPU usage limits
+CPUQuota=infinity
+CPUQuotaPeriod=infinity
+
+# File descriptor limits
+LimitNOFILE=64000
+LimitNPROC=64000
+
+# Network restrictions (if needed)
+# RestrictNetworkInterfaces=eth0
+# IPAddressAllow=127.0.0.1/8
+# IPAddressDeny=0.0.0.0/0
+
+# I/O priority
+IOSchedulingClass=2
+IOWeight=100
+IOReadBandwidthMax=unlimited
+IOWriteBandwidthMax=unlimited
+
+# Device access restrictions
+DeviceAllow=/dev/null
+DeviceAllow=/dev/zero
+DeviceAllow=/dev/random
+DeviceAllow=/dev/urandom
+DevicePolicy=deny
+
+# Mount restrictions
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectKernelLogs=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+
+# Temporary file restrictions
+PrivateTmp=yes
+ProtectSystem=full
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+
+# Environment variables
+Environment=MONGODB_CONFIG_FILE=/etc/mongod.conf
+Environment=MONGODB_PIDFILE=/var/run/mongodb/mongod.pid
+Environment=MONGODB_LOGPATH=/var/log/mongodb/mongod.log
+
+# Pre-execution setup
+ExecStartPre=/usr/bin/mkdir -p /var/lib/mongodb /var/log/mongodb /var/run/mongodb
+ExecStartPre=/usr/bin/chown mongodb:mongodb /var/lib/mongodb /var/log/mongodb /var/run/mongodb
+ExecStartPre=/usr/bin/chmod 0755 /var/lib/mongodb /var/log/mongodb /var/run/mongodb
+
+# Post-execution cleanup
+ExecStopPost=/bin/rm -f /var/run/mongodb/mongod.pid
+
+[Install]
+WantedBy=multi-user.target
+
+[Alias]
+mongod.service

@@ -1,0 +1,61 @@
+# MongoDB Log Rotation Configuration
+# Logrotate configuration for MongoDB logs
+
+/var/log/mongodb/mongod.log {
+    daily
+    missingok
+    rotate 30
+    compress
+    delaycompress
+    notifempty
+    create 644 mongodb mongodb
+    sharedscripts
+    postrotate
+        /bin/kill -SIGUSR1 `cat /var/run/mongodb/mongod.pid 2>/dev/null` 2>/dev/null || true
+    endscript
+}
+
+/var/log/mongodb/audit.log {
+    daily
+    missingok
+    rotate 90
+    compress
+    delaycompress
+    notifempty
+    create 644 mongodb mongodb
+    sharedscripts
+}
+
+/var/log/mongodb/access.log {
+    weekly
+    missingok
+    rotate 52
+    compress
+    delaycompress
+    notifempty
+    create 644 mongodb mongodb
+    sharedscripts
+}
+
+/var/log/mongodb/error.log {
+    weekly
+    missingok
+    rotate 52
+    compress
+    delaycompress
+    notifempty
+    create 644 mongodb mongodb
+    sharedscripts
+}
+
+# Custom application logs (add as needed)
+# /var/log/mongodb/myapp.log {
+#     weekly
+#     missingok
+#     rotate 12
+#     compress
+#     delaycompress
+#     notifempty
+#     create 644 mongodb mongodb
+#     sharedscripts
+# }
