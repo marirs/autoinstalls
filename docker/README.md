@@ -1,15 +1,24 @@
-# Docker README Documentation
-# Internal-only Docker deployment with security hardening
-
-# Docker Internal Installation
-=============================
+# Docker Container Platform Auto-Installation Script
 ![https://img.shields.io/badge/docker-27.0.0-blue](https://img.shields.io/badge/docker-27.0.0-blue)
 ![https://img.shields.io/badge/docker%20compose-2.24.0-blue](https://img.shields.io/badge/docker%20compose-2.24.0-blue)
 ![https://img.shields.io/badge/platform-ubuntu%2018.04%2C%2020.04%2C%2022.04%2C%2024.04%20%7C%20Debian%209.x%2C%2010.x%2C%2011.x%2C%2012.x-orange](https://img.shields.io/badge/platform-ubuntu%2018.04%2C%2020.04%2C%2022.04%2C%2024.04%20%7C%20Debian%209.x%2C%2010.x%2C%2011.x%2C%2012.x-orange)
 ![https://img.shields.io/badge/architecture-x86__64%20%7C%20ARM64-green](https://img.shields.io/badge/architecture-x86__64%20%7C%20ARM64-green)
-![https://img.shields.io/badge/security-secure%20access-blue](https://img.shields.io/badge/security-secure%20access-blue)
+![https://img.shields.io/badge/security-internal%20only-orange](https://img.shields.io/badge/security-internal%20only-orange)
+![https://img.shields.io/badge/status-production%20ready-green](https://img.shields.io/badge/status-production%20ready-green)
 
-Secure Docker installation configured for internal Docker daemon access with internet access for containers and comprehensive security hardening.
+## Overview
+
+This script installs Docker 27.0.0 and Docker Compose 2.24.0 with comprehensive security hardening. The Docker daemon is configured for internal-only access while containers have internet access, providing a secure containerization platform.
+
+## Quick Start
+
+```bash
+# Navigate to the Docker directory
+cd docker/
+
+# Run the installation script
+sudo ./docker-install.sh
+```
 
 ---
 

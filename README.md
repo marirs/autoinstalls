@@ -2,6 +2,8 @@
 ![GitHub](https://img.shields.io/github/license/marirs/autoinstalls)
 ![https://img.shields.io/badge/shell-bash-blue](https://img.shields.io/badge/shell-bash-blue)
 ![https://img.shields.io/badge/platform-ubuntu%2018.04%2C%2020.04%20%7C%20Debian%209.x%2C%2010.x-orange](https://img.shields.io/badge/platform-ubuntu%2018.04%2C%2020.04%20%7C%20Debian%209.x%2C%2010.x-orange)
+![https://img.shields.io/badge/components-7-green](https://img.shields.io/badge/components-7-green)
+![https://img.shields.io/badge/security-hardened-red](https://img.shields.io/badge/security-hardened-red)
 
 A comprehensive collection of automated installation scripts for popular software and development tools. These scripts are designed to simplify the setup process on Ubuntu and Debian systems with proper security configurations and optimizations.
 
@@ -11,6 +13,8 @@ A comprehensive collection of automated installation scripts for popular softwar
 
 ### 🌐 Nginx Web Server
 **High-performance web server with advanced modules and security hardening**
+![https://img.shields.io/badge/version-latest-brightgreen](https://img.shields.io/badge/version-latest-brightgreen)
+![https://img.shields.io/badge/status-production%20ready-green](https://img.shields.io/badge/status-production%20ready-green)
 
 **Features:**
 - ✅ Latest stable Nginx with optimized configuration
@@ -37,8 +41,154 @@ sudo ./nginx-install.sh
 
 ---
 
+### 🗄️ MySQL/MariaDB Database
+**Unified installer for MySQL 8.0 and MariaDB 10.11 with comprehensive security**
+![https://img.shields.io/badge/mysql-8.0-blue](https://img.shields.io/badge/mysql-8.0-blue)
+![https://img.shields.io/badge/mariadb-10.11-orange](https://img.shields.io/badge/mariadb-10.11-orange)
+![https://img.shields.io/badge/security-localhost%20only-red](https://img.shields.io/badge/security-localhost%20only-red)
+
+**Features:**
+- ✅ Interactive database selection (MySQL 8.0 or MariaDB 10.11)
+- ✅ Localhost-only binding for maximum security
+- ✅ Secure password generation and authentication
+- ✅ Anonymous user removal and test database cleanup
+- ✅ Firewall configuration (UFW/iptables)
+- ✅ Systemd security hardening
+- ✅ Automated backup and monitoring tools
+- ✅ Comprehensive verification and testing
+
+**Installation:**
+```bash
+cd mysql/
+sudo ./mysql-install.sh
+# Choose between MySQL 8.0 and MariaDB 10.11 when prompted
+```
+
+**Management Tools:**
+```bash
+# Monitor database status and performance
+mysql-monitor
+
+# Create automated backups
+mysql-backup create
+
+# List available backups
+mysql-backup list
+```
+
+---
+
+### � Redis In-Memory Database
+**High-performance Redis with security hardening and management tools**
+![https://img.shields.io/badge/redis-7.2.4-red](https://img.shields.io/badge/redis-7.2.4-red)
+![https://img.shields.io/badge/security-hardened-brightgreen](https://img.shields.io/badge/security-hardened-brightgreen)
+
+**Features:**
+- ✅ Redis 7.2.4 compiled from source
+- ✅ Localhost-only binding with password authentication
+- ✅ Dangerous commands disabled for security
+- ✅ AOF and RDB persistence configuration
+- ✅ Memory management and performance tuning
+- ✅ Firewall configuration and systemd hardening
+- ✅ Automated backup and monitoring scripts
+- ✅ Comprehensive installation verification
+
+**Installation:**
+```bash
+cd redis/
+sudo ./redis-install.sh
+```
+
+**Management Tools:**
+```bash
+# Monitor Redis status and performance
+redis-monitor
+
+# Create automated backups
+redis-backup create
+
+# Test Redis connection
+redis-cli -a <password> ping
+```
+
+---
+
+### 🐳 Docker Container Platform
+**Container platform with security-focused configuration and management**
+![https://img.shields.io/badge/docker-27.0.0-blue](https://img.shields.io/badge/docker-27.0.0-blue)
+![https://img.shields.io/badge/docker%20compose-2.24.0-blue](https://img.shields.io/badge/docker%20compose-2.24.0-blue)
+![https://img.shields.io/badge/security-internal%20only-orange](https://img.shields.io/badge/security-internal%20only-orange)
+
+**Features:**
+- ✅ Docker 27.0.0 and Docker Compose 2.24.0
+- ✅ Internet access for containers with secure daemon
+- ✅ User namespace remapping and seccomp profiles
+- ✅ Internal Docker bridge networks
+- ✅ Firewall rules for daemon security
+- ✅ Automated backup and monitoring tools
+- ✅ Example configurations for isolated and internet-enabled containers
+
+**Installation:**
+```bash
+cd docker/
+sudo ./docker-install.sh
+```
+
+**Management Tools:**
+```bash
+# Monitor Docker status and containers
+docker-monitor
+
+# Create Docker backups
+docker-backup create
+
+# Run example containers
+cd examples/
+docker-compose up -d
+```
+
+---
+
+### 💾 Redis In-Memory Database
+**High-performance Redis with security hardening and management tools**
+![https://img.shields.io/badge/redis-7.2.4-red](https://img.shields.io/badge/redis-7.2.4-red)
+![https://img.shields.io/badge/security-hardened-brightgreen](https://img.shields.io/badge/security-hardened-brightgreen)
+![https://img.shields.io/badge/status-production%20ready-green](https://img.shields.io/badge/status-production%20ready-green)
+
+**Features:**
+- ✅ Redis 7.2.4 compiled from source
+- ✅ Localhost-only binding with password authentication
+- ✅ Dangerous commands disabled for security
+- ✅ AOF and RDB persistence configuration
+- ✅ Memory management and performance tuning
+- ✅ Firewall configuration and systemd hardening
+- ✅ Automated backup and monitoring scripts
+- ✅ Comprehensive installation verification
+
+**Installation:**
+```bash
+cd redis/
+sudo ./redis-install.sh
+```
+
+**Management Tools:**
+```bash
+# Monitor Redis status and performance
+redis-monitor
+
+# Create automated backups
+redis-backup create
+
+# Test Redis connection
+redis-cli -a <password> ping
+```
+
+---
+
 ### 🐍 Python 3 Development Environment
 **Latest Python 3.11 with development tools and virtual environment management**
+![https://img.shields.io/badge/python-3.11.8-blue](https://img.shields.io/badge/python-3.11.8-blue)
+![https://img.shields.io/badge/status-development%20ready-green](https://img.shields.io/badge/status-development%20ready-green)
 
 **Features:**
 - ✅ Python 3.11.8 (latest stable)
@@ -72,6 +222,8 @@ python3.11 --version
 
 ### 🗄️ MongoDB Database
 **NoSQL database with comprehensive security and management tools**
+![https://img.shields.io/badge/mongodb-latest-green](https://img.shields.io/badge/mongodb-latest-green)
+![https://img.shields.io/badge/security-enterprise%20ready-orange](https://img.shields.io/badge/security-enterprise%20ready-orange)
 
 **Features:**
 - ✅ Latest MongoDB with authentication and SSL
@@ -112,6 +264,8 @@ sudo ./mongodb-install.sh
 
 ### 🐘 PostgreSQL Database
 **Advanced relational database with enterprise-grade features**
+![https://img.shields.io/badge/postgresql-latest-blue](https://img.shields.io/badge/postgresql-latest-blue)
+![https://img.shields.io/badge/features-enterprise%20grade-purple](https://img.shields.io/badge/features-enterprise%20grade-purple)
 
 **Features:**
 - ✅ Latest PostgreSQL with performance tuning
@@ -154,6 +308,8 @@ sudo ./postgresql-install.sh
 
 ### 💻 QEMU Virtualization
 **Full virtualization solution with KVM support**
+![https://img.shields.io/badge/qemu-kvm-ready-green](https://img.shields.io/badge/qemu-kvm-ready-green)
+![https://img.shields.io/badge/status-stable-blue](https://img.shields.io/badge/status-stable-blue)
 
 **Features:**
 - ✅ QEMU with KVM acceleration
@@ -183,20 +339,23 @@ sudo ./inst-libvirt.sh
 ## 🔧 Common Features Across All Scripts
 
 ### 🛡️ Security Best Practices
-- **Localhost-only binding** for databases (MongoDB, PostgreSQL)
+- **Localhost-only binding** for databases (MySQL/MariaDB, Redis, MongoDB, PostgreSQL)
 - **SSL/TLS encryption** where applicable
 - **Authentication** and authorization
-- **Firewall-friendly** configurations
+- **Firewall-friendly** configurations (UFW/iptables support)
 - **Audit logging** and monitoring
 - **Hardened** default settings
+- **Systemd security** with resource limits and restrictions
+- **Password generation** and secure storage
 
 ### 📊 Monitoring and Management
-- **Automated backup** solutions
+- **Automated backup** solutions with scheduling
 - **User management** utilities
 - **Performance monitoring** tools
 - **Log rotation** and management
 - **Status endpoints** for health checks
 - **Alerting** capabilities
+- **Backup verification** and restore tools
 
 ### 🚀 Performance Optimizations
 - **Tuned configurations** for production use
@@ -205,6 +364,7 @@ sudo ./inst-libvirt.sh
 - **Caching** configurations
 - **Compression** support
 - **Parallel processing** where applicable
+- **Memory management** and tuning
 
 ### 📝 Comprehensive Logging
 - **Detailed installation logs**
@@ -212,6 +372,7 @@ sudo ./inst-libvirt.sh
 - **Progress indicators**
 - **Troubleshooting** information
 - **Configuration** documentation
+- **Verification** and testing results
 
 ---
 
@@ -277,6 +438,9 @@ sudo ./<install-script>.sh
 
 ### Log Locations:
 - **Nginx**: `/tmp/nginx-install.log`
+- **MySQL/MariaDB**: `/tmp/mysql-install.log`
+- **Redis**: `/tmp/redis-install.log`
+- **Docker**: `/tmp/docker-install.log`
 - **Python**: `/tmp/py3-install.log`
 - **MongoDB**: `/tmp/mongodb-install.log`
 - **PostgreSQL**: `/tmp/postgresql-install.log`
@@ -294,10 +458,12 @@ sudo ./<install-script>.sh
 - **Security settings**: Modify according to your security requirements
 
 ### Integration Examples:
-- **Web applications**: Nginx + PostgreSQL/Python
-- **API servers**: Nginx + Python + PostgreSQL
-- **Microservices**: Nginx + MongoDB + Python
-- **Development environments**: Python + PostgreSQL + QEMU
+- **Web applications**: Nginx + MySQL/MariaDB/PostgreSQL + Python
+- **API servers**: Nginx + Python + Redis + MySQL/MariaDB
+- **Microservices**: Nginx + MongoDB + Redis + Docker
+- **Development environments**: Python + PostgreSQL + QEMU + Docker
+- **Caching layers**: Redis + MySQL/MariaDB + Nginx
+- **Containerized apps**: Docker + Redis + MySQL/MariaDB + Nginx
 
 ---
 

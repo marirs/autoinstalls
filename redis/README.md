@@ -1,16 +1,30 @@
-# Redis Auto-Installation Script
-# Localhost-only Redis deployment with comprehensive security hardening
+# Redis In-Memory Database Auto-Installation Script
+![https://img.shields.io/badge/redis-7.2.4-red](https://img.shields.io/badge/redis-7.2.4-red)
+![https://img.shields.io/badge/security-hardened-brightgreen](https://img.shields.io/badge/security-hardened-brightgreen)
+![https://img.shields.io/badge/status-production%20ready-green](https://img.shields.io/badge/status-production%20ready-green)
+![https://img.shields.io/badge/memory-optimized-blue](https://img.shields.io/badge/memory-optimized-blue)
 
 ## Overview
 
 This script installs Redis 7.2.4 with comprehensive security hardening for localhost-only deployments. It includes:
 
-- **Security Hardening**: Localhost-only binding, password authentication, dangerous command disabling
-- **Systemd Service**: Security-hardened service with resource limits and restrictions
-- **Firewall Configuration**: UFW rules to block external access while allowing localhost
+- **Source Installation**: Redis 7.2.4 compiled from source with optimizations
+- **Security Hardening**: Localhost-only binding, password authentication, command restrictions
+- **Systemd Service**: Security-hardened service with resource limits and network restrictions
+- **Firewall Configuration**: UFW or iptables rules to block external access while allowing localhost
 - **Monitoring Scripts**: Built-in monitoring and backup utilities
 - **Log Rotation**: Automatic log management
 - **Verification**: Comprehensive installation verification
+
+## Quick Start
+
+```bash
+# Navigate to the Redis directory
+cd redis/
+
+# Run the installation script
+sudo ./redis-install.sh
+```
 
 ## Installation Steps
 

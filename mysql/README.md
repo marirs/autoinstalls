@@ -1,11 +1,14 @@
 # MySQL/MariaDB Auto-Installation Script
-# Localhost-only MySQL/MariaDB deployment with comprehensive security hardening
+![https://img.shields.io/badge/mysql-8.0-blue](https://img.shields.io/badge/mysql-8.0-blue)
+![https://img.shields.io/badge/mariadb-10.11-orange](https://img.shields.io/badge/mariadb-10.11-orange)
+![https://img.shields.io/badge/security-localhost%20only-red](https://img.shields.io/badge/security-localhost%20only-red)
+![https://img.shields.io/badge/status-production%20ready-green](https://img.shields.io/badge/status-production%20ready-green)
 
 ## Overview
 
-This script installs MySQL 8.0 or MariaDB 10.11 with comprehensive security hardening for localhost-only deployments. It includes:
+This script provides a unified installer for both MySQL 8.0 and MariaDB 10.11 with comprehensive security hardening for localhost-only deployments. It includes:
 
-- **Database Selection**: Choose between MySQL 8.0 or MariaDB 10.11 during installation
+- **Interactive Database Selection**: Choose between MySQL 8.0 or MariaDB 10.11 during installation
 - **Security Hardening**: Localhost-only binding, password authentication, user cleanup
 - **Systemd Service**: Security-hardened service with resource limits and restrictions
 - **Firewall Configuration**: UFW or iptables rules to block external access while allowing localhost
@@ -15,7 +18,7 @@ This script installs MySQL 8.0 or MariaDB 10.11 with comprehensive security hard
 
 ## Installation Steps
 
-1. **Database Selection**: Choose between MySQL 8.0 or MariaDB 10.11
+1. **Database Selection**: Interactive choice between MySQL 8.0 and MariaDB 10.11
 2. **System Compatibility Check**: Verifies OS compatibility and existing installations
 3. **Dependency Installation**: Build tools, SSL headers, system utilities
 4. **Repository Setup**: Adds official MySQL or MariaDB repository
@@ -27,6 +30,36 @@ This script installs MySQL 8.0 or MariaDB 10.11 with comprehensive security hard
 10. **Firewall Configuration**: Configures UFW or iptables for localhost-only access
 11. **Monitoring and Backup**: Creates management scripts
 12. **Verification**: Tests connection, security, and configuration
+
+## Quick Start
+
+```bash
+# Navigate to the MySQL directory
+cd mysql/
+
+# Run the installation script
+sudo ./mysql-install.sh
+
+# Choose your database when prompted:
+# 1) MySQL 8.0 (Oracle)
+# 2) MariaDB 10.11 (Community) - [DEFAULT]
+```
+
+## Database Selection Options
+
+### MySQL 8.0 (Oracle)
+- Latest stable version from Oracle
+- Advanced security features
+- Performance improvements
+- JSON document store
+- Window functions
+
+### MariaDB 10.11 (Community) - Default
+- Community-driven fork
+- Enhanced storage engines
+- Additional security features
+- Backward compatibility
+- Open source commitment
 
 ## Security Features
 
@@ -51,22 +84,6 @@ This script installs MySQL 8.0 or MariaDB 10.11 with comprehensive security hard
 - **Skip Show Database**: Prevents users from seeing all databases
 - **Local Infile Disabled**: Prevents LOAD DATA LOCAL INFILE attacks
 - **Character Set**: UTF8MB4 for full Unicode support
-
-## Database Selection Options
-
-### MySQL 8.0 (Oracle)
-- Latest stable version from Oracle
-- Advanced security features
-- Performance improvements
-- JSON document store
-- Window functions
-
-### MariaDB 10.11 (Community)
-- Community-driven fork
-- Enhanced storage engines
-- Additional security features
-- Backward compatibility
-- Open source commitment
 
 ## Configuration Details
 
@@ -165,7 +182,7 @@ conn = mysql.connector.connect(
 cursor = conn.cursor()
 cursor.execute("SELECT VERSION()")
 version = cursor.fetchone()
-print(f"MySQL version: {version[0]}")
+print(f"MySQL/MariaDB version: {version[0]}")
 ```
 
 ```javascript
@@ -183,7 +200,7 @@ const connection = mysql.createConnection({
 
 connection.connect((err) => {
     if (err) throw err;
-    console.log('Connected to MySQL');
+    console.log('Connected to MySQL/MariaDB');
 });
 ```
 
@@ -201,7 +218,7 @@ connection.connect((err) => {
 └── [user_databases]/         # User databases
 
 /var/log/mysql/
-├── error.log                 # MySQL error log
+├── error.log                 # Database error log
 └── slow.log                  # Slow query log
 
 /var/backups/mysql/
@@ -247,10 +264,12 @@ connection.connect((err) => {
 ### Connection Issues
 ```bash
 # Check service status
-systemctl status mysql
+systemctl status mysql    # For MySQL
+systemctl status mariadb  # For MariaDB
 
 # Check logs
-journalctl -u mysql -f
+journalctl -u mysql -f    # For MySQL
+journalctl -u mariadb -f  # For MariaDB
 tail -f /var/log/mysql/error.log
 
 # Test connection
