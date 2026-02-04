@@ -244,41 +244,6 @@ mysql-backup list
 
 ---
 
-### � Redis In-Memory Database
-**High-performance Redis with security hardening and management tools**
-![https://img.shields.io/badge/redis-7.2.4-red](https://img.shields.io/badge/redis-7.2.4-red)
-![https://img.shields.io/badge/security-hardened-brightgreen](https://img.shields.io/badge/security-hardened-brightgreen)
-
-**Features:**
-- ✅ Redis 7.2.4 compiled from source
-- ✅ Localhost-only binding with password authentication
-- ✅ Dangerous commands disabled for security
-- ✅ AOF and RDB persistence configuration
-- ✅ Memory management and performance tuning
-- ✅ Firewall configuration and systemd hardening
-- ✅ Automated backup and monitoring scripts
-- ✅ Comprehensive installation verification
-
-**Installation:**
-```bash
-cd redis/
-sudo ./redis-install.sh
-```
-
-**Management Tools:**
-```bash
-# Monitor Redis status and performance
-redis-monitor
-
-# Create automated backups
-redis-backup create
-
-# Test Redis connection
-redis-cli -a <password> ping
-```
-
----
-
 ### 🐳 Docker Container Platform
 **Container platform with security-focused configuration and management**
 ![https://img.shields.io/badge/docker-27.0.0-blue](https://img.shields.io/badge/docker-27.0.0-blue)
