@@ -2,7 +2,7 @@
 ![GitHub](https://img.shields.io/github/license/marirs/autoinstalls)
 ![https://img.shields.io/badge/shell-bash-blue](https://img.shields.io/badge/shell-bash-blue)
 ![https://img.shields.io/badge/platform-ubuntu%2018.04%2C%2020.04%20%7C%20Debian%209.x%2C%2010.x-orange](https://img.shields.io/badge/platform-ubuntu%2018.04%2C%2020.04%20%7C%20Debian%209.x%2C%2010.x-orange)
-![https://img.shields.io/badge/components-7-green](https://img.shields.io/badge/components-7-green)
+![https://img.shields.io/badge/components-11-green](https://img.shields.io/badge/components-11-green)
 ![https://img.shields.io/badge/security-hardened-red](https://img.shields.io/badge/security-hardened-red)
 
 A comprehensive collection of automated installation scripts for popular software and development tools. These scripts are designed to simplify the setup process on Ubuntu and Debian systems with proper security configurations and optimizations.
@@ -336,10 +336,158 @@ sudo ./inst-libvirt.sh
 
 ---
 
+### 🟢 Node.js JavaScript Runtime
+**Modern JavaScript runtime with development tools and package management**
+![https://img.shields.io/badge/node.js-20.x-lts-green](https://img.shields.io/badge/node.js-20.x-lts-green)
+![https://img.shields.io/badge/npm-10.x-blue](https://img.shields.io/badge/npm-10.x-blue)
+![https://img.shields.io/badge/security-hardened-orange](https://img.shields.io/badge/security-hardened-orange)
+![https://img.shields.io/badge/status-development%20ready-green](https://img.shields.io/badge/status-development%20ready-green)
+
+**Features:**
+- ✅ Node.js 20.x LTS with npm package manager
+- ✅ NodeSource or NVM installation options
+- ✅ Development tools (nodemon, pm2, yarn)
+- ✅ Security-hardened npm configuration
+- ✅ Process management and monitoring
+- ✅ Automated security auditing
+- ✅ Global package management
+- ✅ Performance optimization
+
+**Installation:**
+```bash
+cd nodejs/
+sudo ./nodejs-install.sh
+# Choose between NodeSource LTS or NVM when prompted
+```
+
+**Management Tools:**
+```bash
+# Monitor Node.js status and performance
+nodejs-monitor
+
+# Manage global packages
+nodejs-manager globals
+
+# Security audit
+npm audit
+```
+
+---
+
+### 🔍 Elasticsearch Search Engine
+**Powerful search and analytics engine with comprehensive security**
+![https://img.shields.io/badge/elasticsearch-8.11.0-blue](https://img.shields.io/badge/elasticsearch-8.11.0-blue)
+![https://img.shields.io/badge/security-localhost%20only-red](https://img.shields.io/badge/security-localhost%20only-red)
+![https://img.shields.io/badge/status-production%20ready-green](https://img.shields.io/badge/status-production%20ready-green)
+
+**Features:**
+- ✅ Elasticsearch 8.11.0 with security features
+- ✅ Localhost-only binding for maximum security
+- ✅ Built-in security features enabled
+- ✅ JVM memory optimization
+- ✅ Cluster health monitoring
+- ✅ Index and search capabilities
+- ✅ Management interface (localhost:15672)
+- ✅ Performance tuning
+
+**Installation:**
+```bash
+cd elasticsearch/
+sudo ./elasticsearch-install.sh
+```
+
+**Management Tools:**
+```bash
+# Monitor Elasticsearch status and performance
+elasticsearch-monitor
+
+# Manage Elasticsearch service
+elasticsearch-manager start|stop|restart
+
+# Test connection
+curl http://localhost:9200
+```
+
+---
+
+### 🐰 RabbitMQ Message Broker
+**Reliable message broker with enterprise-grade features**
+![https://img.shields.io/badge/rabbitmq-3.12-orange](https://img.shields.io/badge/rabbitmq-3.12-orange)
+![https://img.shields.io/badge/security-hardened-brightgreen](https://img.shields.io/badge/security-hardened-brightgreen)
+![https://img.shields.io/badge/status-production%20ready-green](https://img.shields.io/badge/status-production%20ready-green)
+
+**Features:**
+- ✅ RabbitMQ 3.12 with Erlang/OTP
+- ✅ Localhost-only binding for security
+- ✅ Management plugin enabled
+- ✅ User and permission management
+- ✅ Queue and connection monitoring
+- ✅ Web management interface
+- ✅ Message persistence and reliability
+- ✅ Performance optimization
+
+**Installation:**
+```bash
+cd rabbitmq/
+sudo ./rabbitmq-install.sh
+```
+
+**Management Tools:**
+```bash
+# Monitor RabbitMQ status and queues
+rabbitmq-monitor
+
+# Manage RabbitMQ service and users
+rabbitmq-manager start|stop|restart
+rabbitmq-manager users
+rabbitmq-manager add-user <username> <password>
+```
+
+---
+
+### ☸️ Kubernetes Container Orchestration
+**Production-grade container orchestration platform**
+![https://img.shields.io/badge/kubernetes-1.29.0-blue](https://img.shields.io/badge/kubernetes-1.29.0-blue)
+![https://img.shields.io/badge/containerd-1.7.11-green](https://img.shields.io/badge/containerd-1.7.11-green)
+![https://img.shields.io/badge/security-enterprise%20ready-purple](https://img.shields.io/badge/kubernetes-1.29.0-blue)
+![https://img.shields.io/badge/status-production%20ready-green](https://img.shields.io/badge/status-production%20ready-green)
+
+**Features:**
+- ✅ Kubernetes 1.29.0 with containerd runtime
+- ✅ Single-node cluster setup
+- ✅ Security-hardened configuration
+- ✅ Systemd service management
+- ✅ Firewall configuration
+- ✅ Cluster initialization tools
+- ✅ Monitoring and management scripts
+- ✅ Production-ready setup
+
+**Installation:**
+```bash
+cd kubernetes/
+sudo ./kubernetes-install.sh
+```
+
+**Management Tools:**
+```bash
+# Monitor Kubernetes status and resources
+kubernetes-monitor
+
+# Manage Kubernetes services
+kubernetes-manager start|stop|restart
+kubernetes-manager init|reset
+
+# Cluster management
+kubectl cluster-info
+kubectl get nodes
+```
+
+---
+
 ## 🔧 Common Features Across All Scripts
 
 ### 🛡️ Security Best Practices
-- **Localhost-only binding** for databases (MySQL/MariaDB, Redis, MongoDB, PostgreSQL)
+- **Localhost-only binding** for databases (MySQL/MariaDB, Redis, MongoDB, PostgreSQL, Elasticsearch, RabbitMQ)
 - **SSL/TLS encryption** where applicable
 - **Authentication** and authorization
 - **Firewall-friendly** configurations (UFW/iptables support)
@@ -445,6 +593,10 @@ sudo ./<install-script>.sh
 - **MongoDB**: `/tmp/mongodb-install.log`
 - **PostgreSQL**: `/tmp/postgresql-install.log`
 - **QEMU**: `/tmp/qemu-install.log`
+- **Node.js**: `/tmp/nodejs-install.log`
+- **Elasticsearch**: `/tmp/elasticsearch-install.log`
+- **RabbitMQ**: `/tmp/rabbitmq-install.log`
+- **Kubernetes**: `/tmp/kubernetes-install.log`
 
 ---
 
