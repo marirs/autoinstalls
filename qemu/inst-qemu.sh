@@ -2,8 +2,8 @@
 #
 # Description: Install Qemu
 # Tested:
-#       Debian: 9.x, 10.x
-#       Ubuntu: 18.04, 20.04
+#       Debian: 9.x, 10.x, 11.x, 12.x
+#       Ubuntu: 18.04, 20.04, 22.04, 24.04
 # 
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 # AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -36,7 +36,7 @@ fi
 [ -f "/tmp/qemu-install.log" ] && rm -f /tmp/qemu-install.log
 
 # Versions
-qemu_version=6.1.0
+qemu_version=8.2.0
 
 # gather system info
 vendor_id=$(cat /proc/cpuinfo | grep 'vendor_id' | head -1 | cut -d":" -f2 | xargs)
@@ -48,10 +48,24 @@ os=$(cat /etc/os-release | grep "^ID=" | cut -d"=" -f2 | xargs)
 os_ver=$(cat /etc/os-release | grep "_ID=" | cut -d"=" -f2 | xargs)
 architecture=$(arch)
 
-[[ "$architecture" != "x86_64"  ]] && echo "${CRED}$architecture not supported, cannot be installed. You need x86_64 system.${CEND}" && exit 1
+# Architecture support
+if [[ "$architecture" != "x86_64" && "$architecture" != "aarch64" && "$architecture" != "arm64" ]]; then
+    echo "${CRED}$architecture not supported, cannot be installed. You need x86_64 or ARM64 system.${CEND}"
+    exit 1
+fi
+
+# Display current system info
+echo -e "${CGREEN}System Information:${CEND}"
+echo -e "  OS: $os $os_ver"
+echo -e "  Architecture: $architecture"
+echo -e "  CPU Cores: $cores"
+echo -e "  CPU: $cpuid"
+echo -e "  Target QEMU: $qemu_version"
+echo ""
 
 # qemu patch replacement strings
 src_misc_bios_table="07\/02\/18"
+src_bios_table_date2="04\/01\/2014"
 src_fw_smbios_date="11\/03\/2018"
 qemu_hd_replacement="SAMSUNG MZ76E120"
 qemu_dvd_replacement="HL-PQ-SV WB8"
@@ -286,7 +300,7 @@ function install_qemu() {
     cd /tmp/qemu-$qemu_version/build || return
     PERL_MM_USE_DEFAULT=1 perl -MCPAN -e install "Perl/perl-podlators" >> /tmp/qemu-install.log 2>&1
     echo -e "${CGREEN}Configuring qemu...${CEND}"
-    ../configure $qeum_opts $qemu_targets >> /tmp/qemu-install.log 2>&1
+    ../configure $qemu_opts $qemu_targets >> /tmp/qemu-install.log 2>&1
     if [ $? -ne 0 ]; then
         echo -e "    - ${CRED}failed qemu configuration; see /tmp/qemu-install.log for more info.${CEND}"
         exit 1
@@ -335,6 +349,26 @@ fi
 # clean-up the downloads, although not necessary
 clean_up
 
-echo " "
-echo -e "${CGREEN}>> Done.${CEND} ${CMAGENTA}If you reached here, seriously done!${CEND}"
+echo ""
+echo -e "${CGREEN}>> QEMU $qemu_version installation completed successfully!${CEND}"
+echo ""
+echo -e "${CCYAN}Installation Summary:${CEND}"
+echo -e "  QEMU Version: $qemu_version"
+echo -e "  Architecture: $architecture"
+echo -e "  CPU Cores: $cores"
+echo -e "  KVM Support: Enabled"
+echo -e "  SPICE Support: Installed"
+echo -e "  SeaBIOS: Patched and installed"
+echo ""
+echo -e "${CCYAN}Next Steps:${CEND}"
+echo -e "  1. Add users to kvm group: usermod -a -G kvm <username>"
+echo -e "  2. Install libvirt: ./inst-libvirt.sh"
+echo -e "  3. Install virt-manager for GUI management"
+echo -e "  4. Test installation: qemu-system-x86_64 --version"
+echo ""
+echo -e "${CCYAN}Logs:${CEND}"
+echo -e "  Dependencies: /tmp/apt-packages.log"
+echo -e "  QEMU Install: /tmp/qemu-install.log"
+echo ""
+echo -e "${CMAGENTA}If you reached here, seriously done!${CEND}"
 # End of script

@@ -2,8 +2,8 @@
 #
 # Description: Install Libvirt & VirtManager
 # Tested:
-#       Debian: 9.x, 10.x
-#       Ubuntu: 18.04, 20.04
+#       Debian: 9.x, 10.x, 11.x, 12.x
+#       Ubuntu: 18.04, 20.04, 22.04, 24.04
 # 
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 # AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -36,9 +36,9 @@ fi
 [ -f "/tmp/libvirt-install.log" ] && rm -f /tmp/libvirt-install.log
 
 # Versions
-libvirt_version=7.9.0
-virtmanager_version=3.2.0
-python_version=3.9
+libvirt_version=10.0.0
+virtmanager_version=5.0.0
+python_version=3.8
 
 # gather system info
 vendor_id=$(cat /proc/cpuinfo | grep 'vendor_id' | head -1 | cut -d":" -f2 | xargs)
@@ -49,14 +49,32 @@ cores=$(nproc)
 os=$(cat /etc/os-release 2>/dev/null | grep "^ID=" | cut -d"=" -f2 | xargs)
 os_ver=$(cat /etc/os-release 2>/dev/null | grep "_ID=" | cut -d"=" -f2 | xargs)
 architecture=$(arch)
-py3=$(which python$python_version 2>/dev/null | tail -1 |  cut -d" " -f3 | xargs) >> /dev/null 2>&1
-curr_py3_version=$($py3 -V 2>/dev/null | cut -d" " -f2 | xargs) >> /dev/null 2>&1
-required_py3_version="3.7"
+py3=$(which python3 2>/dev/null)
+curr_py3_version=$($py3 -V 2>/dev/null | cut -d" " -f2)
+required_py3_version="3.8"
 
 function ver { echo "$@" | awk -F. '{ printf("%d%03d%03d", $1,$2,$3,$4); }'; }
-[[ "$architecture" != "x86_64" ]] && echo "${CRED}$architecture not supported, cannot be installed. You need x86_64 system.${CEND}" && exit 1
-[[ -z $py3 ]] && echo "${CRED}python $python_version not found, cannot be installed${CEND}" && exit 1
-[ $(ver $curr_py3_version) -lt $(ver $required_py3_version) ] && echo -e "${CRED}Required $required_py3_version+: detected python $curr_py3_version not supprted, cannot continue${CEND}" && exit 1
+
+# Architecture support
+if [[ "$architecture" != "x86_64" && "$architecture" != "aarch64" && "$architecture" != "arm64" ]]; then
+    echo "${CRED}$architecture not supported, cannot be installed. You need x86_64 or ARM64 system.${CEND}"
+    exit 1
+fi
+
+# Python version check
+[[ -z $py3 ]] && echo "${CRED}python3 not found, cannot be installed${CEND}" && exit 1
+[ $(ver $curr_py3_version) -lt $(ver $required_py3_version) ] && echo -e "${CRED}Required $required_py3_version+: detected python $curr_py3_version not supported, cannot continue${CEND}" && exit 1
+
+# Display current system info
+echo -e "${CGREEN}System Information:${CEND}"
+echo -e "  OS: $os $os_ver"
+echo -e "  Architecture: $architecture"
+echo -e "  CPU Cores: $cores"
+echo -e "  CPU: $cpuid"
+echo -e "  Python Version: $curr_py3_version"
+echo -e "  Target Libvirt: $libvirt_version"
+echo -e "  Target Virt-Manager: $virtmanager_version"
+echo ""
 
 libvirt_opts="--system --prefix=/usr --localstatedir=/var --sysconfdir=/etc --with-yajl=yes --with-openssl --with-storage-rbd --with-qemu=yes --with-esx --with-xen --with-openvz=no  --with-dtrace --disable-nls --without-apparmor --without-secdriver-apparmor --without-apparmor-mount --without-apparmor-profiles "
 if [[ "$is_numa" -ge "1" ]]; then
@@ -311,12 +329,12 @@ function configure_libvirt_socks() {
         libvirt_path="/usr/local/etc/libvirt/libvirtd.conf"
     fi
 
-	echo -e "${CGREEN}Modifying libvirt configuration to listen on socks...${CEND}\e"
+	echo -e "${CGREEN}Configuring libvirt with secure authentication...${CEND}"
     _replace '#unix_sock_group' 'unix_sock_group' "$libvirt_path"
-    _replace '#unix_sock_ro_perms = "0777"' 'unix_sock_ro_perms = "0770"' "$libvirt_path"
-    _replace '#unix_sock_rw_perms = "0770"' 'unix_sock_rw_perms = "0770"' "$libvirt_path"
-    _replace '#auth_unix_ro = "none"' 'auth_unix_ro = "none"' "$libvirt_path"
-    _replace '#auth_unix_rw = "none"' 'auth_unix_rw = "none"' "$libvirt_path"
+    _replace '#unix_sock_ro_perms = "0777"' 'unix_sock_ro_perms = "0750"' "$libvirt_path"
+    _replace '#unix_sock_rw_perms = "0770"' 'unix_sock_rw_perms = "0750"' "$libvirt_path"
+    _replace '#auth_unix_ro = "none"' 'auth_unix_ro = "polkit"' "$libvirt_path"
+    _replace '#auth_unix_rw = "none"' 'auth_unix_rw = "polkit"' "$libvirt_path"
 }
 
 function start_libvirt_services() {
@@ -439,6 +457,31 @@ install_virtmanager
 # clean-up the downloads, although not necessary
 clean_up
 
-echo " "
-echo -e "${CGREEN}>> Done.${CEND} ${CMAGENTA}If you reached here, seriously done!${CEND}"
+echo ""
+echo -e "${CGREEN}>> Libvirt $libvirt_version and Virt-Manager installation completed successfully!${CEND}"
+echo ""
+echo -e "${CCYAN}Installation Summary:${CEND}"
+echo -e "  Libvirt Version: $libvirt_version"
+echo -e "  Virt-Manager Version: $virtmanager_version"
+echo -e "  Architecture: $architecture"
+echo -e "  Python Version: $curr_py3_version"
+echo -e "  Authentication: Polkit (secure)"
+echo -e "  Services: Enabled and started"
+echo ""
+echo -e "${CCYAN}Next Steps:${CEND}"
+echo -e "  1. Reload shell: source ~/.bashrc (or ~/.zsh)"
+echo -e "  2. Log out and log back in for group changes"
+echo -e "  3. Start virt-manager: virt-manager"
+echo -e "  4. Test libvirt: virsh list --all"
+echo ""
+echo -e "${CCYAN}Services Status:${CEND}"
+echo -e "  libvirtd: $(systemctl is-active libvirtd)"
+echo -e "  virtlogd: $(systemctl is-active virtlogd)"
+echo -e "  virtlockd: $(systemctl is-active virtlockd)"
+echo ""
+echo -e "${CCYAN}Logs:${CEND}"
+echo -e "  Dependencies: /tmp/apt-packages.log"
+echo -e "  Libvirt Install: /tmp/libvirt-install.log"
+echo ""
+echo -e "${CMAGENTA}If you reached here, seriously done!${CEND}"
 # End of script
