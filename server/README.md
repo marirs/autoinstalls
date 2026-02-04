@@ -1,6 +1,7 @@
 # Server Setup & Hardening Automation
 ========================================
-![https://img.shields.io/badge/platform-ubuntu%2018.04%2C%2020.04%2C%2022.04%2C%2024.04%20%7C%20Debian%209.x%2C%2010.x%2C%2011.x%2C%2012.x%20%7C%20macOS-orange](https://img.shields.io/badge/platform-ubuntu%2018.04%2C%2020.04%2C%2022.04%2C%2024.04%20%7C%20Debian%209.x%2C%2010.x%2C%2011.x%2C%2012.x%20%7C%20macOS-orange)
+![GitHub](https://img.shields.io/github/license/marirs/autoinstalls?label=Apache-2.0)
+![https://img.shields.io/badge/platform-ubuntu%2018.04%2C%2020.04%2C%2022.04%2C%2024.04%20%7C%20Debian%209.x%2C%2010.x%2C%2011.x%2C%2012.x%2C%2013.x%20%7C%20macOS-orange](https://img.shields.io/badge/platform-ubuntu%2018.04%2C%2020.04%2C%2022.04%2C%2024.04%20%7C%20Debian%209.x%2C%2010.x%2C%2011.x%2C%2012.x%2C%2013.x%20%7C%20macOS-orange)
 ![https://img.shields.io/badge/architecture-x86__64%20%7C%20ARM64-green](https://img.shields.io/badge/architecture-x86__64%20%7C%20ARM64-green)
 ![https://img.shields.io/badge/security-hardened-red](https://img.shields.io/badge/security-hardened-red)
 ![https://img.shields.io/badge/status-production%20ready-green](https://img.shields.io/badge/status-production%20ready-green)
@@ -59,7 +60,7 @@ Comprehensive server initialization, configuration, and hardening automation scr
 
 ### Supported Operating Systems
 - **Ubuntu**: 18.04, 20.04, 22.04, 24.04
-- **Debian**: 9.x, 10.x, 11.x, 12.x
+- **Debian**: 9.x, 10.x, 11.x, 12.x, 13.x
 - **macOS**: Intel & Apple Silicon (Big Sur+)
 
 ### Architecture Support
@@ -491,6 +492,12 @@ tail -f /var/log/nginx/error.log
 - Submit pull requests for improvements
 - Suggest additional security features
 - Share configuration templates
+
+---
+
+## 📄 License
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](../LICENSE) file for details.
 
 ---
 

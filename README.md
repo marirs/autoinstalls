@@ -13,6 +13,74 @@ A comprehensive collection of automated installation scripts for popular softwar
 
 ## 🚀 Available Installations
 
+### 🖥️ Server Setup & Hardening
+**Comprehensive server initialization, configuration, and security hardening automation**
+![https://img.shields.io/badge/platform-ubuntu%2018.04%2C%2020.04%2C%2022.04%2C%2024.04%20%7C%20Debian%209.x%2C%2010.x%2C%2011.x%2C%2012.x%2C%2013.x%20%7C%20macOS-orange](https://img.shields.io/badge/platform-ubuntu%2018.04%2C%2020.04%2C%2022.04%2C%2024.04%20%7C%20Debian%209.x%2C%2010.x%2C%2011.x%2C%2012.x%2C%2013.x%20%7C%20macOS-orange)
+![https://img.shields.io/badge/architecture-x86__64%20%7C%20ARM64-green](https://img.shields.io/badge/architecture-x86__64%20%7C%20ARM64-green)
+![https://img.shields.io/badge/security-hardened-red](https://img.shields.io/badge/security-hardened-red)
+![https://img.shields.io/badge/status-production%20ready-green](https://img.shields.io/badge/status-production%20ready-green)
+![https://img.shields.io/badge/package%20fallback-enabled-brightgreen](https://img.shields.io/badge/package%20fallback-enabled-brightgreen)
+
+**Features:**
+- ✅ **Intelligent Package Detection** - Automatically detects OS version and adapts package installation
+- ✅ **Comprehensive Fallback System** - Tries multiple package names for maximum compatibility
+- ✅ **Cross-Distribution Support** - Works on Ubuntu, Debian (9-13), CentOS/RHEL, Fedora, and macOS
+- ✅ **Menu-Driven Setup** - Choose individual components or complete server setup
+- ✅ **System Hardening** - Kernel security, network protection, file system security
+- ✅ **SSH Key Management** - Generate or import SSH keys with proper hardening
+- ✅ **Network Configuration** - IPv4/IPv6 dual stack, virtual host support
+- ✅ **Firewall Setup** - UFW/firewalld configuration with security rules
+- ✅ **User Authentication** - Secure user management and password policies
+- ✅ **Nginx Virtual Hosts** - Web server preparation with SSL support
+
+**Advanced Package Handling:**
+- 🔄 **Version-Aware Installation** - Detects Debian 9-13, Ubuntu 18.04-24.04, RHEL/CentOS 7-9, Fedora
+- 🔄 **Package Name Variations** - Handles `software-properties-common` → `python3-software-properties`
+- 🔄 **Build Tool Fallbacks** - `build-essential` → `build-base` → `base-devel`
+- 🔄 **Library Alternatives** - `libssl-dev` → `openssl-dev` → `libssl3-dev`
+- 🔄 **GPG Package Detection** - `gnupg` → `gnupg2` → `gpg`
+- 🔄 **Critical Dependency Validation** - Ensures essential tools are available
+
+**Installation:**
+```bash
+cd server/
+sudo ./server-setup.sh
+
+# Choose your setup mode:
+# 1-7: Individual components (Essential, Hardening, Network, SSH, Nginx, Firewall, Users)
+# 8: Complete Server Setup (Recommended)
+# 9: Custom Setup (Select specific components)
+```
+
+**What's Included:**
+- Essential software installation with intelligent package detection
+- System security hardening with kernel and network protection
+- SSH key generation and management with secure configurations
+- Network configuration for IPv4/IPv6 dual stack
+- Firewall setup with UFW/firewalld support
+- User authentication hardening with password policies
+- Nginx virtual host templates with SSL preparation
+- Comprehensive logging and verification tools
+
+**Package Fallback Examples:**
+```bash
+# Debian 13 - Automatic Package Resolution
+Installing dependencies for debian 13...
+Found python3-software-properties for software properties
+Found gnupg2 for GPG support
+Found build-base for build tools
+Found libssl3-dev for SSL support
+✓ Critical dependencies are available
+
+# RHEL Systems - Package Manager Detection
+Installing dependencies for centos 7...
+Using yum package manager
+Found cmake3 for build system
+✓ Critical dependencies are available
+```
+
+---
+
 ### 🌐 Nginx Web Server
 **High-performance web server with advanced modules and security hardening**
 ![https://img.shields.io/badge/version-latest-brightgreen](https://img.shields.io/badge/version-latest-brightgreen)
