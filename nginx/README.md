@@ -1,6 +1,313 @@
-# Nginx AutoInstall
+# Nginx AutoInstall & Virtual Host Management
 
-- Compile and install Nginx from source with optionnal modules. Modified from [here](https://github.com/Angristan/nginx-autoinstall)
+- Compile and install Nginx from source with optional modules. Modified from [here](https://github.com/Angristan/nginx-autoinstall)
+- Interactive virtual host generator with advanced security and SSL/TLS support
+
+---
+
+## 🌐 Nginx Virtual Host Generator
+
+**Interactive tool for generating and managing Nginx virtual hosts with comprehensive security features**
+
+![https://img.shields.io/badge/nginx-virtual%20host%20generator-blue](https://img.shields.io/badge/nginx-virtual%20host%20generator-blue)
+![https://img.shields.io/badge/ssl%2Ftls-enabled-green](https://img.shields.io/badge/ssl%2Ftls-enabled-green)
+![https://img.shields.io/badge/security-hardened-red](https://img.shields.io/badge/security-hardened-red)
+![https://img.shields.io/badge/ipv4%2Fipv6-ready-purple](https://img.shields.io/badge/ipv4%2Fipv6-ready-purple)
+
+### ✨ Key Features
+
+#### **🔧 Virtual Host Management**
+- ✅ **Interactive Menu System** - User-friendly CLI interface
+- ✅ **Generate New Virtual Hosts** - Complete configuration generation
+- ✅ **Enable/Disable Virtual Hosts** - Simple symbolic link management
+- ✅ **List All Virtual Hosts** - Status overview (Enabled/Disabled)
+- ✅ **Configuration Testing** - Validates Nginx config before applying
+- ✅ **Automatic Nginx Reload** - Safe service restart on success
+
+#### **🌐 Network Configuration**
+- ✅ **IP Address Detection** - Automatically detects all IPv4 and IPv6 addresses
+- ✅ **Dual Stack Support** - Full IPv4/IPv6 configuration
+- ✅ **Selective Binding** - Listen on specific IPs or all interfaces
+- ✅ **Domain Aliases** - Multiple server names support
+
+#### **🔒 Security & SSL/TLS**
+- ✅ **Modern SSL/TLS** - TLSv1.2, TLSv1.3 with strong ciphers
+- ✅ **HTTP to HTTPS Redirect** - Optional secure redirect
+- ✅ **HSTS Support** - HTTP Strict Transport Security
+- ✅ **Security Headers** - X-Frame-Options, CSP, XSS Protection
+- ✅ **Rate Limiting** - Configurable request rate limiting
+- ✅ **Common Exploit Protection** - Block malicious request patterns
+
+#### **📁 Document Root Management**
+- ✅ **Automatic Directory Creation** - Creates web root with proper permissions
+- ✅ **Default Index Page** - Professional welcome page with SSL status
+- ✅ **Permission Setup** - www-data ownership, 755 permissions
+- ✅ **PHP Support** - FastCGI PHP processing (optional)
+
+### 🚀 Quick Start
+
+```bash
+# Navigate to nginx directory
+cd nginx/
+
+# Run the virtual host generator
+sudo ./nginx-vhost-generator.sh
+
+# Follow the interactive menu:
+# 1. Generate new virtual host
+# 2. Enable available virtual host
+# 3. List all virtual hosts
+# 4. Test Nginx configuration
+# 5. Exit
+```
+
+### 📋 Virtual Host Generation Process
+
+#### **Step 1: IP Address Selection**
+```
+Available IPv4 addresses:
+  1. 192.168.1.100
+  2. 10.0.0.15
+
+Available IPv6 addresses:
+  1. 2001:db8::1
+  2. fe80::1
+
+Select IP address for the virtual host:
+  0. Listen on all addresses (default)
+  1. 192.168.1.100 (IPv4)
+  2. 10.0.0.15 (IPv4)
+  3. 2001:db8::1 (IPv6)
+  4. fe80::1 (IPv6)
+```
+
+#### **Step 2: Configuration Details**
+```
+Virtual Host Configuration:
+Enter server name (domain): example.com
+Enter alternative server names: www.example.com api.example.com
+Enter document root path: /var/www/example.com/html
+
+SSL Configuration:
+Enable SSL/TLS? (y/n): y
+SSL certificate path: /etc/ssl/certs/example.com.crt
+SSL private key path: /etc/ssl/private/example.com.key
+Enable HTTPS only (redirect HTTP to HTTPS)? (y/n): y
+
+Additional Features:
+Enable PHP support? (y/n): y
+Enable security headers? (y/n): y
+Enable rate limiting? (y/n): y
+Rate limit requests per second: 10
+Rate limit burst: 20
+```
+
+#### **Step 3: Automatic Setup**
+```
+Generating virtual host configuration...
+Creating document root directory...
+Testing Nginx configuration...
+✓ Nginx configuration test passed
+Reloading Nginx...
+✓ Nginx reloaded successfully
+
+✓ Virtual host generated successfully!
+Configuration file: /etc/nginx/sites-available/example.com
+Document root: /var/www/example.com/html
+SSL Certificate: /etc/ssl/certs/example.com.crt
+SSL Private Key: /etc/ssl/private/example.com.key
+```
+
+### 🔧 Generated Configuration Examples
+
+#### **HTTP + HTTPS Virtual Host**
+```nginx
+# HTTP to HTTPS redirect
+server {
+    listen 80;
+    server_name example.com www.example.com;
+    return 301 https://$server_name$request_uri;
+}
+
+# HTTPS server block
+server {
+    listen 443 ssl http2;
+    server_name example.com www.example.com;
+    
+    # SSL configuration
+    ssl_certificate /etc/ssl/certs/example.com.crt;
+    ssl_certificate_key /etc/ssl/private/example.com.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
+    
+    # HSTS
+    add_header Strict-Transport-Security "max-age=63072000" always;
+    
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Content-Security-Policy "default-src 'self' http: https: data: blob: 'unsafe-inline'" always;
+    
+    # Rate limiting
+    limit_req zone=$server_name burst=20 nodelay;
+    
+    # Document root
+    root /var/www/example.com/html;
+    index index.html index.htm index.php;
+    
+    # PHP processing
+    location ~ \.php$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/var/run/php/php8.1-fpm.sock;
+    }
+    
+    # Security
+    server_tokens off;
+}
+```
+
+### 📊 Virtual Host Management
+
+#### **Enable Available Virtual Hosts**
+```bash
+sudo ./nginx-vhost-generator.sh
+# Choose option 2
+
+Disabled virtual hosts (available but not enabled):
+  1. example.com
+  2. test.domain.com
+  3. api.example.org
+
+Enter the number of the virtual host to enable (0 to cancel): 1
+Enabling virtual host: example.com
+✓ Virtual host enabled: example.com
+✓ Nginx configuration test passed
+✓ Nginx reloaded successfully
+✓ Virtual host is now active
+```
+
+#### **List All Virtual Hosts**
+```bash
+sudo ./nginx-vhost-generator.sh
+# Choose option 3
+
+Available virtual hosts:
+  1. example.com - Enabled
+  2. test.domain.com - Disabled
+  3. api.example.org - Disabled
+  4. default - Enabled
+```
+
+### 🛡️ Security Features
+
+#### **SSL/TLS Configuration**
+- **Modern Protocols**: TLSv1.2 and TLSv1.3 only
+- **Strong Ciphers**: ECDHE with AES-256-GCM
+- **Perfect Forward Secrecy**: Ephemeral key exchange
+- **HSTS**: HTTP Strict Transport Security
+- **SSL Session Optimization**: 1-day timeout, shared cache
+
+#### **Security Headers**
+- **X-Frame-Options**: Prevent clickjacking
+- **X-XSS-Protection**: XSS attack prevention
+- **X-Content-Type-Options**: MIME-type sniffing protection
+- **Content Security Policy**: XSS and data injection protection
+- **Referrer Policy**: Control referrer information
+
+#### **Rate Limiting**
+- **Configurable RPS**: Requests per second limit
+- **Burst Handling**: Temporary traffic spikes
+- **Per-Vhost Zones**: Isolated rate limiting per domain
+
+### 📁 File Structure
+
+```
+/etc/nginx/
+├── sites-available/
+│   ├── example.com          # Generated virtual host
+│   ├── test.domain.com      # Available but disabled
+│   └── default              # Default configuration
+├── sites-enabled/
+│   ├── example.com -> ../sites-available/example.com
+│   └── default -> ../sites-available/default
+├── ssl/
+│   ├── certs/
+│   │   └── example.com.crt
+│   └── private/
+│       └── example.com.key
+└── logs/
+    ├── example.com_access.log
+    └── example.com_error.log
+```
+
+### 🔍 Error Handling & Validation
+
+#### **Pre-flight Checks**
+- ✅ Nginx installation verification
+- ✅ Directory existence validation
+- ✅ Root privilege checking
+- ✅ SSL certificate file validation
+
+#### **Safety Features**
+- ✅ Configuration test before enabling virtual hosts
+- ✅ Automatic rollback on test failure
+- ✅ Detailed logging to `/tmp/nginx-vhost-generator.log`
+- ✅ Clear error messages and user guidance
+
+### 📝 Usage Examples
+
+#### **E-commerce Site with SSL**
+```bash
+# Generate virtual host for online store
+sudo ./nginx-vhost-generator.sh
+# Domain: store.example.com
+# SSL: Enabled
+# HTTPS Only: Yes
+# PHP: Enabled
+# Security Headers: Enabled
+# Rate Limiting: 5 RPS, 10 burst
+```
+
+#### **API Server**
+```bash
+# Generate virtual host for REST API
+sudo ./nginx-vhost-generator.sh
+# Domain: api.example.com
+# SSL: Enabled
+# HTTPS Only: Yes
+# PHP: Disabled
+# Security Headers: Enabled
+# Rate Limiting: 20 RPS, 50 burst
+```
+
+#### **Development Environment**
+```bash
+# Generate virtual host for development
+sudo ./nginx-vhost-generator.sh
+# Domain: dev.example.local
+# SSL: Disabled
+# PHP: Enabled
+# Security Headers: Disabled
+# Rate Limiting: Disabled
+```
+
+### 📋 Requirements
+
+- **Nginx**: Must be installed first
+- **Root Privileges**: Required for file operations
+- **OpenSSL**: For SSL certificate handling
+- **PHP-FPM**: Optional, for PHP support
+
+### 📚 Additional Resources
+
+- [Nginx Official Documentation](https://nginx.org/en/docs/)
+- [SSL/TLS Configuration Guide](https://nginx.org/en/docs/http/configuring_https_servers.html)
+- [Security Best Practices](https://nginx.org/en/docs/http/security.html)
+
+---
+
+## 🔧 Nginx AutoInstall (Original)
 
 ```
 

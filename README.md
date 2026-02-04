@@ -82,9 +82,10 @@ Found cmake3 for build system
 ---
 
 ### 🌐 Nginx Web Server
-**High-performance web server with advanced modules and security hardening**
+**High-performance web server with advanced modules, security hardening, and virtual host management**
 ![https://img.shields.io/badge/version-latest-brightgreen](https://img.shields.io/badge/version-latest-brightgreen)
 ![https://img.shields.io/badge/status-production%20ready-green](https://img.shields.io/badge/status-production%20ready-green)
+![https://img.shields.io/badge/virtual%20host%20generator-enabled-blue](https://img.shields.io/badge/virtual%20host%20generator-enabled-blue)
 
 **Features:**
 - ✅ Latest stable Nginx with optimized configuration
@@ -94,11 +95,47 @@ Found cmake3 for build system
 - ✅ Comprehensive security hardening
 - ✅ Performance monitoring and status endpoints
 - ✅ Automated configuration management
+- ✅ **Interactive Virtual Host Generator** - Generate and manage virtual hosts with SSL/TLS
+- ✅ **Dual Stack Support** - IPv4/IPv6 configuration with automatic IP detection
+- ✅ **Security-First Templates** - Modern SSL, HSTS, security headers, rate limiting
+
+**Virtual Host Generator Features:**
+- 🔄 **Interactive Menu System** - User-friendly CLI for vhost management
+- 🔄 **Automatic IP Detection** - Detects all IPv4/IPv6 addresses for binding
+- 🔄 **SSL/TLS Configuration** - Modern SSL with HTTP to HTTPS redirect
+- 🔄 **Security Headers** - CSP, HSTS, XSS protection, clickjacking prevention
+- 🔄 **Rate Limiting** - Configurable request rate limiting per vhost
+- 🔄 **PHP Support** - FastCGI PHP processing with optional integration
+- 🔄 **Document Root Management** - Automatic directory creation with permissions
+- 🔄 **Configuration Testing** - Validates Nginx config before applying changes
 
 **Installation:**
 ```bash
 cd nginx/
 sudo ./nginx-install.sh
+
+# After installation, use the virtual host generator:
+sudo ./nginx-vhost-generator.sh
+```
+
+**Virtual Host Management:**
+```bash
+# Generate new virtual host with SSL/TLS
+sudo ./nginx-vhost-generator.sh
+# Choose option 1, follow interactive prompts:
+# - Select IP address (IPv4/IPv6 or all)
+# - Enter domain name and aliases
+# - Configure SSL certificates
+# - Enable security headers and rate limiting
+# - Set up PHP support (optional)
+
+# Enable available virtual hosts
+sudo ./nginx-vhost-generator.sh
+# Choose option 2 to enable disabled virtual hosts
+
+# List all virtual hosts
+sudo ./nginx-vhost-generator.sh
+# Choose option 3 to see status (Enabled/Disabled)
 ```
 
 **What's Included:**
@@ -108,6 +145,8 @@ sudo ./nginx-install.sh
 - SSL/TLS configuration
 - Monitoring and status endpoints
 - Log rotation and backup scripts
+- Interactive virtual host generator
+- Professional vhost templates with security best practices
 
 ---
 
