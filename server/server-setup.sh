@@ -441,27 +441,14 @@ function install_linux_essentials() {
     
     # Install essential packages with version flexibility
     local packages=(
-        "software-properties-common"
-        "apt-transport-https"
         "ca-certificates"
         "curl"
         "wget"
         "git"
-        "sudo"
         "openssl"
         "build-essential"
         "zip"
         "unzip"
-        "p7zip-full"
-        "p7zip-rar"
-        "sysstat"
-        "schedtool"
-        "poppler-utils"
-        "libffi-dev"
-        "libssl-dev"
-        "screen"
-        "pcregrep"
-        "net-tools"
         "vim"
         "nano"
         "htop"
@@ -477,22 +464,204 @@ function install_linux_essentials() {
     # Add distribution-specific packages with version handling
     if command -v apt >/dev/null 2>&1; then
         # Ubuntu/Debian specific packages with version flexibility
-        local apt_packages=(
-            "libx11-xcb1"
-            "dnsutils"
-            "devscripts"
-            "libuv1"
-            "libuv1-dev"
+        local apt_packages=()
+        
+        # Detect OS version for package selection
+        local os_id=""
+        local os_version=""
+        if [[ -f /etc/os-release ]]; then
+            source /etc/os-release
+            os_id="$ID"
+            os_version="$VERSION_ID"
+        fi
+        
+        # Base packages for Ubuntu/Debian
+        apt_packages+=(
+            "apt-transport-https"
         )
         
-        # Try different re2 package versions
-        local re2_packages=("libre2-9" "libre2-10" "libre2-8" "libre2-dev" "libre2")
-        for re2_pkg in "${re2_packages[@]}"; do
-            if apt-cache show "$re2_pkg" >/dev/null 2>&1; then
-                apt_packages+=("$re2_pkg")
-                break
-            fi
-        done
+        # Version-specific packages
+        case "$os_id" in
+            "debian")
+                case "$os_version" in
+                    "9"|"10"|"11")
+                        # Older Debian versions
+                        apt_packages+=(
+                            "software-properties-common"
+                            "p7zip-full"
+                            "p7zip-rar"
+                            "libre2-9"
+                            "sysstat"
+                            "schedtool"
+                            "poppler-utils"
+                            "libffi-dev"
+                            "libssl-dev"
+                            "screen"
+                            "pcregrep"
+                            "net-tools"
+                            "libx11-xcb1"
+                            "dnsutils"
+                            "devscripts"
+                            "libuv1"
+                            "libuv1-dev"
+                            "libre2-dev"
+                        )
+                        ;;
+                    "12")
+                        # Debian 12 Bookworm
+                        apt_packages+=(
+                            "software-properties-common"
+                            "p7zip-full"
+                            "p7zip-rar"
+                            "libre2-9"
+                            "sysstat"
+                            "schedtool"
+                            "poppler-utils"
+                            "libffi-dev"
+                            "libssl-dev"
+                            "screen"
+                            "pcregrep"
+                            "net-tools"
+                            "libx11-xcb1"
+                            "dnsutils"
+                            "devscripts"
+                            "libuv1"
+                            "libuv1-dev"
+                            "libre2-dev"
+                        )
+                        ;;
+                    "13")
+                        # Debian 13 Trixie - handle package changes
+                        apt_packages+=(
+                            "sudo"
+                            "p7zip-full"
+                            "p7zip-rar"
+                            "sysstat"
+                            "schedtool"
+                            "poppler-utils"
+                            "libffi-dev"
+                            "libssl-dev"
+                            "screen"
+                            "pcregrep"
+                            "net-tools"
+                            "libx11-xcb1"
+                            "dnsutils"
+                            "devscripts"
+                            "libuv1"
+                            "libuv1-dev"
+                        )
+                        # Try different re2 package versions
+                        local re2_packages=("libre2-9" "libre2-10" "libre2-8" "libre2-dev" "libre2")
+                        for re2_pkg in "${re2_packages[@]}"; do
+                            if apt-cache show "$re2_pkg" >/dev/null 2>&1; then
+                                apt_packages+=("$re2_pkg")
+                                break
+                            fi
+                        done
+                        # Try software-properties-common alternatives
+                        if ! apt-cache show software-properties-common >/dev/null 2>&1; then
+                            echo -e "${CYAN}software-properties-common not found, skipping...${CEND}"
+                        else
+                            apt_packages+=("software-properties-common")
+                        fi
+                        ;;
+                    *)
+                        # Future Debian versions
+                        apt_packages+=(
+                            "software-properties-common"
+                            "sudo"
+                            "p7zip-full"
+                            "p7zip-rar"
+                            "sysstat"
+                            "schedtool"
+                            "poppler-utils"
+                            "libffi-dev"
+                            "libssl-dev"
+                            "screen"
+                            "pcregrep"
+                            "net-tools"
+                        )
+                        # Try re2 packages
+                        local re2_packages=("libre2-9" "libre2-10" "libre2-8" "libre2-dev" "libre2")
+                        for re2_pkg in "${re2_packages[@]}"; do
+                            if apt-cache show "$re2_pkg" >/dev/null 2>&1; then
+                                apt_packages+=("$re2_pkg")
+                                break
+                            fi
+                        done
+                        ;;
+                esac
+                ;;
+            "ubuntu")
+                case "$os_version" in
+                    "18.04"|"20.04")
+                        # Older Ubuntu versions
+                        apt_packages+=(
+                            "software-properties-common"
+                            "sudo"
+                            "p7zip-full"
+                            "p7zip-rar"
+                            "libre2-9"
+                            "sysstat"
+                            "schedtool"
+                            "poppler-utils"
+                            "libffi-dev"
+                            "libssl-dev"
+                            "screen"
+                            "pcregrep"
+                            "net-tools"
+                            "libx11-xcb1"
+                            "dnsutils"
+                            "devscripts"
+                            "libuv1"
+                            "libuv1-dev"
+                            "libre2-dev"
+                        )
+                        ;;
+                    "22.04"|"24.04")
+                        # Modern Ubuntu versions
+                        apt_packages+=(
+                            "software-properties-common"
+                            "sudo"
+                            "p7zip-full"
+                            "p7zip-rar"
+                            "libre2-9"
+                            "sysstat"
+                            "schedtool"
+                            "poppler-utils"
+                            "libffi-dev"
+                            "libssl-dev"
+                            "screen"
+                            "pcregrep"
+                            "net-tools"
+                            "libx11-xcb1"
+                            "dnsutils"
+                            "devscripts"
+                            "libuv1"
+                            "libuv1-dev"
+                            "libre2-dev"
+                        )
+                        ;;
+                    *)
+                        # Future Ubuntu versions
+                        apt_packages+=(
+                            "software-properties-common"
+                            "sudo"
+                            "p7zip-full"
+                            "p7zip-rar"
+                            "sysstat"
+                            "schedtool"
+                            "poppler-utils"
+                            "libffi-dev"
+                            "libssl-dev"
+                            "screen"
+                            "pcregrep"
+                            "net-tools"
+                        )
+                        ;;
+                esac
+                ;;
+        esac
         
         # Try mailutils or alternatives
         local mail_packages=("mailutils" "mailx" "bsd-mailx")
@@ -508,6 +677,7 @@ function install_linux_essentials() {
     elif command -v yum >/dev/null 2>&1 || command -v dnf >/dev/null 2>&1; then
         # RHEL/CentOS/Fedora specific packages with version flexibility
         local rpm_packages=(
+            "sudo"
             "libX11-xcb"
             "bind-utils"
         )

@@ -21,15 +21,109 @@ fi
 # Clear log files
 rm -f /tmp/docker-install.log /tmp/apt-packages.log
 
-# Versions
-docker_version="27.0.0"
-docker_compose_version="2.24.0"
-
 # System information
 os=$(cat /etc/os-release | grep "^ID=" | cut -d"=" -f2 | xargs)
 os_ver=$(cat /etc/os-release | grep "_ID=" | cut -d"=" -f2 | xargs)
+os_codename=$(cat /etc/os-release | grep "VERSION_CODENAME" | cut -d"=" -f2 | xargs)
 cores=$(nproc)
 architecture=$(arch)
+
+# Docker version mapping based on OS and version
+function get_docker_version() {
+    case "$os" in
+        "ubuntu")
+            case "$os_ver" in
+                "18.04") echo "20.10.17" ;;  # Last version supporting Ubuntu 18.04
+                "20.04") echo "24.0.7" ;;   # Latest stable for Ubuntu 20.04
+                "22.04") echo "27.0.0" ;;   # Latest for Ubuntu 22.04
+                "24.04") echo "27.0.0" ;;   # Latest for Ubuntu 24.04
+                *) echo "27.0.0" ;;        # Default latest
+            esac
+            ;;
+        "debian")
+            case "$os_ver" in
+                "9") echo "18.09.1" ;;     # Debian 9 Stretch
+                "10") echo "20.10.17" ;;   # Debian 10 Buster
+                "11") echo "24.0.7" ;;     # Debian 11 Bullseye
+                "12") echo "27.0.0" ;;     # Debian 12 Bookworm
+                "13") echo "27.0.0" ;;     # Debian 13 Trixie (testing)
+                *) echo "27.0.0" ;;        # Default latest
+            esac
+            ;;
+        "centos")
+            case "$os_ver" in
+                "7") echo "20.10.17" ;;    # CentOS 7
+                "8") echo "24.0.7" ;;      # CentOS 8
+                "9") echo "27.0.0" ;;      # CentOS 9 Stream
+                *) echo "27.0.0" ;;        # Default latest
+            esac
+            ;;
+        "rhel")
+            case "$os_ver" in
+                "8") echo "24.0.7" ;;      # RHEL 8
+                "9") echo "27.0.0" ;;      # RHEL 9
+                *) echo "27.0.0" ;;        # Default latest
+            esac
+            ;;
+        "rocky")
+            case "$os_ver" in
+                "8") echo "24.0.7" ;;      # Rocky Linux 8
+                "9") echo "27.0.0" ;;      # Rocky Linux 9
+                *) echo "27.0.0" ;;        # Default latest
+            esac
+            ;;
+        "almalinux")
+            case "$os_ver" in
+                "8") echo "24.0.7" ;;      # AlmaLinux 8
+                "9") echo "27.0.0" ;;      # AlmaLinux 9
+                *) echo "27.0.0" ;;        # Default latest
+            esac
+            ;;
+        "fedora")
+            case "$os_ver" in
+                "38") echo "24.0.7" ;;     # Fedora 38
+                "39") echo "27.0.0" ;;     # Fedora 39
+                "40") echo "27.0.0" ;;     # Fedora 40
+                *) echo "27.0.0" ;;        # Default latest
+            esac
+            ;;
+        *)
+            echo "27.0.0" ;;            # Default latest for unknown OS
+            ;;
+    esac
+}
+
+# Docker Compose version mapping
+function get_docker_compose_version() {
+    case "$os" in
+        "ubuntu")
+            case "$os_ver" in
+                "18.04") echo "1.29.2" ;;   # Last v1 for Ubuntu 18.04
+                "20.04") echo "2.24.0" ;;  # Stable for Ubuntu 20.04
+                "22.04") echo "2.24.0" ;;  # Latest for Ubuntu 22.04
+                "24.04") echo "2.24.0" ;;  # Latest for Ubuntu 24.04
+                *) echo "2.24.0" ;;        # Default latest v2
+            esac
+            ;;
+        "debian")
+            case "$os_ver" in
+                "9") echo "1.29.2" ;;     # Debian 9 - v1 compose
+                "10") echo "2.24.0" ;;    # Debian 10 - v2 compose
+                "11") echo "2.24.0" ;;    # Debian 11 - v2 compose
+                "12") echo "2.24.0" ;;    # Debian 12 - v2 compose
+                "13") echo "2.24.0" ;;    # Debian 13 - v2 compose
+                *) echo "2.24.0" ;;        # Default latest v2
+            esac
+            ;;
+        *)
+            echo "2.24.0" ;;            # Default latest v2
+            ;;
+    esac
+}
+
+# Get appropriate versions
+docker_version=$(get_docker_version)
+docker_compose_version=$(get_docker_compose_version)
 
 # Architecture support
 if [[ "$architecture" != "x86_64" && "$architecture" != "aarch64" && "$architecture" != "arm64" ]]; then
@@ -48,20 +142,201 @@ echo ""
 
 function install_deps() {
     echo -e "${CGREEN}Installing dependencies...${CEND}"
-    apt-get update -y >> /tmp/apt-packages.log 2>&1
-    apt-get install -y \
-        ca-certificates \
-        curl \
-        gnupg \
-        lsb-release \
-        apt-transport-https \
-        software-properties-common \
-        >> /tmp/apt-packages.log 2>&1
     
-    if [ $? -eq 0 ]; then
-        echo -e "${CGREEN}Dependencies installed successfully${CEND}"
+    case "$os" in
+        "ubuntu"|"debian")
+            # Update package lists first
+            apt-get update -y >> /tmp/apt-packages.log 2>&1
+            
+            # Base packages common to all versions
+            local base_packages=(
+                "ca-certificates"
+                "curl"
+                "gnupg"
+            )
+            
+            # Version-specific packages
+            local version_packages=()
+            
+            case "$os" in
+                "debian")
+                    case "$os_ver" in
+                        "9"|"10"|"11")
+                            # Older Debian versions
+                            version_packages+=(
+                                "lsb-release"
+                                "apt-transport-https"
+                                "software-properties-common"
+                            )
+                            ;;
+                        "12")
+                            # Debian 12 Bookworm
+                            version_packages+=(
+                                "lsb-release"
+                                "apt-transport-https"
+                                "software-properties-common"
+                            )
+                            ;;
+                        "13")
+                            # Debian 13 Trixie - updated package names
+                            version_packages+=(
+                                "lsb-release"
+                                "apt-transport-https"
+                                "software-properties-common"
+                            )
+                            # Try alternative if not found
+                            if ! apt-cache show software-properties-common >/dev/null 2>&1; then
+                                version_packages=()
+                                version_packages+=(
+                                    "lsb-release"
+                                    "apt-transport-https"
+                                    "ca-certificates"
+                                    "curl"
+                                    "gnupg"
+                                )
+                            fi
+                            ;;
+                        *)
+                            # Future Debian versions - try common packages
+                            version_packages+=(
+                                "lsb-release"
+                                "apt-transport-https"
+                                "software-properties-common"
+                            )
+                            ;;
+                    esac
+                    ;;
+                "ubuntu")
+                    case "$os_ver" in
+                        "18.04"|"20.04")
+                            # Older Ubuntu versions
+                            version_packages+=(
+                                "lsb-release"
+                                "apt-transport-https"
+                                "software-properties-common"
+                            )
+                            ;;
+                        "22.04"|"24.04")
+                            # Modern Ubuntu versions
+                            version_packages+=(
+                                "lsb-release"
+                                "apt-transport-https"
+                                "software-properties-common"
+                            )
+                            ;;
+                        *)
+                            # Future Ubuntu versions
+                            version_packages+=(
+                                "lsb-release"
+                                "apt-transport-https"
+                                "software-properties-common"
+                            )
+                            ;;
+                    esac
+                    ;;
+            esac
+            
+            # Combine all packages
+            local all_packages=("${base_packages[@]}" "${version_packages[@]}")
+            
+            # Install packages with error handling
+            local failed_packages=()
+            for package in "${all_packages[@]}"; do
+                echo -e "${CCYAN}Installing $package...${CEND}"
+                if apt-cache show "$package" >/dev/null 2>&1; then
+                    apt-get install -y "$package" >> /tmp/apt-packages.log 2>&1
+                    if [ $? -eq 0 ]; then
+                        echo -e "${CGREEN}✓ $package installed${CEND}"
+                    else
+                        echo -e "${CRED}✗ $package failed to install${CEND}"
+                        failed_packages+=("$package")
+                    fi
+                else
+                    echo -e "${CYAN}⚠ Package $package not found, skipping${CEND}"
+                    failed_packages+=("$package")
+                fi
+            done
+            
+            # Warn about failed packages but don't exit
+            if [ ${#failed_packages[@]} -gt 0 ]; then
+                echo -e "${CYAN}Warning: Some packages failed to install: ${failed_packages[*]}${CEND}"
+                echo -e "${CYAN}Docker installation will continue with available packages...${CEND}"
+            fi
+            ;;
+        "centos"|"rhel"|"rocky"|"almalinux")
+            # RHEL-based systems
+            local rhel_packages=(
+                "ca-certificates"
+                "curl"
+                "gnupg2"
+                "yum-utils"
+            )
+            
+            # Version-specific adjustments
+            case "$os_ver" in
+                "7")
+                    # CentOS 7 uses older package names
+                    rhel_packages+=("lsb_release")
+                    ;;
+                "8"|"9")
+                    # RHEL 8+ uses gnupg2 and dnf
+                    rhel_packages+=("lsb_release")
+                    ;;
+            esac
+            
+            if command -v dnf >/dev/null 2>&1; then
+                for package in "${rhel_packages[@]}"; do
+                    echo -e "${CCYAN}Installing $package...${CEND}"
+                    dnf install -y "$package" >> /tmp/apt-packages.log 2>&1
+                    if [ $? -eq 0 ]; then
+                        echo -e "${CGREEN}✓ $package installed${CEND}"
+                    else
+                        echo -e "${CRED}✗ $package failed to install${CEND}"
+                    fi
+                done
+            elif command -v yum >/dev/null 2>&1; then
+                for package in "${rhel_packages[@]}"; do
+                    echo -e "${CCYAN}Installing $package...${CEND}"
+                    yum install -y "$package" >> /tmp/apt-packages.log 2>&1
+                    if [ $? -eq 0 ]; then
+                        echo -e "${CGREEN}✓ $package installed${CEND}"
+                    else
+                        echo -e "${CRED}✗ $package failed to install${CEND}"
+                    fi
+                done
+            fi
+            ;;
+        "fedora")
+            # Fedora-specific packages
+            local fedora_packages=(
+                "ca-certificates"
+                "curl"
+                "gnupg2"
+                "lsb_release"
+                "dnf-plugins-core"
+            )
+            
+            for package in "${fedora_packages[@]}"; do
+                echo -e "${CCYAN}Installing $package...${CEND}"
+                dnf install -y "$package" >> /tmp/apt-packages.log 2>&1
+                if [ $? -eq 0 ]; then
+                    echo -e "${CGREEN}✓ $package installed${CEND}"
+                else
+                    echo -e "${CRED}✗ $package failed to install${CEND}"
+                fi
+            done
+            ;;
+        *)
+            echo -e "${CRED}Unsupported OS: $os${CEND}"
+            exit 1
+            ;;
+    esac
+    
+    # Check if critical packages are available
+    if command -v curl >/dev/null 2>&1 && command -v gpg >/dev/null 2>&1; then
+        echo -e "${CGREEN}Critical dependencies installed successfully${CEND}"
     else
-        echo -e "${CRED}Failed to install dependencies${CEND}"
+        echo -e "${CRED}Critical dependencies missing. Cannot continue.${CEND}"
         exit 1
     fi
 }
@@ -69,18 +344,34 @@ function install_deps() {
 function setup_docker_repo() {
     echo -e "${CGREEN}Setting up Docker repository...${CEND}"
     
-    # Add Docker's official GPG key
-    install -m 0755 -d /etc/apt/keyrings >> /tmp/docker-install.log 2>&1
-    curl -fsSL https://download.docker.com/linux/$os/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg >> /tmp/docker-install.log 2>&1
-    chmod a+r /etc/apt/keyrings/docker.gpg >> /tmp/docker-install.log 2>&1
-    
-    # Add the repository to Apt sources
-    echo \
-        "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$os \
-        $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-        tee /etc/apt/sources.list.d/docker.list > /dev/null >> /tmp/docker-install.log 2>&1
-    
-    apt-get update >> /tmp/docker-install.log 2>&1
+    case "$os" in
+        "ubuntu"|"debian")
+            # Add Docker's official GPG key
+            install -m 0755 -d /etc/apt/keyrings >> /tmp/docker-install.log 2>&1
+            curl -fsSL https://download.docker.com/linux/$os/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg >> /tmp/docker-install.log 2>&1
+            chmod a+r /etc/apt/keyrings/docker.gpg >> /tmp/docker-install.log 2>&1
+            
+            # Add the repository to Apt sources
+            echo \
+                "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$os \
+                $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+                tee /etc/apt/sources.list.d/docker.list > /dev/null >> /tmp/docker-install.log 2>&1
+            
+            apt-get update >> /tmp/docker-install.log 2>&1
+            ;;
+        "centos"|"rhel"|"rocky"|"almalinux")
+            # Add Docker repository for RHEL-based systems
+            yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo >> /tmp/docker-install.log 2>&1
+            ;;
+        "fedora")
+            # Add Docker repository for Fedora
+            dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo >> /tmp/docker-install.log 2>&1
+            ;;
+        *)
+            echo -e "${CRED}Unsupported OS for repository setup: $os${CEND}"
+            exit 1
+            ;;
+    esac
     
     if [ $? -eq 0 ]; then
         echo -e "${CGREEN}Docker repository setup completed${CEND}"
@@ -93,14 +384,52 @@ function setup_docker_repo() {
 function install_docker() {
     echo -e "${CGREEN}Installing Docker Engine...${CEND}"
     
-    # Install Docker Engine, CLI, Containerd, and Docker Compose plugin
-    apt-get install -y \
-        docker-ce=$docker_version* \
-        docker-ce-cli=$docker_version* \
-        containerd.io \
-        docker-buildx-plugin \
-        docker-compose-plugin \
-        >> /tmp/docker-install.log 2>&1
+    case "$os" in
+        "ubuntu"|"debian")
+            # Install Docker Engine, CLI, Containerd, and Docker Compose plugin
+            apt-get install -y \
+                docker-ce=$docker_version* \
+                docker-ce-cli=$docker_version* \
+                containerd.io \
+                docker-buildx-plugin \
+                docker-compose-plugin \
+                >> /tmp/docker-install.log 2>&1
+            ;;
+        "centos"|"rhel"|"rocky"|"almalinux")
+            # Install Docker Engine for RHEL-based systems
+            if command -v dnf >/dev/null 2>&1; then
+                dnf install -y \
+                    docker-ce-$docker_version \
+                    docker-ce-cli-$docker_version \
+                    containerd.io \
+                    docker-buildx-plugin \
+                    docker-compose-plugin \
+                    >> /tmp/docker-install.log 2>&1
+            elif command -v yum >/dev/null 2>&1; then
+                yum install -y \
+                    docker-ce-$docker_version \
+                    docker-ce-cli-$docker_version \
+                    containerd.io \
+                    docker-buildx-plugin \
+                    docker-compose-plugin \
+                    >> /tmp/docker-install.log 2>&1
+            fi
+            ;;
+        "fedora")
+            # Install Docker Engine for Fedora
+            dnf install -y \
+                docker-ce-$docker_version \
+                docker-ce-cli-$docker_version \
+                containerd.io \
+                docker-buildx-plugin \
+                docker-compose-plugin \
+                >> /tmp/docker-install.log 2>&1
+            ;;
+        *)
+            echo -e "${CRED}Unsupported OS for Docker installation: $os${CEND}"
+            exit 1
+            ;;
+    esac
     
     if [ $? -eq 0 ]; then
         echo -e "${CGREEN}Docker Engine installed successfully${CEND}"
