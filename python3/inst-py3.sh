@@ -32,6 +32,326 @@ os_codename=$(cat /etc/os-release | grep "VERSION_CODENAME" | cut -d"=" -f2 | xa
 
 # Installation mode
 INSTALL_MODE=""
+PYTHON_INSTALL_TYPE=""
+
+# Function to show installation type menu
+function show_installation_type_menu() {
+    echo -e "${CGREEN}========================================${CEND}"
+    echo -e "${CGREEN}    Python Installation Type Menu    ${CEND}"
+    echo -e "${CGREEN}========================================${CEND}"
+    echo ""
+    echo -e "${CCYAN}Please select Python installation type:${CEND}"
+    echo "1) Repository Installation (Deadsnakes PPA) - Recommended"
+    echo "2) Source Installation (Compile from source)"
+    echo ""
+    echo -e "${CCYAN}Repository installation advantages:${CEND}"
+    echo "- Faster installation"
+    echo "- Easier maintenance and updates"
+    echo "- Multiple Python versions available"
+    echo "- Better system integration"
+    echo ""
+}
+
+# Function to get installation type choice
+function get_installation_type_choice() {
+    while true; do
+        show_installation_type_menu
+        read -p "Enter your choice [1-2]: " type_choice
+        case $type_choice in
+            1)
+                PYTHON_INSTALL_TYPE="repository"
+                echo -e "${CGREEN}Selected: Repository Installation${CEND}"
+                break
+                ;;
+            2)
+                PYTHON_INSTALL_TYPE="source"
+                echo -e "${CGREEN}Selected: Source Installation${CEND}"
+                break
+                ;;
+            *)
+                echo -e "${CRED}Invalid choice. Please select 1 or 2.${CEND}"
+                ;;
+        esac
+    done
+}
+
+# Function to add Deadsnakes repository with intelligent management
+function add_deadsnakes_repository_enhanced() {
+    echo -e "${CCYAN}Adding Deadsnakes repository for $os $os_ver...${CEND}" >> "/tmp/py3-install.log"
+    
+    case "$os" in
+        "ubuntu")
+            add_ubuntu_deadsnakes_repo_enhanced
+            ;;
+        "debian")
+            add_debian_deadsnakes_repo_enhanced
+            ;;
+        *)
+            echo -e "${CRED}✗ Unsupported OS for Deadsnakes: $os${CEND}" >> "/tmp/py3-install.log"
+            echo -e "${CRED}Deadsnakes PPA is only available for Ubuntu and Debian${CEND}"
+            echo -e "${CYAN}Falling back to source installation...${CEND}"
+            return 1
+            ;;
+    esac
+}
+
+function add_ubuntu_deadsnakes_repo_enhanced() {
+    echo -e "${CCYAN}Configuring Deadsnakes repository for Ubuntu...${CEND}" >> "/tmp/py3-install.log"
+    
+    # Check Ubuntu version compatibility
+    case "$os_ver" in
+        "18.04"|"20.04"|"22.04"|"24.04")
+            echo -e "${CGREEN}✓ Ubuntu $os_ver is supported${CEND}" >> "/tmp/py3-install.log"
+            ;;
+        *)
+            echo -e "${CYAN}⚠ Ubuntu $os_ver may not be fully supported${CEND}" >> "/tmp/py3-install.log"
+            ;;
+    esac
+    
+    # Check if repository already exists
+    if apt-cache policy | grep -q "ppa.launchpad.net/deadsnakes"; then
+        echo -e "${CYAN}⚠ Deadsnakes repository already exists${CEND}" >> "/tmp/py3-install.log"
+        return 0
+    fi
+    
+    # Install required packages
+    echo -e "${CCYAN}Installing required packages...${CEND}" >> "/tmp/py3-install.log"
+    apt update >> "/tmp/py3-install.log" 2>&1
+    
+    local required_packages=("curl" "wget" "gnupg" "ca-certificates" "apt-transport-https" "software-properties-common")
+    for pkg in "${required_packages[@]}"; do
+        if ! dpkg -l | grep -q "$pkg"; then
+            echo -e "${CCYAN}Installing $pkg...${CEND}" >> "/tmp/py3-install.log"
+            apt install -y "$pkg" >> "/tmp/py3-install.log" 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ $pkg installed${CEND}" >> "/tmp/py3-install.log"
+            else
+                echo -e "${CRED}✗ Failed to install $pkg${CEND}" >> "/tmp/py3-install.log"
+                return 1
+            fi
+        fi
+    done
+    
+    # Add Deadsnakes PPA
+    echo -e "${CCYAN}Adding Deadsnakes PPA...${CEND}" >> "/tmp/py3-install.log"
+    add-apt-repository ppa:deadsnakes/ppa -y >> "/tmp/py3-install.log" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Deadsnakes PPA added${CEND}" >> "/tmp/py3-install.log"
+    else
+        echo -e "${CRED}✗ Failed to add Deadsnakes PPA${CEND}" >> "/tmp/py3-install.log"
+        return 1
+    fi
+    
+    # Update package list
+    echo -e "${CCYAN}Updating package list...${CEND}" >> "/tmp/py3-install.log"
+    apt update >> "/tmp/py3-install.log" 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Package list updated${CEND}" >> "/tmp/py3-install.log"
+    else
+        echo -e "${CRED}✗ Failed to update package list${CEND}" >> "/tmp/py3-install.log"
+        return 1
+    fi
+    
+    # Verify Python packages are available
+    echo -e "${CCYAN}Verifying Python packages availability...${CEND}" >> "/tmp/py3-install.log"
+    if apt-cache show "python3.12" >/dev/null 2>&1 || apt-cache show "python3.11" >/dev/null 2>&1 || apt-cache show "python3.10" >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ Python packages available from Deadsnakes${CEND}" >> "/tmp/py3-install.log"
+    else
+        echo -e "${CRED}✗ Python packages not available from Deadsnakes${CEND}" >> "/tmp/py3-install.log"
+        return 1
+    fi
+}
+
+function add_debian_deadsnakes_repo_enhanced() {
+    echo -e "${CCYAN}Configuring Deadsnakes repository for Debian...${CEND}" >> "/tmp/py3-install.log"
+    
+    # Check Debian version compatibility
+    case "$os_ver" in
+        "10"|"11"|"12"|"13")
+            echo -e "${CGREEN}✓ Debian $os_ver is supported${CEND}" >> "/tmp/py3-install.log"
+            ;;
+        *)
+            echo -e "${CYAN}⚠ Debian $os_ver may not be fully supported${CEND}" >> "/tmp/py3-install.log"
+            ;;
+    esac
+    
+    # Check if repository already exists
+    if apt-cache policy | grep -q "ppa.launchpad.net/deadsnakes"; then
+        echo -e "${CYAN}⚠ Deadsnakes repository already exists${CEND}" >> "/tmp/py3-install.log"
+        return 0
+    fi
+    
+    # Install required packages
+    echo -e "${CCYAN}Installing required packages...${CEND}" >> "/tmp/py3-install.log"
+    apt update >> "/tmp/py3-install.log" 2>&1
+    
+    local required_packages=("curl" "wget" "gnupg" "ca-certificates" "apt-transport-https" "software-properties-common")
+    for pkg in "${required_packages[@]}"; do
+        if ! dpkg -l | grep -q "$pkg"; then
+            echo -e "${CCYAN}Installing $pkg...${CEND}" >> "/tmp/py3-install.log"
+            apt install -y "$pkg" >> "/tmp/py3-install.log" 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ $pkg installed${CEND}" >> "/tmp/py3-install.log"
+            else
+                echo -e "${CRED}✗ Failed to install $pkg${CEND}" >> "/tmp/py3-install.log"
+                return 1
+            fi
+        fi
+    done
+    
+    # Add Deadsnakes PPA
+    echo -e "${CCYAN}Adding Deadsnakes PPA...${CEND}" >> "/tmp/py3-install.log"
+    add-apt-repository ppa:deadsnakes/ppa -y >> "/tmp/py3-install.log" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Deadsnakes PPA added${CEND}" >> "/tmp/py3-install.log"
+    else
+        echo -e "${CRED}✗ Failed to add Deadsnakes PPA${CEND}" >> "/tmp/py3-install.log"
+        return 1
+    fi
+    
+    # Update package list
+    echo -e "${CCYAN}Updating package list...${CEND}" >> "/tmp/py3-install.log"
+    apt update >> "/tmp/py3-install.log" 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Package list updated${CEND}" >> "/tmp/py3-install.log"
+    else
+        echo -e "${CRED}✗ Failed to update package list${CEND}" >> "/tmp/py3-install.log"
+        return 1
+    fi
+    
+    # Verify Python packages are available
+    echo -e "${CCYAN}Verifying Python packages availability...${CEND}" >> "/tmp/py3-install.log"
+    if apt-cache show "python3.12" >/dev/null 2>&1 || apt-cache show "python3.11" >/dev/null 2>&1 || apt-cache show "python3.10" >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ Python packages available from Deadsnakes${CEND}" >> "/tmp/py3-install.log"
+    else
+        echo -e "${CRED}✗ Python packages not available from Deadsnakes${CEND}" >> "/tmp/py3-install.log"
+        return 1
+    fi
+}
+
+# Function to show Python version selection menu
+function show_python_version_menu() {
+    echo -e "${CGREEN}========================================${CEND}"
+    echo -e "${CGREEN}    Python Version Selection Menu    ${CEND}"
+    echo -e "${CGREEN}========================================${CEND}"
+    echo ""
+    echo -e "${CCYAN}Available Python versions:${CEND}"
+    echo "1) Python 3.12 - Latest stable"
+    echo "2) Python 3.11 - Previous stable"
+    echo "3) Python 3.10 - LTS version"
+    echo "4) Python 3.9 - Older stable"
+    echo "5) Python 3.8 - Legacy version"
+    echo ""
+}
+
+# Function to get Python version choice
+function get_python_version_choice() {
+    while true; do
+        show_python_version_menu
+        read -p "Enter your choice [1-5]: " version_choice
+        case $version_choice in
+            1)
+                python_version="3.12"
+                echo -e "${CGREEN}Selected: Python 3.12${CEND}"
+                break
+                ;;
+            2)
+                python_version="3.11"
+                echo -e "${CGREEN}Selected: Python 3.11${CEND}"
+                break
+                ;;
+            3)
+                python_version="3.10"
+                echo -e "${CGREEN}Selected: Python 3.10${CEND}"
+                break
+                ;;
+            4)
+                python_version="3.9"
+                echo -e "${CGREEN}Selected: Python 3.9${CEND}"
+                break
+                ;;
+            5)
+                python_version="3.8"
+                echo -e "${CGREEN}Selected: Python 3.8${CEND}"
+                break
+                ;;
+            *)
+                echo -e "${CRED}Invalid choice. Please select 1-5.${CEND}"
+                ;;
+        esac
+    done
+}
+
+# Function to install Python from repository
+function install_python_from_repository() {
+    echo -e "${CGREEN}Installing Python $python_version from Deadsnakes repository...${CEND}"
+    
+    # Check if the specific Python version is available
+    if ! apt-cache show "python$python_version" >/dev/null 2>&1; then
+        echo -e "${CRED}✗ Python $python_version is not available from Deadsnakes${CEND}"
+        echo -e "${CYAN}Available versions:${CEND}"
+        apt-cache search "^python3\.[0-9]+$" | grep -E "python3\.[0-9]+" | head -5
+        return 1
+    fi
+    
+    # Install Python package
+    echo -e "${CCYAN}Installing python$python_version...${CEND}"
+    apt install -y python$python_version >> "/tmp/py3-install.log" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Python $python_version installed${CEND}"
+    else
+        echo -e "${CRED}✗ Failed to install Python $python_version${CEND}"
+        return 1
+    fi
+    
+    # Install additional packages
+    echo -e "${CCYAN}Installing additional Python packages...${CEND}"
+    local additional_packages=(
+        "python$python_version-venv"
+        "python$python_version-dev"
+        "python$python_version-distutils"
+        "python$python_version-lib2to3"
+        "python$python_version-tk"
+        "python$python_version-full"
+    )
+    
+    for pkg in "${additional_packages[@]}"; do
+        if apt-cache show "$pkg" >/dev/null 2>&1; then
+            echo -e "${CCYAN}Installing $pkg...${CEND}"
+            apt install -y "$pkg" >> "/tmp/py3-install.log" 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ $pkg installed${CEND}"
+            else
+                echo -e "${CYAN}⚠ $pkg failed (optional)${CEND}"
+            fi
+        fi
+    done
+    
+    # Install pip if not included
+    if ! command -v pip$python_version >/dev/null 2>&1; then
+        echo -e "${CCYAN}Installing pip for Python $python_version...${CEND}"
+        apt install -y python$python_version-pip >> "/tmp/py3-install.log" 2>&1
+        if [ $? -eq 0 ]; then
+            echo -e "${CGREEN}✓ pip$python_version installed${CEND}"
+        else
+            echo -e "${CYAN}⚠ pip$python_version not available, will use ensurepip${CEND}"
+        fi
+    fi
+    
+    # Upgrade pip
+    echo -e "${CGREEN}Upgrading pip...${CEND}"
+    python$python_version -m pip install --upgrade pip >> "/tmp/py3-install.log" 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ pip upgraded${CEND}"
+    else
+        echo -e "${CYAN}⚠ pip upgrade failed (will continue)${CEND}"
+    fi
+    
+    echo -e "${CGREEN}✓ Python $python_version installation completed${CEND}"
+}
 
 # Function to install dependencies with comprehensive fallback handling
 function install_packages_with_fallback() {
@@ -766,13 +1086,19 @@ EOF
 
 # Main execution flow
 function main() {
+    # Get installation type choice (repository vs source)
+    get_installation_type_choice
+    
+    # Get Python version choice
+    get_python_version_choice
+    
     # Get user choice for installation mode
     get_user_choice
     
     # Show installation summary and confirm
     show_installation_summary
     
-    # Install based on mode
+    # Install based on mode and installation type
     case $INSTALL_MODE in
         "ai-only")
             echo -e "${CGREEN}Setting up AI/ML environment only...${CEND}"
@@ -781,8 +1107,26 @@ function main() {
             ;;
         *)
             # Standard Python installation + AI/ML if needed
-            install_deps
-            install_py3
+            if [ "$PYTHON_INSTALL_TYPE" = "repository" ]; then
+                echo -e "${CGREEN}Installing Python from repository...${CEND}"
+                install_deps
+                
+                # Add Deadsnakes repository with intelligent management
+                if add_deadsnakes_repository_enhanced; then
+                    echo -e "${CGREEN}✓ Deadsnakes repository configured${CEND}"
+                    install_python_from_repository
+                else
+                    echo -e "${CRED}✗ Failed to configure Deadsnakes repository${CEND}"
+                    echo -e "${CYAN}Falling back to source installation...${CEND}"
+                    PYTHON_INSTALL_TYPE="source"
+                    install_py3
+                fi
+            else
+                echo -e "${CGREEN}Installing Python from source...${CEND}"
+                install_deps
+                install_py3
+            fi
+            
             install_venv
             
             # Install AI/ML libraries if requested
@@ -814,8 +1158,14 @@ function show_completion_message() {
             echo ""
             echo -e "${CCYAN}Installation Summary:${CEND}"
             echo -e "  Python Version: $python_version"
-            echo -e "  Installation Path: /usr/bin/python${python_version%.*}"
-            echo -e "  Pip Version: $(python${python_version%.*} -m pip --version | cut -d' ' -f2)"
+            echo -e "  Installation Type: $PYTHON_INSTALL_TYPE"
+            if [ "$PYTHON_INSTALL_TYPE" = "repository" ]; then
+                echo -e "  Installation Path: /usr/bin/python$python_version"
+                echo -e "  Pip Command: pip$python_version"
+            else
+                echo -e "  Installation Path: /usr/bin/python${python_version%.*}"
+                echo -e "  Pip Command: python${python_version%.*} -m pip"
+            fi
             echo -e "  Virtualenvwrapper: Installed"
             ;;
         "ai-only")
@@ -835,8 +1185,14 @@ function show_completion_message() {
             echo ""
             echo -e "${CCYAN}Installation Summary:${CEND}"
             echo -e "  Python Version: $python_version"
-            echo -e "  Installation Path: /usr/bin/python${python_version%.*}"
-            echo -e "  Pip Version: $(python${python_version%.*} -m pip --version | cut -d' ' -f2)"
+            echo -e "  Installation Type: $PYTHON_INSTALL_TYPE"
+            if [ "$PYTHON_INSTALL_TYPE" = "repository" ]; then
+                echo -e "  Installation Path: /usr/bin/python$python_version"
+                echo -e "  Pip Command: pip$python_version"
+            else
+                echo -e "  Installation Path: /usr/bin/python${python_version%.*}"
+                echo -e "  Pip Command: python${python_version%.*} -m pip"
+            fi
             echo -e "  Virtualenvwrapper: Installed"
             echo -e "  AI/ML Libraries: Installed"
             echo -e "  Environment Script: /usr/local/bin/setup-ai-env"
@@ -856,7 +1212,11 @@ function show_completion_message() {
     echo -e "  setup-ai-env <name> <type>  # Create environment"
     echo -e "  workon <name>               # Activate environment"
     echo -e "  jupyter lab                 # Start Jupyter Lab"
-    echo -e "  python -c \"import torch; print('PyTorch:', torch.__version__)\"  # Test"
+    if [ "$PYTHON_INSTALL_TYPE" = "repository" ]; then
+        echo -e "  python$python_version -c \"import torch; print('PyTorch:', torch.__version__)\"  # Test"
+    else
+        echo -e "  python${python_version%.*} -c \"import torch; print('PyTorch:', torch.__version__)\"  # Test"
+    fi
     echo ""
     echo -e "${CCYAN}Logs:${CEND}"
     echo -e "  Dependencies: /tmp/apt-packages.log"

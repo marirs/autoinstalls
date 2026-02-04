@@ -126,25 +126,470 @@ function install_dependencies() {
 }
 
 function install_nodesource() {
-    echo -e "${CGREEN}Installing Node.js via NodeSource...${CEND}"
+    echo -e "${CGREEN}Installing Node.js via NodeSource with intelligent repository management...${CEND}"
     
-    # Add NodeSource repository
-    curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION} | bash - >> "$LOG_FILE" 2>&1
-    
-    if [ $? -ne 0 ]; then
-        echo -e "${CRED}Failed to add NodeSource repository${CEND}"
+    # Enhanced repository management
+    if add_nodesource_repository_enhanced; then
+        echo -e "${CGREEN}✓ NodeSource repository configured${CEND}"
+    else
+        echo -e "${CRED}✗ Failed to configure NodeSource repository${CEND}"
         exit 1
     fi
     
     # Install Node.js
+    echo -e "${CGREEN}Installing Node.js...${CEND}"
     apt install -y nodejs >> "$LOG_FILE" 2>&1
     
-    if [ $? -ne 0 ]; then
-        echo -e "${CRED}Failed to install Node.js${CEND}"
-        exit 1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Node.js installed successfully${CEND}"
+    else
+        echo -e "${CRED}✗ Failed to install Node.js${CEND}"
+        return 1
+    fi
+}
+
+# Function to add NodeSource repository with intelligent management
+function add_nodesource_repository_enhanced() {
+    echo -e "${CCYAN}Adding NodeSource repository for $os $os_ver...${CEND}" >> "$LOG_FILE"
+    
+    case "$os" in
+        "ubuntu")
+            add_ubuntu_nodesource_repo_enhanced
+            ;;
+        "debian")
+            add_debian_nodesource_repo_enhanced
+            ;;
+        "centos"|"rhel"|"rocky"|"almalinux")
+            add_rhel_nodesource_repo_enhanced
+            ;;
+        "fedora")
+            add_fedora_nodesource_repo_enhanced
+            ;;
+        *)
+            echo -e "${CRED}✗ Unsupported OS for NodeSource: $os${CEND}" >> "$LOG_FILE"
+            return 1
+            ;;
+    esac
+}
+
+function add_ubuntu_nodesource_repo_enhanced() {
+    echo -e "${CCYAN}Configuring NodeSource repository for Ubuntu...${CEND}" >> "$LOG_FILE"
+    
+    # Check Ubuntu version compatibility
+    case "$os_ver" in
+        "18.04"|"20.04"|"22.04"|"24.04")
+            echo -e "${CGREEN}✓ Ubuntu $os_ver is supported${CEND}" >> "$LOG_FILE"
+            ;;
+        *)
+            echo -e "${CYAN}⚠ Ubuntu $os_ver may not be fully supported${CEND}" >> "$LOG_FILE"
+            ;;
+    esac
+    
+    # Check if repository already exists
+    if [ -f "/etc/apt/sources.list.d/nodesource.list" ] || apt-cache policy | grep -q "nodesource"; then
+        echo -e "${CYAN}⚠ NodeSource repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
     fi
     
-    echo -e "${CGREEN}Node.js installed successfully${CEND}"
+    # Install required packages
+    echo -e "${CCYAN}Installing required packages...${CEND}" >> "$LOG_FILE"
+    apt update >> "$LOG_FILE" 2>&1
+    
+    local required_packages=("curl" "wget" "gnupg" "ca-certificates" "apt-transport-https")
+    for pkg in "${required_packages[@]}"; do
+        if ! dpkg -l | grep -q "$pkg"; then
+            echo -e "${CCYAN}Installing $pkg...${CEND}" >> "$LOG_FILE"
+            apt install -y "$pkg" >> "$LOG_FILE" 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ $pkg installed${CEND}" >> "$LOG_FILE"
+            else
+                echo -e "${CRED}✗ Failed to install $pkg${CEND}" >> "$LOG_FILE"
+                return 1
+            fi
+        fi
+    done
+    
+    # Get Ubuntu codename dynamically
+    local ubuntu_codename=""
+    if command -v lsb_release >/dev/null 2>&1; then
+        ubuntu_codename=$(lsb_release -cs 2>/dev/null || echo "jammy")
+    else
+        # Fallback to version-based codename
+        case "$os_ver" in
+            "18.04") ubuntu_codename="bionic" ;;
+            "20.04") ubuntu_codename="focal" ;;
+            "22.04") ubuntu_codename="jammy" ;;
+            "24.04") ubuntu_codename="noble" ;;
+            *) ubuntu_codename="jammy" ;;
+        esac
+    fi
+    
+    echo -e "${CCYAN}Using Ubuntu codename: $ubuntu_codename${CEND}" >> "$LOG_FILE"
+    
+    # Validate Node.js version compatibility
+    echo -e "${CCYAN}Validating Node.js version $NODE_VERSION compatibility...${CEND}" >> "$LOG_FILE"
+    case "$NODE_VERSION" in
+        "20.x"|"18.x"|"16.x"|"14.x")
+            echo -e "${CGREEN}✓ Node.js $NODE_VERSION is supported${CEND}" >> "$LOG_FILE"
+            ;;
+        *)
+            echo -e "${CYAN}⚠ Node.js $NODE_VERSION may not be fully supported${CEND}" >> "$LOG_FILE"
+            ;;
+    esac
+    
+    # Add NodeSource repository using setup script
+    echo -e "${CCYAN}Adding NodeSource repository...${CEND}" >> "$LOG_FILE"
+    local nodesource_setup_url="https://deb.nodesource.com/setup_${NODE_VERSION}"
+    
+    # Download and execute setup script with validation
+    curl -fsSL "$nodesource_setup_url" -o /tmp/nodesource_setup.sh >> "$LOG_FILE" 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ NodeSource setup script downloaded${CEND}" >> "$LOG_FILE"
+        
+        # Validate setup script
+        if [ -s /tmp/nodesource_setup.sh ]; then
+            echo -e "${CGREEN}✓ NodeSource setup script validated${CEND}" >> "$LOG_FILE"
+            bash /tmp/nodesource_setup.sh >> "$LOG_FILE" 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ NodeSource repository added${CEND}" >> "$LOG_FILE"
+            else
+                echo -e "${CRED}✗ Failed to execute NodeSource setup script${CEND}" >> "$LOG_FILE"
+                rm -f /tmp/nodesource_setup.sh
+                return 1
+            fi
+        else
+            echo -e "${CRED}✗ NodeSource setup script is empty or corrupted${CEND}" >> "$LOG_FILE"
+            rm -f /tmp/nodesource_setup.sh
+            return 1
+        fi
+        rm -f /tmp/nodesource_setup.sh
+    else
+        echo -e "${CRED}✗ Failed to download NodeSource setup script${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Update package list
+    echo -e "${CCYAN}Updating package list...${CEND}" >> "$LOG_FILE"
+    apt update >> "$LOG_FILE" 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Package list updated${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to update package list${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Verify Node.js packages are available
+    echo -e "${CCYAN}Verifying Node.js package availability...${CEND}" >> "$LOG_FILE"
+    if apt-cache show "nodejs" >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ Node.js packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Node.js packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+}
+
+function add_debian_nodesource_repo_enhanced() {
+    echo -e "${CCYAN}Configuring NodeSource repository for Debian...${CEND}" >> "$LOG_FILE"
+    
+    # Check Debian version compatibility
+    case "$os_ver" in
+        "10"|"11"|"12"|"13")
+            echo -e "${CGREEN}✓ Debian $os_ver is supported${CEND}" >> "$LOG_FILE"
+            ;;
+        *)
+            echo -e "${CYAN}⚠ Debian $os_ver may not be fully supported${CEND}" >> "$LOG_FILE"
+            ;;
+    esac
+    
+    # Check if repository already exists
+    if [ -f "/etc/apt/sources.list.d/nodesource.list" ] || apt-cache policy | grep -q "nodesource"; then
+        echo -e "${CYAN}⚠ NodeSource repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Install required packages
+    echo -e "${CCYAN}Installing required packages...${CEND}" >> "$LOG_FILE"
+    apt update >> "$LOG_FILE" 2>&1
+    
+    local required_packages=("curl" "wget" "gnupg" "ca-certificates" "apt-transport-https")
+    for pkg in "${required_packages[@]}"; do
+        if ! dpkg -l | grep -q "$pkg"; then
+            echo -e "${CCYAN}Installing $pkg...${CEND}" >> "$LOG_FILE"
+            apt install -y "$pkg" >> "$LOG_FILE" 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ $pkg installed${CEND}" >> "$LOG_FILE"
+            else
+                echo -e "${CRED}✗ Failed to install $pkg${CEND}" >> "$LOG_FILE"
+                return 1
+            fi
+        fi
+    done
+    
+    # Get Debian codename dynamically
+    local debian_codename=""
+    if command -v lsb_release >/dev/null 2>&1; then
+        debian_codename=$(lsb_release -cs 2>/dev/null || echo "bookworm")
+    else
+        # Fallback to version-based codename
+        case "$os_ver" in
+            "10") debian_codename="buster" ;;
+            "11") debian_codename="bullseye" ;;
+            "12") debian_codename="bookworm" ;;
+            "13") debian_codename="trixie" ;;
+            *) debian_codename="bookworm" ;;
+        esac
+    fi
+    
+    echo -e "${CCYAN}Using Debian codename: $debian_codename${CEND}" >> "$LOG_FILE"
+    
+    # Validate Node.js version compatibility
+    echo -e "${CCYAN}Validating Node.js version $NODE_VERSION compatibility...${CEND}" >> "$LOG_FILE"
+    case "$NODE_VERSION" in
+        "20.x"|"18.x"|"16.x"|"14.x")
+            echo -e "${CGREEN}✓ Node.js $NODE_VERSION is supported${CEND}" >> "$LOG_FILE"
+            ;;
+        *)
+            echo -e "${CYAN}⚠ Node.js $NODE_VERSION may not be fully supported${CEND}" >> "$LOG_FILE"
+            ;;
+    esac
+    
+    # Add NodeSource repository using setup script
+    echo -e "${CCYAN}Adding NodeSource repository...${CEND}" >> "$LOG_FILE"
+    local nodesource_setup_url="https://deb.nodesource.com/setup_${NODE_VERSION}"
+    
+    # Download and execute setup script with validation
+    curl -fsSL "$nodesource_setup_url" -o /tmp/nodesource_setup.sh >> "$LOG_FILE" 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ NodeSource setup script downloaded${CEND}" >> "$LOG_FILE"
+        
+        # Validate setup script
+        if [ -s /tmp/nodesource_setup.sh ]; then
+            echo -e "${CGREEN}✓ NodeSource setup script validated${CEND}" >> "$LOG_FILE"
+            bash /tmp/nodesource_setup.sh >> "$LOG_FILE" 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ NodeSource repository added${CEND}" >> "$LOG_FILE"
+            else
+                echo -e "${CRED}✗ Failed to execute NodeSource setup script${CEND}" >> "$LOG_FILE"
+                rm -f /tmp/nodesource_setup.sh
+                return 1
+            fi
+        else
+            echo -e "${CRED}✗ NodeSource setup script is empty or corrupted${CEND}" >> "$LOG_FILE"
+            rm -f /tmp/nodesource_setup.sh
+            return 1
+        fi
+        rm -f /tmp/nodesource_setup.sh
+    else
+        echo -e "${CRED}✗ Failed to download NodeSource setup script${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Update package list
+    echo -e "${CCYAN}Updating package list...${CEND}" >> "$LOG_FILE"
+    apt update >> "$LOG_FILE" 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ Package list updated${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to update package list${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Verify Node.js packages are available
+    echo -e "${CCYAN}Verifying Node.js package availability...${CEND}" >> "$LOG_FILE"
+    if apt-cache show "nodejs" >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ Node.js packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Node.js packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+}
+
+function add_rhel_nodesource_repo_enhanced() {
+    echo -e "${CCYAN}Configuring NodeSource repository for RHEL-based systems...${CEND}" >> "$LOG_FILE"
+    
+    # Check OS version compatibility
+    case "$os_ver" in
+        "7"|"8"|"9")
+            echo -e "${CGREEN}✓ RHEL/CentOS/Rocky/AlmaLinux $os_ver is supported${CEND}" >> "$LOG_FILE"
+            ;;
+        *)
+            echo -e "${CRED}✗ RHEL/CentOS version $os_ver not supported${CEND}" >> "$LOG_FILE"
+            return 1
+            ;;
+    esac
+    
+    # Determine package manager
+    local pkg_manager="dnf"
+    if ! command -v dnf >/dev/null 2>&1; then
+        pkg_manager="yum"
+    fi
+    
+    echo -e "${CCYAN}Using package manager: $pkg_manager${CEND}" >> "$LOG_FILE"
+    
+    # Check if repository already exists
+    if [ -f "/etc/yum.repos.d/nodesource.repo" ]; then
+        echo -e "${CYAN}⚠ NodeSource repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Install required packages
+    echo -e "${CCYAN}Installing required packages...${CEND}" >> "$LOG_FILE"
+    local required_packages=("curl" "wget" "gnupg" "ca-certificates")
+    for pkg in "${required_packages[@]}"; do
+        if ! $pkg_manager list installed "$pkg" >/dev/null 2>&1; then
+            echo -e "${CCYAN}Installing $pkg...${CEND}" >> "$LOG_FILE"
+            $pkg_manager install -y "$pkg" >> "$LOG_FILE" 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ $pkg installed${CEND}" >> "$LOG_FILE"
+            else
+                echo -e "${CRED}✗ Failed to install $pkg${CEND}" >> "$LOG_FILE"
+                return 1
+            fi
+        fi
+    done
+    
+    # Validate Node.js version compatibility
+    echo -e "${CCYAN}Validating Node.js version $NODE_VERSION compatibility...${CEND}" >> "$LOG_FILE"
+    case "$NODE_VERSION" in
+        "20.x"|"18.x"|"16.x"|"14.x")
+            echo -e "${CGREEN}✓ Node.js $NODE_VERSION is supported${CEND}" >> "$LOG_FILE"
+            ;;
+        *)
+            echo -e "${CYAN}⚠ Node.js $NODE_VERSION may not be fully supported${CEND}" >> "$LOG_FILE"
+            ;;
+    esac
+    
+    # Add NodeSource repository using setup script
+    echo -e "${CCYAN}Adding NodeSource repository...${CEND}" >> "$LOG_FILE"
+    local nodesource_setup_url="https://rpm.nodesource.com/setup_${NODE_VERSION}"
+    
+    # Download and execute setup script with validation
+    curl -fsSL "$nodesource_setup_url" -o /tmp/nodesource_setup.sh >> "$LOG_FILE" 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ NodeSource setup script downloaded${CEND}" >> "$LOG_FILE"
+        
+        # Validate setup script
+        if [ -s /tmp/nodesource_setup.sh ]; then
+            echo -e "${CGREEN}✓ NodeSource setup script validated${CEND}" >> "$LOG_FILE"
+            bash /tmp/nodesource_setup.sh >> "$LOG_FILE" 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ NodeSource repository added${CEND}" >> "$LOG_FILE"
+            else
+                echo -e "${CRED}✗ Failed to execute NodeSource setup script${CEND}" >> "$LOG_FILE"
+                rm -f /tmp/nodesource_setup.sh
+                return 1
+            fi
+        else
+            echo -e "${CRED}✗ NodeSource setup script is empty or corrupted${CEND}" >> "$LOG_FILE"
+            rm -f /tmp/nodesource_setup.sh
+            return 1
+        fi
+        rm -f /tmp/nodesource_setup.sh
+    else
+        echo -e "${CRED}✗ Failed to download NodeSource setup script${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Clean package cache
+    echo -e "${CCYAN}Cleaning package cache...${CEND}" >> "$LOG_FILE"
+    $pkg_manager clean all >> "$LOG_FILE" 2>&1
+    
+    # Verify Node.js packages are available
+    echo -e "${CCYAN}Verifying Node.js package availability...${CEND}" >> "$LOG_FILE"
+    if $pkg_manager info nodejs >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ Node.js packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Node.js packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+}
+
+function add_fedora_nodesource_repo_enhanced() {
+    echo -e "${CCYAN}Configuring NodeSource repository for Fedora...${CEND}" >> "$LOG_FILE"
+    
+    # Check Fedora version
+    local fedora_major=$(echo "$os_ver" | cut -d. -f1)
+    echo -e "${CGREEN}✓ Fedora $os_ver detected${CEND}" >> "$LOG_FILE"
+    
+    # Determine package manager
+    local pkg_manager="dnf"
+    
+    # Check if repository already exists
+    if [ -f "/etc/yum.repos.d/nodesource.repo" ]; then
+        echo -e "${CYAN}⚠ NodeSource repository already exists${CEND}" >> "$LOG_FILE"
+        return 0
+    fi
+    
+    # Install required packages
+    echo -e "${CCYAN}Installing required packages...${CEND}" >> "$LOG_FILE"
+    local required_packages=("curl" "wget" "gnupg" "ca-certificates")
+    for pkg in "${required_packages[@]}"; do
+        if ! $pkg_manager list installed "$pkg" >/dev/null 2>&1; then
+            echo -e "${CCYAN}Installing $pkg...${CEND}" >> "$LOG_FILE"
+            $pkg_manager install -y "$pkg" >> "$LOG_FILE" 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ $pkg installed${CEND}" >> "$LOG_FILE"
+            else
+                echo -e "${CRED}✗ Failed to install $pkg${CEND}" >> "$LOG_FILE"
+                return 1
+            fi
+        fi
+    done
+    
+    # Validate Node.js version compatibility
+    echo -e "${CCYAN}Validating Node.js version $NODE_VERSION compatibility...${CEND}" >> "$LOG_FILE"
+    case "$NODE_VERSION" in
+        "20.x"|"18.x"|"16.x"|"14.x")
+            echo -e "${CGREEN}✓ Node.js $NODE_VERSION is supported${CEND}" >> "$LOG_FILE"
+            ;;
+        *)
+            echo -e "${CYAN}⚠ Node.js $NODE_VERSION may not be fully supported${CEND}" >> "$LOG_FILE"
+            ;;
+    esac
+    
+    # Add NodeSource repository using setup script
+    echo -e "${CCYAN}Adding NodeSource repository...${CEND}" >> "$LOG_FILE"
+    local nodesource_setup_url="https://rpm.nodesource.com/setup_${NODE_VERSION}"
+    
+    # Download and execute setup script with validation
+    curl -fsSL "$nodesource_setup_url" -o /tmp/nodesource_setup.sh >> "$LOG_FILE" 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ NodeSource setup script downloaded${CEND}" >> "$LOG_FILE"
+        
+        # Validate setup script
+        if [ -s /tmp/nodesource_setup.sh ]; then
+            echo -e "${CGREEN}✓ NodeSource setup script validated${CEND}" >> "$LOG_FILE"
+            bash /tmp/nodesource_setup.sh >> "$LOG_FILE" 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${CGREEN}✓ NodeSource repository added${CEND}" >> "$LOG_FILE"
+            else
+                echo -e "${CRED}✗ Failed to execute NodeSource setup script${CEND}" >> "$LOG_FILE"
+                rm -f /tmp/nodesource_setup.sh
+                return 1
+            fi
+        else
+            echo -e "${CRED}✗ NodeSource setup script is empty or corrupted${CEND}" >> "$LOG_FILE"
+            rm -f /tmp/nodesource_setup.sh
+            return 1
+        fi
+        rm -f /tmp/nodesource_setup.sh
+    else
+        echo -e "${CRED}✗ Failed to download NodeSource setup script${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Clean package cache
+    echo -e "${CCYAN}Cleaning package cache...${CEND}" >> "$LOG_FILE"
+    $pkg_manager clean all >> "$LOG_FILE" 2>&1
+    
+    # Verify Node.js packages are available
+    echo -e "${CCYAN}Verifying Node.js package availability...${CEND}" >> "$LOG_FILE"
+    if $pkg_manager info nodejs >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ Node.js packages available${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Node.js packages not available${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
 }
 
 function install_nvm() {
