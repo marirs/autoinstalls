@@ -2017,6 +2017,7 @@ function create_cargo_publish_config() {
     
     # Add publishing configuration to existing config or create new one
     local config_file="$CARGO_HOME/config.toml"
+    local credentials_file="$CARGO_HOME/credentials.toml"
     
     # Backup existing config if it exists
     if [ -f "$config_file" ]; then
@@ -2024,7 +2025,13 @@ function create_cargo_publish_config() {
         echo -e "${CCYAN}Backed up existing config.toml${CEND}"
     fi
     
-    # Add publishing configuration
+    # Backup existing credentials if they exist
+    if [ -f "$credentials_file" ]; then
+        cp "$credentials_file" "$credentials_file.backup.$(date +%Y%m%d_%H%M%S)"
+        echo -e "${CCYAN}Backed up existing credentials.toml${CEND}"
+    fi
+    
+    # Add publishing configuration to main config (without credentials)
     cat >> "$config_file" << 'EOF'
 
 # Cargo Publishing Configuration
@@ -2032,31 +2039,53 @@ function create_cargo_publish_config() {
 # Default registry for publishing
 default = "crates-io"
 
-# Alternative registries (if needed)
-# [registries.my-registry]
-# index = "https://my-registry.com/index/"
-# token = "your-token-here"
+[http]
+# HTTP settings for cargo registry
+timeout = 30
+check-revoke = false
+
+[net]
+# Network settings for publishing
+retry = 3
+git-fetch-with-cli = true
+
+[registry.crates-io]
+# crates.io registry configuration
+protocol = "https"
+registry = "https://github.com/rust-lang/crates.io-index"
 
 [publish]
-# Publishing settings
+# Publishing behavior settings
 registry = "crates-io"
-token = "${CARGO_REGISTRY_TOKEN}"
-
-# Allow publishing with warnings
 allow-dirty = false
-
-# Verify before publishing
 verify = true
 
 EOF
     
-    # If we have a publish config template, use it
+    # Create credentials file with proper structure
+    cat > "$credentials_file" << 'EOF'
+
+# Cargo Credentials File
+# This file contains authentication tokens for cargo registries
+# WARNING: This file contains sensitive information - keep it secure!
+
+[registry]
+# crates.io authentication token
+# This will be automatically configured when you run 'cargo login'
+# or use the Rust installation script's publishing configuration
+
+EOF
+    
+    # If we have a publish config template, add additional settings
     if [ -f "$CONFIG_DIR/cargo-publish.toml" ]; then
-        cat "$CONFIG_DIR/cargo-publish.toml" >> "$config_file"
+        # Extract only non-credential settings from the template
+        grep -v "token" "$CONFIG_DIR/cargo-publish.toml" | grep -v "credentials" >> "$config_file"
         echo -e "${CGREEN}Added publishing configuration from template${CEND}"
     fi
     
     echo -e "${CGREEN}Publishing configuration added to $config_file${CEND}"
+    echo -e "${CGREEN}Credentials file created at $credentials_file${CEND}"
+    echo -e "${CYAN}Note: Token will be securely stored by 'cargo login' command${CEND}"
 }
 
 function show_cargo_publish_next_steps() {
@@ -2081,6 +2110,17 @@ function show_cargo_publish_next_steps() {
     echo -e "${CGREEN}Configuration files:${CEND}"
     echo "• Cargo config: $CARGO_HOME/config.toml"
     echo "• Credentials: $CARGO_HOME/credentials.toml"
+    echo ""
+    echo -e "${CYAN}Credentials file structure:${CEND}"
+    echo "The credentials.toml file should contain:"
+    echo "[registry]"
+    echo 'token = "your_api_token_here"'
+    echo ""
+    echo -e "${CYAN}Note:${CEND}"
+    echo "• The 'cargo login' command automatically creates/updates credentials.toml"
+    echo "• Never share your credentials.toml file"
+    echo "• Add credentials.toml to your .gitignore file"
+    echo "• The script backs up existing credentials before making changes"
     echo ""
     echo -e "${CYAN}For more information, visit: https://doc.rust-lang.org/cargo/reference/publishing.html${CEND}"
 }
