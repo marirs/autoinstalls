@@ -8,7 +8,7 @@ BACKUP_DIR="/var/backups/mongodb"
 DATE=$(date +%Y%m%d_%H%M%S)
 RETENTION_DAYS=7
 DB_NAME="your_database"
-MONGO_HOST="localhost"
+MONGO_HOST="127.0.0.1"                    # Use localhost only for security
 MONGO_PORT="27017"
 
 # Create backup directory if it doesn't exist
