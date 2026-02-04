@@ -2,7 +2,7 @@
 ![GitHub](https://img.shields.io/github/license/marirs/autoinstalls)
 ![https://img.shields.io/badge/shell-bash-blue](https://img.shields.io/badge/shell-bash-blue)
 ![https://img.shields.io/badge/platform-ubuntu%2018.04%2C%2020.04%20%7C%20Debian%209.x%2C%2010.x-orange](https://img.shields.io/badge/platform-ubuntu%2018.04%2C%2020.04%20%7C%20Debian%209.x%2C%2010.x-orange)
-![https://img.shields.io/badge/components-11-green](https://img.shields.io/badge/components-11-green)
+![https://img.shields.io/badge/components-12-green](https://img.shields.io/badge/components-12-green)
 ![https://img.shields.io/badge/security-hardened-red](https://img.shields.io/badge/security-hardened-red)
 
 A comprehensive collection of automated installation scripts for popular software and development tools. These scripts are designed to simplify the setup process on Ubuntu and Debian systems with proper security configurations and optimizations.
@@ -484,6 +484,61 @@ kubectl get nodes
 
 ---
 
+### 🦀 Rust Programming Language
+**Universal Rust installation with cross-compilation support for all platforms**
+![https://img.shields.io/badge/rust-stable-orange](https://img.shields.io/badge/rust-stable-orange)
+![https://img.shields.io/badge/platform-macos%20%7C%20linux%20%7C%20windows-blue](https://img.shields.io/badge/platform-macos%20%7C%20linux%20%7C%20windows-blue)
+![https://img.shields.io/badge/architecture-x86__64%20%7C%20ARM64%20%7C%20ARM-green](https://img.shields.io/badge/architecture-x86__64%20%7C%20ARM64%20%7C%20ARM-green)
+![https://img.shields.io/badge/cross%20compilation-enabled-purple](https://img.shields.io/badge/cross%20compilation-enabled-purple)
+![https://img.shields.io/badge/status-production%20ready-green](https://img.shields.io/badge/status-production%20ready-green)
+
+**Features:**
+- ✅ Rust stable with rustup toolchain manager
+- ✅ Multi-platform support (macOS, Linux, Windows)
+- ✅ Multi-architecture support (x64, ARM64, ARM)
+- ✅ Cross-compilation targets for all platforms
+- ✅ Platform-specific dependency installation
+- ✅ WebAssembly (WASM) support
+- ✅ Development tools and cargo extensions
+- ✅ Security audit and code analysis tools
+
+**Installation:**
+```bash
+cd rust/
+./rust-install.sh
+
+# Source environment for new shells
+source ~/.cargo/env
+```
+
+**Cross-Compilation Examples:**
+```bash
+# Build for Windows from Linux/macOS
+cargo build --target x86_64-pc-windows-gnu
+
+# Build for Linux ARM64
+cargo build --target aarch64-unknown-linux-gnu
+
+# Build for macOS from Linux
+cargo build --target x86_64-apple-darwin
+
+# Build for WebAssembly
+cargo build --target wasm32-unknown-unknown
+```
+
+**Management Tools:**
+```bash
+# Monitor Rust installation and targets
+rust-monitor
+
+# Manage Rust toolchain and targets
+rust-manager update
+rust-manager install-target x86_64-pc-windows-gnu
+rust-manager check
+```
+
+---
+
 ## 🔧 Common Features Across All Scripts
 
 ### 🛡️ Security Best Practices
@@ -597,6 +652,7 @@ sudo ./<install-script>.sh
 - **Elasticsearch**: `/tmp/elasticsearch-install.log`
 - **RabbitMQ**: `/tmp/rabbitmq-install.log`
 - **Kubernetes**: `/tmp/kubernetes-install.log`
+- **Rust**: `/tmp/rust-install.log`
 
 ---
 
