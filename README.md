@@ -2,7 +2,7 @@
 ![GitHub](https://img.shields.io/github/license/marirs/autoinstalls?label=Apache-2.0)
 ![https://img.shields.io/badge/shell-bash-blue](https://img.shields.io/badge/shell-bash-blue)
 ![https://img.shields.io/badge/platform-ubuntu%2018.04%2C%2020.04%2C%2022.04%2C%2024.04%20%7C%20Debian%209.x%2C%2010.x%2C%2011.x%2C%2012.x%2C%2013.x%20%7C%20macOS%20%7C%20Windows-orange](https://img.shields.io/badge/platform-ubuntu%2018.04%2C%2020.04%2C%2022.04%2C%2024.04%20%7C%20Debian%209.x%2C%2010.x%2C%2011.x%2C%2012.x%2C%2013.x%20%7C%20macOS%20%7C%20Windows-orange)
-![https://img.shields.io/badge/components-14-green](https://img.shields.io/badge/components-14-green)
+![https://img.shields.io/badge/components-15-green](https://img.shields.io/badge/components-15-green)
 ![https://img.shields.io/badge/cross%20compilation-enabled-purple](https://img.shields.io/badge/cross%20compilation-enabled-purple)
 ![https://img.shields.io/badge/ai%20ml-ready-blue](https://img.shields.io/badge/ai%20ml-ready-blue)
 ![https://img.shields.io/badge/security-hardened-red](https://img.shields.io/badge/security-hardened-red)
@@ -316,7 +316,71 @@ redis-cli -a <password> ping
 
 ---
 
-### 🐍 Python 3 Development Environment
+### � Let's Encrypt SSL Certificate Manager
+**Automated SSL certificate management with multi-webserver support**
+![https://img.shields.io/badge/certbot-latest-blue](https://img.shields.io/badge/certbot-latest-blue)
+![https://img.shields.io/badge/webservers-nginx%20%7C%20apache%20%7C%20lighttpd-green](https://img.shields.io/badge/webservers-nginx%20%7C%20apache%20%7C%20lighttpd-green)
+![https://img.shields.io/badge/security-hardened-brightgreen](https://img.shields.io/badge/security-hardened-brightgreen)
+![https://img.shields.io/badge/status-production%20ready-green](https://img.shields.io/badge/status-production%20ready-green)
+
+**Features:**
+- ✅ **Automatic Web Server Detection** - Nginx, Apache, Lighttpd with custom path support
+- ✅ **Domain Discovery** - Scans existing vhost configurations for SSL-less domains
+- ✅ **Multiple Certificate Types** - Single domain, SAN (multi-domain), and wildcard certificates
+- ✅ **One-Click SSL Configuration** - Automatic vhost modification with HTTP→HTTPS redirects
+- ✅ **Security Hardening** - TLS 1.2/1.3, modern ciphers, HSTS, security headers
+- ✅ **Clean Cron Management** - Single renewal script for all certificates
+- ✅ **DNS Provider Support** - Cloudflare, Route 53, DigitalOcean, manual validation
+- ✅ **Certificate Backup** - Automated backup and restoration capabilities
+- ✅ **Production-Ready** - Comprehensive logging, monitoring, and error handling
+
+**Certificate Types:**
+- 🔒 **Single Domain** - HTTP validation for individual domains
+- 📋 **SAN Certificates** - Multiple domains per certificate (HTTP validation)
+- 🌟 **Wildcard Certificates** - Subdomain coverage with DNS validation
+
+**Web Server Integration:**
+- 🚀 **Nginx** - SSL configuration with security headers and redirects
+- 🅰️ **Apache** - VirtualHost SSL setup with hardening
+- 💡 **Lighttpd** - SSL engine configuration with security headers
+
+**Installation:**
+```bash
+cd letsencrypt/
+sudo ./letsencrypt-install.sh
+
+# Quick Start:
+# 1) Install and Configure Let's Encrypt
+# 2) Configure SSL Certificate for Domain
+# 3) Configure Auto-Renewal
+```
+
+**Management Tools:**
+```bash
+# Monitor certificate status and renewal
+/opt/letsencrypt/letsencrypt-renew-all.sh
+
+# Check renewal logs
+tail -f /var/log/letsencrypt-renewal.log
+
+# List configured domains
+ls -la /etc/letsencrypt/live/
+
+# Test SSL configuration
+nginx -t  # or apache2ctl configtest
+```
+
+**Advanced Features:**
+- 🔄 **Automatic Renewal** - 30-day expiry threshold with email notifications
+- 🛡️ **Security Hardening** - Disabled weak protocols, modern cipher suites
+- 📁 **Multiple Vhost Paths** - `/etc/nginx/sites-available/`, `/etc/nginx/conf.d/`, custom directories
+- 🔧 **Domain Extraction** - Proper wildcard domain handling (e.g., `*.example.com` → `example.com`)
+- 📊 **Certificate Monitoring** - Expiry tracking and health checks
+- 🔄 **Web Server Reload** - Graceful reload after certificate renewal
+
+---
+
+### �� Python 3 Development Environment
 **Latest Python 3.11 with development tools and virtual environment management**
 ![https://img.shields.io/badge/python-3.11.8-blue](https://img.shields.io/badge/python-3.11.8-blue)
 ![https://img.shields.io/badge/status-development%20ready-green](https://img.shields.io/badge/status-development%20ready-green)
