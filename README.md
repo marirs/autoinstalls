@@ -150,7 +150,64 @@ sudo ./nginx-vhost-generator.sh
 
 ---
 
-### 🗄️ MySQL/MariaDB Database
+### � PHP Programming Language
+**Multi-version PHP installation with FPM, 40+ extensions, and webserver integration**
+![https://img.shields.io/badge/php-8.3%20%7C%208.2%20%7C%208.1%20%7C%208.0%20%7C%207.4-blue](https://img.shields.io/badge/php-8.3%20%7C%208.2%20%7C%208.1%20%7C%208.0%20%7C%207.4-blue)
+![https://img.shields.io/badge/php--fpm-enabled-green](https://img.shields.io/badge/php--fpm-enabled-green)
+![https://img.shields.io/badge/extensions-40%2B-brightgreen](https://img.shields.io/badge/extensions-40%2B-brightgreen)
+![https://img.shields.io/badge/nginx%20%7C%20apache-integrated-purple](https://img.shields.io/badge/nginx%20%7C%20apache-integrated-purple)
+
+**Features:**
+- ✅ **Multi-Version Support** - PHP 8.3, 8.2, 8.1, 8.0, 7.4
+- ✅ **PHP-FPM Configuration** - Unix Socket or TCP Port options
+- ✅ **40+ Extensions** - Database, security, image, system extensions
+- ✅ **Webserver Integration** - Automatic Nginx and Apache configuration
+- ✅ **Security Hardening** - Production-ready security settings
+- ✅ **Performance Optimization** - OPcache and FPM tuning
+- ✅ **Smart Installation** - Package fallbacks and PECL support
+- ✅ **Comprehensive Testing** - Built-in test site and validation
+
+**Extension Categories:**
+- 🔄 **Database Extensions** - Redis, MongoDB, MySQL, PostgreSQL, SQLite
+- 🔄 **Security Extensions** - Sodium, GMP for modern cryptography
+- 🔄 **Image Processing** - GD, ImageMagick, EXIF support
+- 🔄 **Web Services** - SOAP, XML-RPC, DOM, SimpleXML
+- 🔄 **System Extensions** - Process control, shared memory, IPC
+- 🔄 **Text Processing** - JSON, mbstring, tokenizer, iconv
+
+**Installation:**
+```bash
+cd php/
+sudo ./php-install.sh
+
+# Interactive installation:
+# - Select PHP version (8.3, 8.2, 8.1, 8.0, 7.4)
+# - Choose FPM type (Unix Socket/TCP Port)
+# - Configure webserver integration (Nginx/Apache)
+# - Install 40+ extensions automatically
+```
+
+**Webserver Integration:**
+```bash
+# Automatic configuration for detected webservers
+# Nginx: Upstream and location blocks
+# Apache: Proxy modules and virtual hosts
+# Test site: http://php-test.local
+# Extension testing: http://php-test.local/test-extensions.php
+```
+
+**What's Included:**
+- Multi-version PHP with FPM
+- 40+ essential extensions
+- Nginx and Apache integration
+- Security hardening and optimization
+- Comprehensive test site
+- Performance monitoring tools
+- Production-ready configuration
+
+---
+
+### �🗄️ MySQL/MariaDB Database
 **Unified installer for MySQL 8.0 and MariaDB 10.11 with comprehensive security**
 ![https://img.shields.io/badge/mysql-8.0-blue](https://img.shields.io/badge/mysql-8.0-blue)
 ![https://img.shields.io/badge/mariadb-10.11-orange](https://img.shields.io/badge/mariadb-10.11-orange)
