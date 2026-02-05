@@ -394,8 +394,10 @@ function add_ubuntu_mongodb_repo_enhanced() {
     echo -e "${CCYAN}Using Ubuntu codename: $ubuntu_codename${CEND}" >> /tmp/mongodb-install.log
     
     # Import MongoDB GPG key
-    echo -e "${CCYAN}Importing MongoDB GPG key...${CEND}" >> /tmp/mongodb-install.log
-    curl -fsSL "https://pgp.mongodb.com/server-${MONGO_VER}.asc" | gpg --dearmor -o /usr/share/keyrings/mongodb-server-${MONGO_VER}.gpg >> /tmp/mongodb-install.log 2>&1
+    # Extract major.minor version for GPG key (e.g., "8.0.0" -> "8.0")
+    local gpg_version=$(echo "$MONGO_VER" | cut -d'.' -f1,2)
+    echo -e "${CCYAN}Importing MongoDB GPG key for version ${MONGO_VER} (using key version ${gpg_version})...${CEND}" >> /tmp/mongodb-install.log
+    curl -fsSL "https://pgp.mongodb.com/server-${gpg_version}.asc" | gpg --dearmor -o /usr/share/keyrings/mongodb-server-${MONGO_VER}.gpg >> /tmp/mongodb-install.log 2>&1
     if [ $? -eq 0 ]; then
         echo -e "${CGREEN}✓ MongoDB GPG key imported${CEND}" >> /tmp/mongodb-install.log
     else
@@ -405,7 +407,9 @@ function add_ubuntu_mongodb_repo_enhanced() {
     
     # Add MongoDB repository
     echo -e "${CCYAN}Adding MongoDB repository...${CEND}" >> /tmp/mongodb-install.log
-    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-${MONGO_VER}.gpg ] https://repo.mongodb.org/apt/ubuntu $ubuntu_codename/mongodb-org/${MONGO_VER} multiverse" | tee "/etc/apt/sources.list.d/mongodb-org-${MONGO_VER}.list" >> /tmp/mongodb-install.log 2>&1
+    # Extract major.minor version for repository URL
+    local repo_version=$(echo "$MONGO_VER" | cut -d'.' -f1,2)
+    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-${MONGO_VER}.gpg ] https://repo.mongodb.org/apt/ubuntu $ubuntu_codename/mongodb-org/${repo_version} multiverse" | tee "/etc/apt/sources.list.d/mongodb-org-${MONGO_VER}.list" >> /tmp/mongodb-install.log 2>&1
     
     if [ $? -eq 0 ]; then
         echo -e "${CGREEN}✓ MongoDB repository added${CEND}" >> /tmp/mongodb-install.log
@@ -447,10 +451,18 @@ function add_debian_mongodb_repo_enhanced() {
             ;;
     esac
     
-    # Check if repository already exists
-    if [ -f "/etc/apt/sources.list.d/mongodb-org-${MONGO_VER}.list" ] || apt-cache policy | grep -q "repo.mongodb.org"; then
-        echo -e "${CYAN}⚠ MongoDB repository already exists${CEND}" >> /tmp/mongodb-install.log
-        return 0
+    # Check if repository already exists and clean up old ones
+    echo -e "${CCYAN}Checking for existing MongoDB repositories...${CEND}" >> /tmp/mongodb-install.log
+    
+    # Remove any existing MongoDB repository files to ensure clean setup
+    if ls /etc/apt/sources.list.d/mongodb-org*.list 1> /dev/null 2>&1; then
+        echo -e "${CYAN}Removing existing MongoDB repository files...${CEND}" >> /tmp/mongodb-install.log
+        rm -f /etc/apt/sources.list.d/mongodb-org*.list >> /tmp/mongodb-install.log 2>&1
+    fi
+    
+    if apt-cache policy | grep -q "repo.mongodb.org"; then
+        echo -e "${CYAN}Cleaning up old MongoDB repository cache...${CEND}" >> /tmp/mongodb-install.log
+        apt-get clean >> /tmp/mongodb-install.log 2>&1
     fi
     
     # Install required packages
@@ -490,10 +502,16 @@ function add_debian_mongodb_repo_enhanced() {
     echo -e "${CCYAN}Using Debian codename: $debian_codename${CEND}" >> /tmp/mongodb-install.log
     
     # Import MongoDB GPG key
-    echo -e "${CCYAN}Importing MongoDB GPG key...${CEND}" >> /tmp/mongodb-install.log
+    # Extract major.minor version for GPG key (e.g., "8.0.0" -> "8.0")
+    local gpg_version=$(echo "$MONGO_VER" | cut -d'.' -f1,2)
+    echo -e "${CCYAN}Importing MongoDB GPG key for version ${MONGO_VER} (using key version ${gpg_version})...${CEND}" >> /tmp/mongodb-install.log
+    
+    # Test the URL first
+    echo -e "${CCYAN}Testing GPG key URL: https://pgp.mongodb.com/server-${gpg_version}.asc${CEND}" >> /tmp/mongodb-install.log
+    curl -s "https://pgp.mongodb.com/server-${gpg_version}.asc" | head -1 >> /tmp/mongodb-install.log 2>&1
     
     # Use a more reliable method for GPG key import
-    curl -fsSL "https://pgp.mongodb.com/server-${MONGO_VER}.asc" | gpg --dearmor -o /usr/share/keyrings/mongodb-server-${MONGO_VER}.gpg >> /tmp/mongodb-install.log 2>&1
+    curl -fsSL "https://pgp.mongodb.com/server-${gpg_version}.asc" | gpg --dearmor -o /usr/share/keyrings/mongodb-server-${MONGO_VER}.gpg >> /tmp/mongodb-install.log 2>&1
     
     if [ $? -eq 0 ]; then
         echo -e "${CGREEN}✓ MongoDB GPG key imported${CEND}" >> /tmp/mongodb-install.log
@@ -501,7 +519,9 @@ function add_debian_mongodb_repo_enhanced() {
         echo -e "${CRED}✗ Failed to import MongoDB GPG key${CEND}" >> /tmp/mongodb-install.log
         # Try alternative method
         echo -e "${CYAN}Trying alternative GPG key import method...${CEND}" >> /tmp/mongodb-install.log
-        curl -fsSL "https://pgp.mongodb.com/server-${MONGO_VER}.asc" > /tmp/mongodb-key.asc
+        curl -fsSL "https://pgp.mongodb.com/server-${gpg_version}.asc" > /tmp/mongodb-key.asc
+        echo -e "${CCYAN}Downloaded key file size: $(wc -c < /tmp/mongodb-key.asc) bytes${CEND}" >> /tmp/mongodb-install.log
+        head -1 /tmp/mongodb-key.asc >> /tmp/mongodb-install.log 2>&1
         gpg --dearmor < /tmp/mongodb-key.asc > /usr/share/keyrings/mongodb-server-${MONGO_VER}.gpg 2>> /tmp/mongodb-install.log
         if [ $? -eq 0 ]; then
             echo -e "${CGREEN}✓ MongoDB GPG key imported (alternative method)${CEND}" >> /tmp/mongodb-install.log
@@ -523,7 +543,7 @@ function add_debian_mongodb_repo_enhanced() {
         echo -e "${CYAN}Using Debian 12 (bookworm) repository for Debian 13 (trixie) compatibility${CEND}" >> /tmp/mongodb-install.log
     fi
     
-    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-${MONGO_VER}.gpg ] https://repo.mongodb.org/apt/debian $repo_codename/mongodb-org/${MONGO_VER} main" | tee "/etc/apt/sources.list.d/mongodb-org-${MONGO_VER}.list" >> /tmp/mongodb-install.log 2>&1
+    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-${MONGO_VER}.gpg ] https://repo.mongodb.org/apt/debian $repo_codename/mongodb-org/${gpg_version} main" | tee "/etc/apt/sources.list.d/mongodb-org-${MONGO_VER}.list" >> /tmp/mongodb-install.log 2>&1
     
     if [ $? -eq 0 ]; then
         echo -e "${CGREEN}✓ MongoDB repository added${CEND}" >> /tmp/mongodb-install.log
@@ -585,10 +605,10 @@ function add_rhel_mongodb_repo_enhanced() {
     cat > "/etc/yum.repos.d/mongodb-org-${MONGO_VER}.repo" << EOF
 [mongodb-org-${MONGO_VER}]
 name=MongoDB Repository
-baseurl=https://repo.mongodb.org/yum/redhat/\$releasever/mongodb-org/${MONGO_VER}/x86_64/
+baseurl=https://repo.mongodb.org/yum/redhat/\$releasever/mongodb-org/${gpg_version}/x86_64/
 gpgcheck=1
 enabled=1
-gpgkey=https://pgp.mongodb.com/server-${MONGO_VER}.asc
+gpgkey=https://pgp.mongodb.com/server-${gpg_version}.asc
 EOF
     
     if [ $? -eq 0 ]; then
@@ -633,10 +653,10 @@ function add_fedora_mongodb_repo_enhanced() {
     cat > "/etc/yum.repos.d/mongodb-org-${MONGO_VER}.repo" << EOF
 [mongodb-org-${MONGO_VER}]
 name=MongoDB Repository
-baseurl=https://repo.mongodb.org/yum/fedora/\$releasever/mongodb-org/${MONGO_VER}/x86_64/
+baseurl=https://repo.mongodb.org/yum/fedora/\$releasever/mongodb-org/${gpg_version}/x86_64/
 gpgcheck=1
 enabled=1
-gpgkey=https://pgp.mongodb.com/server-${MONGO_VER}.asc
+gpgkey=https://pgp.mongodb.com/server-${gpg_version}.asc
 EOF
     
     if [ $? -eq 0 ]; then
