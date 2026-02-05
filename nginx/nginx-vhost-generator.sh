@@ -88,8 +88,9 @@ function get_available_ips() {
     
     if [ ${#ipv6_ips[@]} -gt 0 ]; then
         echo -e "${CYAN}Available IPv6 addresses:${CEND}"
+        local ipv6_offset=${#ipv4_ips[@]}
         for i in "${!ipv6_ips[@]}"; do
-            echo "  $((i+1)). ${ipv6_ips[i]}"
+            echo "  $((ipv6_offset+i+1)). ${ipv6_ips[i]}"
         done
     fi
     
@@ -103,8 +104,6 @@ function select_ip_address() {
     echo -e "${CCYAN}Select IP address for the virtual host:${CEND}"
     echo "  0. Listen on all addresses (default)"
     
-    local total_ips=$((${#AVAILABLE_IPV4[@]} + ${#AVAILABLE_IPV6[@]}))
-    
     for i in "${!AVAILABLE_IPV4[@]}"; do
         echo "  $((i+1)). ${AVAILABLE_IPV4[i]} (IPv4)"
     done
@@ -114,13 +113,16 @@ function select_ip_address() {
         echo "  $((ipv6_offset+i+1)). ${AVAILABLE_IPV6[i]} (IPv6)"
     done
     
+    local total_ips=$((${#AVAILABLE_IPV4[@]} + ${#AVAILABLE_IPV6[@]}))
+    local max_choice=$total_ips
+    
     while true; do
-        read -p "Enter your choice (0-$((total_ips+1))): " ip_choice
+        read -p "Enter your choice (0-$max_choice): " ip_choice
         
-        if [[ "$ip_choice" =~ ^[0-9]+$ ]] && [ "$ip_choice" -ge 0 ] && [ "$ip_choice" -le $((total_ips+1)) ]; then
+        if [[ "$ip_choice" =~ ^[0-9]+$ ]] && [ "$ip_choice" -ge 0 ] && [ "$ip_choice" -le $max_choice ]; then
             break
         else
-            echo -e "${CRED}Invalid choice. Please enter a number between 0 and $((total_ips+1))${CEND}"
+            echo -e "${CRED}Invalid choice. Please enter a number between 0 and $max_choice${CEND}"
         fi
     done
     
