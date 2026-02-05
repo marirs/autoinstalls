@@ -25,6 +25,51 @@ check_root() {
     fi
 }
 
+# Detect if interface is a VLAN interface
+is_vlan_interface() {
+    local interface="$1"
+    
+    # Check for VLAN interface naming patterns (contains dot)
+    if [[ "$interface" =~ \. ]]; then
+        return 0  # Is VLAN
+    fi
+    
+    # Check for VLAN interface in system
+    if command -v ip >/dev/null 2>&1; then
+        local vlan_info=$(ip -details link show "$interface" 2>/dev/null | grep -i "vlan\|802.1q" || true)
+        if [[ -n "$vlan_info" ]]; then
+            return 0  # Is VLAN
+        fi
+    fi
+    
+    return 1  # Not VLAN
+}
+
+# Detect if interface is a VPN interface
+is_vpn_interface() {
+    local interface="$1"
+    
+    # Check for common VPN interface naming patterns
+    if [[ "$interface" =~ ^(tun|tap|vpn|ppp|wg|ipsec)[0-9]*$ ]]; then
+        return 0  # Is VPN
+    fi
+    
+    # Check for common VPN interface patterns
+    if [[ "$interface" =~ ^(tun|tap|vpn|ppp|wg|ipsec) ]]; then
+        return 0  # Is VPN
+    fi
+    
+    # Check interface type from system
+    if command -v ip >/dev/null 2>&1; then
+        local interface_type=$(ip -details link show "$interface" 2>/dev/null | grep -i "tun\|tap\|vpn\|ppp\|wireguard\|ipsec" || true)
+        if [[ -n "$interface_type" ]]; then
+            return 0  # Is VPN
+        fi
+    fi
+    
+    return 1  # Not VPN
+}
+
 # Get list of network interfaces
 get_network_interfaces() {
     local interfaces=()
@@ -37,8 +82,14 @@ get_network_interfaces() {
             local ip=$(echo "$line" | awk '{print $2}')
             local status=$(ip link show "$iface" | grep -o 'state [A-Z]*' | awk '{print $2}')
             
+            # Check if this is a VLAN interface
+            local vlan_label=""
+            if is_vlan_interface "$iface"; then
+                vlan_label=" - VLAN"
+            fi
+            
             interfaces+=("$iface")
-            interface_info+=("$iface - $ip ($status)")
+            interface_info+=("$iface - $ip ($status)$vlan_label")
         fi
     done < <(ip addr show | grep -E '^[0-9]+:' | grep -v 'lo:' | awk '{print $2, $4}' | sed 's/://')
     
@@ -830,34 +881,111 @@ verify_ipv6_addresses() {
     return $failed_count
 }
 
-# Get IPv4 configuration from user
+# Get IPv4 configuration from user (enhanced for VLAN/private networks)
 get_ipv4_config() {
     echo ""
     echo -e "${CYAN}IPv4 Configuration:${NC}"
     
+    # Detect if this is a VLAN interface
+    local is_vlan=false
+    if [[ "$SELECTED_INTERFACE" =~ \. ]]; then
+        is_vlan=true
+        echo -e "${BLUE}VLAN interface detected: $SELECTED_INTERFACE${NC}"
+    fi
+    
+    # Detect existing IPv4 to suggest next address
+    local existing_ipv4=""
+    local base_ip=""
+    if [[ ${#CURRENT_IPV4_CONFIG[@]} -gt 0 ]]; then
+        for line in "${CURRENT_IPV4_CONFIG[@]}"; do
+            if [[ "$line" =~ address[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+) ]]; then
+                existing_ipv4="${BASH_REMATCH[1]}"
+                base_ip=$(echo "$existing_ipv4" | cut -d'.' -f1-3)
+                echo -e "${BLUE}Existing IPv4: $existing_ipv4${NC}"
+                echo -e "${BLUE}Network segment: $base_ip.0/24${NC}"
+                break
+            fi
+        done
+    fi
+    
+    # Suggest next available IP
+    local suggested_ip=""
+    if [[ -n "$base_ip" ]]; then
+        local last_octet=$(echo "$existing_ipv4" | cut -d'.' -f4)
+        local next_octet=$((last_octet + 1))
+        suggested_ip="$base_ip.$next_octet"
+        echo -e "${BLUE}Suggested next IP: $suggested_ip${NC}"
+    fi
+    
     while true; do
-        read -p "Enter IPv4 address (e.g., 65.108.195.246): " ipv4_addr
-        if [[ "$ipv4_addr" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
-            break
+        if [[ -n "$suggested_ip" ]]; then
+            read -p "Enter IPv4 address (current: $existing_ipv4, suggested: $suggested_ip): " ipv4_addr
+            if [[ -z "$ipv4_addr" ]]; then
+                ipv4_addr="$suggested_ip"
+            fi
         else
-            echo -e "${RED}Invalid IPv4 address format${NC}"
+            read -p "Enter IPv4 address (e.g., 10.30.73.74): " ipv4_addr
+        fi
+        
+        if [[ "$ipv4_addr" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+            # Validate IP range
+            local octets=($(echo "$ipv4_addr" | tr '.' ' '))
+            local valid=true
+            for octet in "${octets[@]}"; do
+                if [[ $octet -gt 255 ]]; then
+                    valid=false
+                    break
+                fi
+            done
+            
+            if [[ "$valid" == true ]]; then
+                break
+            else
+                echo -e "${RED}Invalid IP address: octets must be 0-255${NC}"
+            fi
+        else
+            echo -e "${RED}Invalid IPv4 address format. Use format like 10.30.73.74${NC}"
         fi
     done
     
+    # Suggest netmask based on IP type
+    local suggested_netmask="255.255.255.0"
+    if [[ "$ipv4_addr" =~ ^10\. ]] || [[ "$ipv4_addr" =~ ^192\.168\. ]] || [[ "$ipv4_addr" =~ ^172\.1[6-9]\. ]] || [[ "$ipv4_addr" =~ ^172\.2[0-9]\. ]] || [[ "$ipv4_addr" =~ ^172\.3[0-1]\. ]]; then
+        suggested_netmask="255.255.255.0"
+        echo -e "${BLUE}Private IP detected, suggesting /24 netmask${NC}"
+    else
+        suggested_netmask="255.255.255.192"
+        echo -e "${BLUE}Public IP detected, suggesting /26 netmask${NC}"
+    fi
+    
     while true; do
-        read -p "Enter netmask (e.g., 255.255.255.192): " netmask
+        read -p "Enter netmask (suggested: $suggested_netmask): " netmask
+        if [[ -z "$netmask" ]]; then
+            netmask="$suggested_netmask"
+        fi
+        
         if [[ "$netmask" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
             break
         else
-            echo -e "${RED}Invalid netmask format${NC}"
+            echo -e "${RED}Invalid netmask format. Use format like 255.255.255.0${NC}"
         fi
     done
     
-    read -p "Enter gateway (optional, press Enter to skip): " gateway
+    while true; do
+        read -p "Enter gateway (optional, press Enter to skip): " gateway
+        if [[ -z "$gateway" ]]; then
+            break
+        elif [[ "$gateway" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+            break
+        else
+            echo -e "${RED}Invalid gateway format. Use format like 10.30.73.1${NC}"
+        fi
+    done
     
-    SELECTED_IPV4="$ipv4_addr"
-    SELECTED_NETMASK="$netmask"
-    SELECTED_GATEWAY="$gateway"
+    # Store for later use
+    IPV4_ADDRESS="$ipv4_addr"
+    IPV4_NETMASK="$netmask"
+    IPV4_GATEWAY="$gateway"
 }
 
 # Add IPv4 address to existing static configuration
