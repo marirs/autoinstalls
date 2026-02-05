@@ -491,17 +491,39 @@ function add_debian_mongodb_repo_enhanced() {
     
     # Import MongoDB GPG key
     echo -e "${CCYAN}Importing MongoDB GPG key...${CEND}" >> /tmp/mongodb-install.log
-    curl -fsSL "https://www.mongodb.org/static/pgp/server-${MONGO_VER}.asc" | gpg -o /usr/share/keyrings/mongodb-server-${MONGO_VER}.gpg >> /tmp/mongodb-install.log 2>&1
+    
+    # Use a more reliable method for GPG key import
+    curl -fsSL "https://www.mongodb.org/static/pgp/server-${MONGO_VER}.asc" | gpg --dearmor -o /usr/share/keyrings/mongodb-server-${MONGO_VER}.gpg >> /tmp/mongodb-install.log 2>&1
+    
     if [ $? -eq 0 ]; then
         echo -e "${CGREEN}✓ MongoDB GPG key imported${CEND}" >> /tmp/mongodb-install.log
     else
         echo -e "${CRED}✗ Failed to import MongoDB GPG key${CEND}" >> /tmp/mongodb-install.log
-        return 1
+        # Try alternative method
+        echo -e "${CYAN}Trying alternative GPG key import method...${CEND}" >> /tmp/mongodb-install.log
+        curl -fsSL "https://www.mongodb.org/static/pgp/server-${MONGO_VER}.asc" > /tmp/mongodb-key.asc
+        gpg --dearmor < /tmp/mongodb-key.asc > /usr/share/keyrings/mongodb-server-${MONGO_VER}.gpg 2>> /tmp/mongodb-install.log
+        if [ $? -eq 0 ]; then
+            echo -e "${CGREEN}✓ MongoDB GPG key imported (alternative method)${CEND}" >> /tmp/mongodb-install.log
+            rm -f /tmp/mongodb-key.asc
+        else
+            echo -e "${CRED}✗ Failed to import MongoDB GPG key (all methods)${CEND}" >> /tmp/mongodb-install.log
+            rm -f /tmp/mongodb-key.asc
+            return 1
+        fi
     fi
     
     # Add MongoDB repository
     echo -e "${CCYAN}Adding MongoDB repository...${CEND}" >> /tmp/mongodb-install.log
-    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-${MONGO_VER}.gpg ] https://repo.mongodb.org/apt/debian $debian_codename/mongodb-org/${MONGO_VER} main" | tee "/etc/apt/sources.list.d/mongodb-org-${MONGO_VER}.list" >> /tmp/mongodb-install.log 2>&1
+    
+    # For Debian 13 (trixie), use Debian 12 (bookworm) repository since MongoDB doesn't support trixie yet
+    local repo_codename="$debian_codename"
+    if [[ "$debian_codename" == "trixie" ]]; then
+        repo_codename="bookworm"
+        echo -e "${CYAN}Using Debian 12 (bookworm) repository for Debian 13 (trixie) compatibility${CEND}" >> /tmp/mongodb-install.log
+    fi
+    
+    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-${MONGO_VER}.gpg ] https://repo.mongodb.org/apt/debian $repo_codename/mongodb-org/${MONGO_VER} main" | tee "/etc/apt/sources.list.d/mongodb-org-${MONGO_VER}.list" >> /tmp/mongodb-install.log 2>&1
     
     if [ $? -eq 0 ]; then
         echo -e "${CGREEN}✓ MongoDB repository added${CEND}" >> /tmp/mongodb-install.log
@@ -673,8 +695,8 @@ case $OPTION in
 		echo "This script will install MongoDB with optional configurations."
 		echo ""
 		echo "Choose MongoDB version:"
-		echo "   1) Stable $MONGODB_STABLE_VER"
-		echo "   2) Latest $MONGODB_LATEST_VER"
+		echo "   1) Stable (v${MONGODB_STABLE_VER}) - Recommended for production"
+		echo "   2) Latest (v${MONGODB_LATEST_VER}) - Newest features and updates"
 		echo ""
 		while [[ $MONGO_VER != "1" && $MONGO_VER != "2" ]]; do
 			read -p "Select an option [1-2]: " MONGO_VER
