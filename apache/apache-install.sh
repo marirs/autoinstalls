@@ -16,7 +16,7 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Global variables
-APACHE_VERSION="2.4.62"  # Fallback version, will be updated dynamically
+APACHE_VERSION=""  # Will be set dynamically based on OS
 INSTALL_DIR="/opt/apache"
 CONFIG_DIR="/etc/apache2"
 LOG_DIR="/var/log/apache2"
@@ -66,20 +66,63 @@ detect_os() {
 
 # Get latest Apache version
 get_apache_version() {
-    echo -e "${CYAN}Fetching latest Apache version...${NC}"
+    echo -e "${CYAN}Determining Apache version for $os $os_ver...${NC}"
     
-    # Try to get latest version from Apache download page
-    LATEST_VERSION=$(curl -s "https://httpd.apache.org/download.cgi" | \
-        grep -oP 'httpd-\K[0-9]+\.[0-9]+\.[0-9]+' | \
-        sort -V | tail -n1)
+    # Get version from OS mapping
+    APACHE_VERSION=$(get_apache_version_mapping)
     
-    # Update to latest version if fetch succeeded
-    if [[ -n "$LATEST_VERSION" ]]; then
-        APACHE_VERSION="$LATEST_VERSION"
-        echo -e "${GREEN}Found latest version: $APACHE_VERSION${NC}"
-    else
-        echo -e "${YELLOW}Using fallback version: $APACHE_VERSION${NC}"
-    fi
+    echo -e "${GREEN}Using Apache version: $APACHE_VERSION${NC}"
+}
+
+# Apache version mapping based on OS and version
+get_apache_version_mapping() {
+    case "$os" in
+        "ubuntu")
+            case "$os_ver" in
+                "18.04") echo "2.4.29" ;;   # Ubuntu 18.04 Bionic
+                "20.04") echo "2.4.41" ;;   # Ubuntu 20.04 Focal
+                "22.04") echo "2.4.52" ;;   # Ubuntu 22.04 Jammy
+                "24.04") echo "2.4.58" ;;   # Ubuntu 24.04 Noble
+                *) echo "2.4.62" ;;        # Default latest
+            esac
+            ;;
+        "debian")
+            case "$os_ver" in
+                "9") echo "2.4.25" ;;      # Debian 9 Stretch
+                "10") echo "2.4.38" ;;     # Debian 10 Buster
+                "11") echo "2.4.56" ;;     # Debian 11 Bullseye
+                "12") echo "2.4.62" ;;     # Debian 12 Bookworm
+                "13") echo "2.4.62" ;;     # Debian 13 Trixie (testing)
+                *) echo "2.4.62" ;;        # Default latest
+            esac
+            ;;
+        "centos")
+            case "$os_ver" in
+                "7") echo "2.4.6" ;;       # CentOS 7
+                "8") echo "2.4.37" ;;      # CentOS 8
+                "9") echo "2.4.57" ;;      # CentOS 9 Stream
+                *) echo "2.4.62" ;;        # Default latest
+            esac
+            ;;
+        "rhel")
+            case "$os_ver" in
+                "7") echo "2.4.6" ;;       # RHEL 7
+                "8") echo "2.4.37" ;;      # RHEL 8
+                "9") echo "2.4.57" ;;      # RHEL 9
+                *) echo "2.4.62" ;;        # Default latest
+            esac
+            ;;
+        "fedora")
+            case "$os_ver" in
+                "38") echo "2.4.57" ;;     # Fedora 38
+                "39") echo "2.4.58" ;;     # Fedora 39
+                "40") echo "2.4.62" ;;     # Fedora 40
+                *) echo "2.4.62" ;;        # Default latest
+            esac
+            ;;
+        *)
+            echo "2.4.62" ;;            # Default latest for unknown OS
+    esac
 }
 
 # Check if user is root
@@ -89,6 +132,13 @@ check_root() {
         exit 1
     fi
 }
+
+# System information
+os=$(cat /etc/os-release | grep "^ID=" | cut -d"=" -f2 | xargs)
+os_ver=$(cat /etc/os-release | grep "_ID=" | cut -d"=" -f2 | xargs)
+os_codename=$(cat /etc/os-release | grep "VERSION_CODENAME" | cut -d"=" -f2 | xargs)
+cores=$(nproc)
+architecture=$(arch)
 
 # Install dependencies
 install_dependencies() {
