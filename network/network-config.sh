@@ -299,12 +299,13 @@ ask_configuration_type() {
     echo -e "${CYAN}What would you like to configure?${NC}"
     echo "  1. Add IPv6 addresses"
     echo "  2. Add IPv4 addresses"
-    echo "  3. Modify existing configuration"
-    echo "  4. Show current configuration only"
+    echo "  3. Add new VLAN interface"
+    echo "  4. Modify existing configuration"
+    echo "  5. Show current configuration only"
     echo ""
     
     while true; do
-        read -p "Enter your choice (1-4): " config_choice
+        read -p "Enter your choice (1-5): " config_choice
         
         case "$config_choice" in
             1)
@@ -314,14 +315,16 @@ ask_configuration_type() {
                 return 2  # IPv4
                 ;;
             3)
-                return 3  # Modify
+                return 3  # VLAN
                 ;;
             4)
-                echo -e "${YELLOW}Current configuration displayed above. Exiting.${NC}"
-                exit 0
+                return 4  # Modify
+                ;;
+            5)
+                return 5  # Show only
                 ;;
             *)
-                echo -e "${RED}Invalid choice. Please enter a number between 1 and 4${NC}"
+                echo -e "${RED}Invalid choice. Please enter 1, 2, 3, 4, or 5${NC}"
                 ;;
         esac
     done
@@ -454,93 +457,280 @@ find_next_ipv6_address() {
     echo $((next_num + 1))
 }
 
-# Convert mixed configuration to proper address lines
-convert_mixed_ipv6_config() {
-    local interface="$1"
-    echo -e "${CYAN}Converting mixed IPv6 configuration to proper address lines...${NC}"
+# Create new VLAN interface
+create_vlan_interface() {
+    local parent_interface="$1"
     
-    # Backup before conversion
+    echo ""
+    echo -e "${CYAN}VLAN Interface Creation:${NC}"
+    echo -e "${BLUE}Parent interface: $parent_interface${NC}"
+    echo ""
+    
+    # Get VLAN ID
+    while true; do
+        read -p "Enter VLAN ID (e.g., 4000, 100, 200): " vlan_id
+        if [[ "$vlan_id" =~ ^[0-9]+$ ]] && [ "$vlan_id" -ge 1 ] && [ "$vlan_id" -le 4094 ]; then
+            break
+        else
+            echo -e "${RED}VLAN ID must be between 1 and 4094${NC}"
+        fi
+    done
+    
+    local vlan_interface="${parent_interface}.${vlan_id}"
+    echo -e "${BLUE}New VLAN interface will be: $vlan_interface${NC}"
+    
+    # Check if VLAN already exists
+    if ip link show "$vlan_interface" >/dev/null 2>&1; then
+        echo -e "${YELLOW}Warning: VLAN interface $vlan_interface already exists${NC}"
+        while true; do
+            read -p "Continue anyway? [y/N]: " continue_choice
+            case "$continue_choice" in
+                [Yy]|[Yy][Ee][Ss])
+                    break
+                    ;;
+                *)
+                    echo -e "${CYAN}VLAN creation cancelled${NC}"
+                    return 1
+                    ;;
+            esac
+        done
+    fi
+    
+    # Choose IP configuration type
+    echo ""
+    echo -e "${CYAN}VLAN Configuration:${NC}"
+    echo "  1. IPv4 only"
+    echo "  2. IPv6 only"
+    echo "  3. Both IPv4 and IPv6"
+    echo ""
+    
+    while true; do
+        read -p "Enter your choice (1-3): " ip_type
+        case "$ip_type" in
+            1|2|3)
+                break
+                ;;
+            *)
+                echo -e "${RED}Invalid choice. Please enter 1, 2, or 3${NC}"
+                ;;
+        esac
+    done
+    
+    # Backup configuration
     mkdir -p "$BACKUP_DIR"
-    cp /etc/network/interfaces "$BACKUP_DIR/interfaces-before-conversion"
+    cp /etc/network/interfaces "$BACKUP_DIR/"
     
+    # Add VLAN configuration to interfaces file
     local temp_file=$(mktemp)
-    local in_ipv6_section=false
-    local iface_found=false
-    local up_commands=()
-    local down_commands=()
+    local vlan_added=false
     
     while IFS= read -r line; do
-        # Check for IPv6 interface definition
-        if [[ "$line" =~ ^[[:space:]]*iface[[:space:]]+([^[:space:]]+)[[:space:]]+inet6[[:space:]]+static ]]; then
-            local current_iface="${BASH_REMATCH[1]}"
-            if [[ "$current_iface" == "$interface" ]]; then
-                iface_found=true
-                in_ipv6_section=true
-                echo "$line" >> "$temp_file"
-                continue
-            fi
-        elif [[ "$line" =~ ^[[:space:]]*iface[[:space:]]+ ]] && [[ "$in_ipv6_section" == true ]]; then
-            # We've reached the next interface, add collected up commands as address lines
-            if [[ ${#up_commands[@]} -gt 0 ]]; then
-                echo -e "${BLUE}Converting ${#up_commands[@]} up commands to address lines...${NC}"
-                for cmd in "${up_commands[@]}"; do
-                    if [[ "$cmd" =~ ip[[:space:]]+-6[[:space:]]+addr[[:space:]]+add[[:space:]]+([0-9a-fA-F:]+/64) ]]; then
-                        local addr="${BASH_REMATCH[1]}"
-                        echo "  address $addr" >> "$temp_file"
-                    fi
-                done
-                up_commands=()
-            fi
-            in_ipv6_section=false
-        fi
-        
-        # Process lines within IPv6 section
-        if [[ "$in_ipv6_section" == true ]] && [[ "$iface_found" == true ]]; then
-            if [[ "$line" =~ ^[[:space:]]*up[[:space:]]+ip[[:space:]]+-6[[:space:]]+addr[[:space:]]+add ]]; then
-                # Collect up commands for conversion
-                up_commands+=("$line")
-                echo -e "${YELLOW}  Found up command: $line${NC}"
-                continue
-            elif [[ "$line" =~ ^[[:space:]]*down[[:space:]]+ip[[:space:]]+-6[[:space:]]+addr[[:space:]]+del ]]; then
-                # Skip down commands (they'll be handled automatically)
-                echo -e "${YELLOW}  Skipping down command: $line${NC}"
-                continue
-            elif [[ "$line" =~ ^[[:space:]]*#.*Add.*IPv6.*addresses.*when.*IFACE.*goes.*up ]]; then
-                # Skip the comment about up commands
-                echo -e "${YELLOW}  Skipping comment about up commands${NC}"
-                continue
-            elif [[ "$line" =~ ^[[:space:]]*#.*Remove.*them.*when.*IFACE.*goes.*down ]]; then
-                # Skip the comment about down commands
-                echo -e "${YELLOW}  Skipping comment about down commands${NC}"
-                continue
-            fi
-        fi
-        
         echo "$line" >> "$temp_file"
+        
+        # Add VLAN configuration after the parent interface
+        if [[ "$line" =~ ^[[:space:]]*iface[[:space:]]+${parent_interface}[[:space:]]+.* ]] && [[ "$vlan_added" == false ]]; then
+            echo "" >> "$temp_file"
+            echo "auto $vlan_interface" >> "$temp_file"
+            
+            if [[ "$ip_type" == "1" ]] || [[ "$ip_type" == "3" ]]; then
+                echo "iface $vlan_interface inet static" >> "$temp_file"
+                get_vlan_ipv4_config >> "$temp_file"
+            fi
+            
+            if [[ "$ip_type" == "2" ]] || [[ "$ip_type" == "3" ]]; then
+                if [[ "$ip_type" == "3" ]]; then
+                    echo "" >> "$temp_file"
+                fi
+                echo "iface $vlan_interface inet6 static" >> "$temp_file"
+                get_vlan_ipv6_config >> "$temp_file"
+            fi
+            
+            vlan_added=true
+        fi
     done < "/etc/network/interfaces"
     
-    # Handle case where file ends while still in IPv6 section
-    if [[ "$in_ipv6_section" == true ]] && [[ ${#up_commands[@]} -gt 0 ]]; then
-        echo -e "${BLUE}Converting ${#up_commands[@]} up commands to address lines...${NC}"
-        for cmd in "${up_commands[@]}"; do
-            if [[ "$cmd" =~ ip[[:space:]]+-6[[:space:]]+addr[[:space:]]+add[[:space:]]+([0-9a-fA-F:]+/64) ]]; then
-                local addr="${BASH_REMATCH[1]}"
-                echo "  address $addr" >> "$temp_file"
+    # If parent interface not found, add at the end
+    if [[ "$vlan_added" == false ]]; then
+        echo "" >> "$temp_file"
+        echo "auto $vlan_interface" >> "$temp_file"
+        
+        if [[ "$ip_type" == "1" ]] || [[ "$ip_type" == "3" ]]; then
+            echo "iface $vlan_interface inet static" >> "$temp_file"
+            get_vlan_ipv4_config >> "$temp_file"
+        fi
+        
+        if [[ "$ip_type" == "2" ]] || [[ "$ip_type" == "3" ]]; then
+            if [[ "$ip_type" == "3" ]]; then
+                echo "" >> "$temp_file"
             fi
-        done
+            echo "iface $vlan_interface inet6 static" >> "$temp_file"
+            get_vlan_ipv6_config >> "$temp_file"
+        fi
     fi
     
     # Replace original file
     mv "$temp_file" /etc/network/interfaces
     
-    echo -e "${GREEN}✓ Configuration converted successfully${NC}"
-    echo -e "${CYAN}Backup saved to: $BACKUP_DIR/interfaces-before-conversion${NC}"
+    echo -e "${GREEN}✓ VLAN configuration added to /etc/network/interfaces${NC}"
     
-    # Restart interface to apply changes
-    echo -e "${CYAN}Restarting interface to apply converted configuration...${NC}"
-    ifdown "$interface" 2>/dev/null && ifup "$interface"
+    # Bring up VLAN interface
+    echo -e "${CYAN}Bringing up VLAN interface...${NC}"
+    ifup "$vlan_interface" 2>/dev/null
+    
+    if ip link show "$vlan_interface" >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ $vlan_interface is now UP${NC}"
+        
+        # Test connectivity
+        echo -e "${CYAN}Testing connectivity...${NC}"
+        if [[ "$ip_type" == "1" ]] || [[ "$ip_type" == "3" ]]; then
+            local vlan_ip=$(ip -4 addr show "$vlan_interface" | grep -oP 'inet \K[0-9.]+' | head -1)
+            if [[ -n "$vlan_ip" ]]; then
+                echo -e "${GREEN}✓ VLAN interface is working with IP: $vlan_ip${NC}"
+            fi
+        fi
+    else
+        echo -e "${RED}✗ Failed to bring up VLAN interface${NC}"
+        return 1
+    fi
     
     return 0
+}
+
+# Get IPv4 configuration for VLAN
+get_vlan_ipv4_config() {
+    echo -e "${CYAN}IPv4 Configuration for VLAN:${NC}"
+    
+    # Suggest private IP ranges
+    echo ""
+    echo "Available private IP ranges for VLAN:"
+    echo "  1. 10.30.74.0/24 (suggested)"
+    echo "  2. 192.168.100.0/24"
+    echo "  3. 172.16.100.0/24"
+    echo "  4. Custom IP range"
+    echo ""
+    
+    while true; do
+        read -p "Enter your choice (1-4): " range_choice
+        case "$range_choice" in
+            1)
+                vlan_ip="10.30.74.1"
+                netmask="255.255.255.0"
+                break
+                ;;
+            2)
+                vlan_ip="192.168.100.1"
+                netmask="255.255.255.0"
+                break
+                ;;
+            3)
+                vlan_ip="172.16.100.1"
+                netmask="255.255.255.0"
+                break
+                ;;
+            4)
+                while true; do
+                    read -p "Enter VLAN IP address: " vlan_ip
+                    if [[ "$vlan_ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+                        break
+                    else
+                        echo -e "${RED}Invalid IP format${NC}"
+                    fi
+                done
+                read -p "Enter netmask (default: 255.255.255.0): " netmask
+                if [[ -z "$netmask" ]]; then
+                    netmask="255.255.255.0"
+                fi
+                break
+                ;;
+            *)
+                echo -e "${RED}Invalid choice${NC}"
+                ;;
+        esac
+    done
+    
+    read -p "Enter gateway (optional, press Enter to skip): " gateway
+    
+    # Suggest MTU based on existing VLANs
+    local suggested_mtu="1500"
+    if grep -q "mtu 1400" /etc/network/interfaces; then
+        suggested_mtu="1400"
+    fi
+    
+    read -p "MTU for VLAN (default $suggested_mtu, Press Enter for default or enter new value): " mtu
+    if [[ -z "$mtu" ]]; then
+        mtu="$suggested_mtu"
+    fi
+    
+    # Generate configuration
+    echo "  address $vlan_ip"
+    echo "  netmask $netmask"
+    if [[ -n "$gateway" ]]; then
+        echo "  gateway $gateway"
+    fi
+    echo "  vlan-raw-device ${SELECTED_INTERFACE%.*}"
+    echo "  mtu $mtu"
+}
+
+# Get IPv6 configuration for VLAN
+get_vlan_ipv6_config() {
+    echo -e "${CYAN}IPv6 Configuration for VLAN:${NC}"
+    
+    # Suggest private IPv6 ranges
+    echo ""
+    echo "Available private IPv6 ranges for VLAN:"
+    echo "  1. fd00:30:74::1/64 (suggested)"
+    echo "  2. fd00:100::1/64"
+    echo "  3. fd00:16:100::1/64"
+    echo "  4. Custom IPv6"
+    echo ""
+    
+    while true; do
+        read -p "Enter your choice (1-4): " ipv6_choice
+        case "$ipv6_choice" in
+            1)
+                ipv6_addr="fd00:30:74::1"
+                prefix="64"
+                break
+                ;;
+            2)
+                ipv6_addr="fd00:100::1"
+                prefix="64"
+                break
+                ;;
+            3)
+                ipv6_addr="fd00:16:100::1"
+                prefix="64"
+                break
+                ;;
+            4)
+                while true; do
+                    read -p "Enter IPv6 address: " ipv6_addr
+                    if [[ "$ipv6_addr" =~ ^[0-9a-fA-F:]+ ]] && [[ "$ipv6_addr" == *":"*":"* ]]; then
+                        break
+                    else
+                        echo -e "${RED}Invalid IPv6 format${NC}"
+                    fi
+                done
+                read -p "Enter prefix (default: 64): " prefix
+                if [[ -z "$prefix" ]]; then
+                    prefix="64"
+                fi
+                break
+                ;;
+            *)
+                echo -e "${RED}Invalid choice${NC}"
+                ;;
+        esac
+    done
+    
+    read -p "Enter IPv6 gateway (optional, press Enter to skip): " ipv6_gateway
+    
+    # Generate configuration
+    echo "  address $ipv6_addr"
+    echo "  netmask $prefix"
+    if [[ -n "$ipv6_gateway" ]]; then
+        echo "  gateway $ipv6_gateway"
+    fi
 }
 
 # Get IPv6 range configuration
@@ -1554,7 +1744,16 @@ main() {
                     exit 1
                 fi
                 ;;
-            3)  # Modify
+            3)  # VLAN
+                echo -e "${CYAN}Creating new VLAN interface...${NC}"
+                if create_vlan_interface "$SELECTED_INTERFACE"; then
+                    echo -e "${GREEN}✓ VLAN interface created successfully${NC}"
+                else
+                    echo -e "${RED}✗ Failed to create VLAN interface${NC}"
+                    exit 1
+                fi
+                ;;
+            4)  # Modify
                 echo -e "${YELLOW}Modify option not yet implemented${NC}"
                 echo -e "${CYAN}Please edit /etc/network/interfaces manually or choose add options${NC}"
                 exit 0
