@@ -661,9 +661,28 @@ EOF
 }
 
 # Get MongoDB latest version
+echo -e "${CCYAN}Detecting available MongoDB versions...${CEND}"
 MONGODB_VERSIONS=$(curl -s https://www.mongodb.org/download-center/community | grep -oP 'mongodb-\d+\.\d+\.\d+' | sort -V | uniq | tail -n2)
-MONGODB_LATEST_VER=$(echo $MONGODB_VERSIONS | cut -d' ' -f2 | cut -d'-' -f2)
-MONGODB_STABLE_VER=$(echo $MONGODB_VERSIONS | cut -d' ' -f1 | cut -d'-' -f2)
+
+# Fallback versions if detection fails
+if [[ -z "$MONGODB_VERSIONS" ]]; then
+    echo -e "${CYAN}Using fallback MongoDB versions...${CEND}"
+    MONGODB_LATEST_VER="8.0.0"
+    MONGODB_STABLE_VER="7.0.14"
+else
+    MONGODB_LATEST_VER=$(echo $MONGODB_VERSIONS | cut -d' ' -f2 | cut -d'-' -f2)
+    MONGODB_STABLE_VER=$(echo $MONGODB_VERSIONS | cut -d' ' -f1 | cut -d'-' -f2)
+fi
+
+# Ensure we have valid versions
+if [[ -z "$MONGODB_LATEST_VER" ]]; then
+    MONGODB_LATEST_VER="8.0.0"
+fi
+if [[ -z "$MONGODB_STABLE_VER" ]]; then
+    MONGODB_STABLE_VER="7.0.14"
+fi
+
+echo -e "${CGREEN}✓ MongoDB versions detected: Stable ($MONGODB_STABLE_VER), Latest ($MONGODB_LATEST_VER)${CEND}"
 
 cores=$(nproc)
 if [ $? -ne 0 ]; then
