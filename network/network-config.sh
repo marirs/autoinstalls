@@ -1904,8 +1904,8 @@ main() {
                 if [[ -n "$existing_gateway" ]]; then
                     echo -e "${GREEN}Gateway: $existing_gateway (preserved)${NC}"
                 fi
-                echo -e "${GREEN}From: ${new_addresses[0]}${NC}"
-                echo -e "${GREEN}To:   ${new_addresses[-1]}${NC}"
+                echo -e "${GREEN}Start: ${new_addresses[0]}${NC}"
+                echo -e "${GREEN}End:   ${new_addresses[-1]}${NC}"
                 echo ""
                 read -p "Continue? [y/N]: " confirm
                 
