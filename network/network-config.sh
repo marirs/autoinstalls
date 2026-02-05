@@ -1858,24 +1858,28 @@ main() {
                     exit 1
                 fi
                 
-                # Step 4: Generate addresses starting from next available (or ::2 if none)
+                # Step 4: Generate addresses starting from next available after existing ones
                 local base_address=$(echo "$SELECTED_SUBNET" | cut -d'/' -f1 | sed 's/::$//')
                 local prefix_length=$(echo "$SELECTED_SUBNET" | cut -d'/' -f2)
                 local new_addresses=()
                 
-                # Find next available number from existing addresses
+                # Find the highest existing number to continue from there
                 local next_num=2  # Default start from ::2
                 if [[ ${#existing_addresses[@]} -gt 0 ]]; then
                     for addr in "${existing_addresses[@]}"; do
                         if [[ "$addr" =~ ${base_address}::([0-9a-fA-F]+) ]]; then
                             local hex_num="${BASH_REMATCH[1]}"
                             local dec_num=$((16#$hex_num))
+                            # Find the highest number and add 1
                             if [[ $dec_num -ge $next_num ]]; then
                                 next_num=$((dec_num + 1))
                             fi
                         fi
                     done
                 fi
+                
+                echo -e "${BLUE}Existing addresses found: ${#existing_addresses[@]}${NC}"
+                echo -e "${BLUE}Starting from: ${base_address}::$(printf "%x" $next_num)${NC}"
                 
                 # Generate the requested number of addresses
                 for ((i=0; i<num_addresses; i++)); do
@@ -1898,7 +1902,7 @@ main() {
                 
                 if [[ ! "$confirm" =~ ^[Yy] ]]; then
                     echo -e "${YELLOW}Cancelled${NC}"
-                    continue
+                    exit 0
                 fi
                 
                 # Step 6: Backup and rewrite IPv6 section in standard format
@@ -1916,10 +1920,12 @@ main() {
                         # Skip old IPv6 section, write new one
                         echo "iface $SELECTED_INTERFACE inet6 static" >> "$temp_file"
                         
-                        # Write all existing addresses first
-                        for addr in "${existing_addresses[@]}"; do
-                            echo "  address $addr/$(echo "$SELECTED_SUBNET" | cut -d'/' -f2)" >> "$temp_file"
-                        done
+                        # Write first address with netmask and gateway
+                        if [[ ${#existing_addresses[@]} -gt 0 ]]; then
+                            echo "  address ${existing_addresses[0]}/$(echo "$SELECTED_SUBNET" | cut -d'/' -f2)" >> "$temp_file"
+                        else
+                            echo "  address ${base_address}::2/$(echo "$SELECTED_SUBNET" | cut -d'/' -f2)" >> "$temp_file"
+                        fi
                         
                         echo "  netmask $(echo "$SELECTED_SUBNET" | cut -d'/' -f2)" >> "$temp_file"
                         
@@ -1928,9 +1934,17 @@ main() {
                             echo "  gateway $existing_gateway" >> "$temp_file"
                         fi
                         
-                        # Add new addresses
-                        for addr in "${new_addresses[@]}"; do
-                            echo "  address $addr" >> "$temp_file"
+                        # Add additional addresses using up commands (Hetzner style)
+                        local additional_addresses=("${existing_addresses[@]:1}")  # Skip first one
+                        additional_addresses+=("${new_addresses[@]}")  # Add new ones
+                        
+                        for addr in "${additional_addresses[@]}"; do
+                            echo "  up ip -6 addr add $addr dev \$IFACE" >> "$temp_file"
+                        done
+                        
+                        # Add corresponding down commands
+                        for addr in "${additional_addresses[@]}"; do
+                            echo "  down ip -6 addr del $addr dev \$IFACE" >> "$temp_file"
                         done
                         
                         echo "" >> "$temp_file"
@@ -1952,13 +1966,10 @@ main() {
                     echo "" >> "$temp_file"
                     echo "iface $SELECTED_INTERFACE inet6 static" >> "$temp_file"
                     
-                    # Write all existing addresses first (if any)
-                    for addr in "${existing_addresses[@]}"; do
-                        echo "  address $addr/$(echo "$SELECTED_SUBNET" | cut -d'/' -f2)" >> "$temp_file"
-                    done
-                    
-                    # If no existing addresses, start with ::2
-                    if [[ ${#existing_addresses[@]} -eq 0 ]]; then
+                    # Write first address with netmask and gateway
+                    if [[ ${#existing_addresses[@]} -gt 0 ]]; then
+                        echo "  address ${existing_addresses[0]}/$(echo "$SELECTED_SUBNET" | cut -d'/' -f2)" >> "$temp_file"
+                    else
                         echo "  address ${base_address}::2/$(echo "$SELECTED_SUBNET" | cut -d'/' -f2)" >> "$temp_file"
                     fi
                     
@@ -1969,14 +1980,17 @@ main() {
                         echo "  gateway $existing_gateway" >> "$temp_file"
                     fi
                     
-                    # Add new addresses (skip first if we already wrote ::2)
-                    local start_idx=0
-                    if [[ ${#existing_addresses[@]} -eq 0 ]]; then
-                        start_idx=1  # Skip the first one (::2) since we already wrote it
-                    fi
+                    # Add additional addresses using up commands (Hetzner style)
+                    local additional_addresses=("${existing_addresses[@]:1}")  # Skip first one
+                    additional_addresses+=("${new_addresses[@]}")  # Add new ones
                     
-                    for ((i=start_idx; i<${#new_addresses[@]}; i++)); do
-                        echo "  address ${new_addresses[i]}" >> "$temp_file"
+                    for addr in "${additional_addresses[@]}"; do
+                        echo "  up ip -6 addr add $addr dev \$IFACE" >> "$temp_file"
+                    done
+                    
+                    # Add corresponding down commands
+                    for addr in "${additional_addresses[@]}"; do
+                        echo "  down ip -6 addr del $addr dev \$IFACE" >> "$temp_file"
                     done
                     
                     echo "" >> "$temp_file"
