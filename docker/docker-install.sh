@@ -89,7 +89,6 @@ function get_docker_version() {
             ;;
         *)
             echo "27.0.0" ;;            # Default latest for unknown OS
-            ;;
     esac
 }
 
@@ -117,7 +116,6 @@ function get_docker_compose_version() {
             ;;
         *)
             echo "2.24.0" ;;            # Default latest v2
-            ;;
     esac
 }
 
@@ -495,356 +493,42 @@ function install_deps() {
 }
 
 function setup_docker_repo() {
-    echo -e "${CGREEN}Setting up Docker repository with intelligent management...${CEND}"
-    
-    # Enhanced repository management
-    if add_docker_repository_enhanced; then
-        echo -e "${CGREEN}✓ Docker repository configured${CEND}"
-    else
-        echo -e "${CRED}✗ Failed to configure Docker repository${CEND}"
-        exit 1
-    fi
-}
-
-# Function to add Docker repository with intelligent management
-function add_docker_repository_enhanced() {
-    echo -e "${CCYAN}Adding Docker repository for $os $os_ver...${CEND}" >> "/tmp/docker-install.log"
+    echo -e "${CGREEN}Setting up Docker repository...${CEND}"
     
     case "$os" in
-        "ubuntu")
-            add_ubuntu_docker_repo_enhanced
-            ;;
-        "debian")
-            add_debian_docker_repo_enhanced
+        "ubuntu"|"debian")
+            # Add Docker's official GPG key
+            install -m 0755 -d /etc/apt/keyrings >> /tmp/docker-install.log 2>&1
+            curl -fsSL https://download.docker.com/linux/$os/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg >> /tmp/docker-install.log 2>&1
+            chmod a+r /etc/apt/keyrings/docker.gpg >> /tmp/docker-install.log 2>&1
+            
+            # Add the repository to Apt sources
+            echo \
+                "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$os \
+                $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+                tee /etc/apt/sources.list.d/docker.list > /dev/null >> /tmp/docker-install.log 2>&1
+            
+            apt-get update >> /tmp/docker-install.log 2>&1
             ;;
         "centos"|"rhel"|"rocky"|"almalinux")
-            add_rhel_docker_repo_enhanced
+            # Add Docker repository for RHEL-based systems
+            yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo >> /tmp/docker-install.log 2>&1
             ;;
         "fedora")
-            add_fedora_docker_repo_enhanced
+            # Add Docker repository for Fedora
+            dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo >> /tmp/docker-install.log 2>&1
             ;;
         *)
-            echo -e "${CRED}✗ Unsupported OS for Docker: $os${CEND}" >> "/tmp/docker-install.log"
-            return 1
-            ;;
-    esac
-}
-
-function add_ubuntu_docker_repo_enhanced() {
-    echo -e "${CCYAN}Configuring Docker repository for Ubuntu...${CEND}" >> "/tmp/docker-install.log"
-    
-    # Check Ubuntu version compatibility
-    case "$os_ver" in
-        "18.04"|"20.04"|"22.04"|"24.04")
-            echo -e "${CGREEN}✓ Ubuntu $os_ver is supported${CEND}" >> "/tmp/docker-install.log"
-            ;;
-        *)
-            echo -e "${CYAN}⚠ Ubuntu $os_ver may not be fully supported${CEND}" >> "/tmp/docker-install.log"
+            echo -e "${CRED}Unsupported OS for repository setup: $os${CEND}"
+            exit 1
             ;;
     esac
     
-    # Check if repository already exists
-    if [ -f "/etc/apt/sources.list.d/docker.list" ] || apt-cache policy | grep -q "download.docker.com"; then
-        echo -e "${CYAN}⚠ Docker repository already exists${CEND}" >> "/tmp/docker-install.log"
-        return 0
-    fi
-    
-    # Install required packages
-    echo -e "${CCYAN}Installing required packages...${CEND}" >> "/tmp/docker-install.log"
-    apt-get update >> "/tmp/docker-install.log" 2>&1
-    
-    local required_packages=("curl" "wget" "gnupg" "ca-certificates" "apt-transport-https")
-    for pkg in "${required_packages[@]}"; do
-        if ! dpkg -l | grep -q "$pkg"; then
-            echo -e "${CCYAN}Installing $pkg...${CEND}" >> "/tmp/docker-install.log"
-            apt-get install -y "$pkg" >> "/tmp/docker-install.log" 2>&1
-            if [ $? -eq 0 ]; then
-                echo -e "${CGREEN}✓ $pkg installed${CEND}" >> "/tmp/docker-install.log"
-            else
-                echo -e "${CRED}✗ Failed to install $pkg${CEND}" >> "/tmp/docker-install.log"
-                return 1
-            fi
-        fi
-    done
-    
-    # Get Ubuntu codename dynamically
-    local ubuntu_codename=""
-    if command -v lsb_release >/dev/null 2>&1; then
-        ubuntu_codename=$(lsb_release -cs 2>/dev/null || echo "jammy")
-    else
-        # Fallback to version-based codename
-        case "$os_ver" in
-            "18.04") ubuntu_codename="bionic" ;;
-            "20.04") ubuntu_codename="focal" ;;
-            "22.04") ubuntu_codename="jammy" ;;
-            "24.04") ubuntu_codename="noble" ;;
-            *) ubuntu_codename="jammy" ;;
-        esac
-    fi
-    
-    echo -e "${CCYAN}Using Ubuntu codename: $ubuntu_codename${CEND}" >> "/tmp/docker-install.log"
-    
-    # Add Docker GPG key
-    echo -e "${CCYAN}Importing Docker GPG key...${CEND}" >> "/tmp/docker-install.log"
-    install -m 0755 -d /etc/apt/keyrings >> "/tmp/docker-install.log" 2>&1
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg >> "/tmp/docker-install.log" 2>&1
-    chmod a+r /etc/apt/keyrings/docker.gpg >> "/tmp/docker-install.log" 2>&1
-    
     if [ $? -eq 0 ]; then
-        echo -e "${CGREEN}✓ Docker GPG key imported${CEND}" >> "/tmp/docker-install.log"
+        echo -e "${CGREEN}Docker repository setup completed${CEND}"
     else
-        echo -e "${CRED}✗ Failed to import Docker GPG key${CEND}" >> "/tmp/docker-install.log"
-        return 1
-    fi
-    
-    # Add Docker repository
-    echo -e "${CCYAN}Adding Docker repository...${CEND}" >> "/tmp/docker-install.log"
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $ubuntu_codename stable" | tee /etc/apt/sources.list.d/docker.list >> "/tmp/docker-install.log" 2>&1
-    
-    if [ $? -eq 0 ]; then
-        echo -e "${CGREEN}✓ Docker repository added${CEND}" >> "/tmp/docker-install.log"
-    else
-        echo -e "${CRED}✗ Failed to add Docker repository${CEND}" >> "/tmp/docker-install.log"
-        return 1
-    fi
-    
-    # Update package list
-    echo -e "${CCYAN}Updating package list...${CEND}" >> "/tmp/docker-install.log"
-    apt-get update >> "/tmp/docker-install.log" 2>&1
-    if [ $? -eq 0 ]; then
-        echo -e "${CGREEN}✓ Package list updated${CEND}" >> "/tmp/docker-install.log"
-    else
-        echo -e "${CRED}✗ Failed to update package list${CEND}" >> "/tmp/docker-install.log"
-        return 1
-    fi
-    
-    # Verify Docker packages are available
-    echo -e "${CCYAN}Verifying Docker package availability...${CEND}" >> "/tmp/docker-install.log"
-    if apt-cache show "docker-ce" >/dev/null 2>&1 && apt-cache show "docker-ce-cli" >/dev/null 2>&1 && apt-cache show "containerd.io" >/dev/null 2>&1; then
-        echo -e "${CGREEN}✓ Docker packages available${CEND}" >> "/tmp/docker-install.log"
-    else
-        echo -e "${CRED}✗ Docker packages not available${CEND}" >> "/tmp/docker-install.log"
-        return 1
-    fi
-}
-
-function add_debian_docker_repo_enhanced() {
-    echo -e "${CCYAN}Configuring Docker repository for Debian...${CEND}" >> "/tmp/docker-install.log"
-    
-    # Check Debian version compatibility
-    case "$os_ver" in
-        "10"|"11"|"12"|"13")
-            echo -e "${CGREEN}✓ Debian $os_ver is supported${CEND}" >> "/tmp/docker-install.log"
-            ;;
-        *)
-            echo -e "${CYAN}⚠ Debian $os_ver may not be fully supported${CEND}" >> "/tmp/docker-install.log"
-            ;;
-    esac
-    
-    # Check if repository already exists
-    if [ -f "/etc/apt/sources.list.d/docker.list" ] || apt-cache policy | grep -q "download.docker.com"; then
-        echo -e "${CYAN}⚠ Docker repository already exists${CEND}" >> "/tmp/docker-install.log"
-        return 0
-    fi
-    
-    # Install required packages
-    echo -e "${CCYAN}Installing required packages...${CEND}" >> "/tmp/docker-install.log"
-    apt-get update >> "/tmp/docker-install.log" 2>&1
-    
-    local required_packages=("curl" "wget" "gnupg" "ca-certificates" "apt-transport-https")
-    for pkg in "${required_packages[@]}"; do
-        if ! dpkg -l | grep -q "$pkg"; then
-            echo -e "${CCYAN}Installing $pkg...${CEND}" >> "/tmp/docker-install.log"
-            apt-get install -y "$pkg" >> "/tmp/docker-install.log" 2>&1
-            if [ $? -eq 0 ]; then
-                echo -e "${CGREEN}✓ $pkg installed${CEND}" >> "/tmp/docker-install.log"
-            else
-                echo -e "${CRED}✗ Failed to install $pkg${CEND}" >> "/tmp/docker-install.log"
-                return 1
-            fi
-        fi
-    done
-    
-    # Get Debian codename dynamically
-    local debian_codename=""
-    if command -v lsb_release >/dev/null 2>&1; then
-        debian_codename=$(lsb_release -cs 2>/dev/null || echo "bookworm")
-    else
-        # Fallback to version-based codename
-        case "$os_ver" in
-            "10") debian_codename="buster" ;;
-            "11") debian_codename="bullseye" ;;
-            "12") debian_codename="bookworm" ;;
-            "13") debian_codename="trixie" ;;
-            *) debian_codename="bookworm" ;;
-        esac
-    fi
-    
-    echo -e "${CCYAN}Using Debian codename: $debian_codename${CEND}" >> "/tmp/docker-install.log"
-    
-    # Add Docker GPG key
-    echo -e "${CCYAN}Importing Docker GPG key...${CEND}" >> "/tmp/docker-install.log"
-    install -m 0755 -d /etc/apt/keyrings >> "/tmp/docker-install.log" 2>&1
-    curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg >> "/tmp/docker-install.log" 2>&1
-    chmod a+r /etc/apt/keyrings/docker.gpg >> "/tmp/docker-install.log" 2>&1
-    
-    if [ $? -eq 0 ]; then
-        echo -e "${CGREEN}✓ Docker GPG key imported${CEND}" >> "/tmp/docker-install.log"
-    else
-        echo -e "${CRED}✗ Failed to import Docker GPG key${CEND}" >> "/tmp/docker-install.log"
-        return 1
-    fi
-    
-    # Add Docker repository
-    echo -e "${CCYAN}Adding Docker repository...${CEND}" >> "/tmp/docker-install.log"
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $debian_codename stable" | tee /etc/apt/sources.list.d/docker.list >> "/tmp/docker-install.log" 2>&1
-    
-    if [ $? -eq 0 ]; then
-        echo -e "${CGREEN}✓ Docker repository added${CEND}" >> "/tmp/docker-install.log"
-    else
-        echo -e "${CRED}✗ Failed to add Docker repository${CEND}" >> "/tmp/docker-install.log"
-        return 1
-    fi
-    
-    # Update package list
-    echo -e "${CCYAN}Updating package list...${CEND}" >> "/tmp/docker-install.log"
-    apt-get update >> "/tmp/docker-install.log" 2>&1
-    if [ $? -eq 0 ]; then
-        echo -e "${CGREEN}✓ Package list updated${CEND}" >> "/tmp/docker-install.log"
-    else
-        echo -e "${CRED}✗ Failed to update package list${CEND}" >> "/tmp/docker-install.log"
-        return 1
-    fi
-    
-    # Verify Docker packages are available
-    echo -e "${CCYAN}Verifying Docker package availability...${CEND}" >> "/tmp/docker-install.log"
-    if apt-cache show "docker-ce" >/dev/null 2>&1 && apt-cache show "docker-ce-cli" >/dev/null 2>&1 && apt-cache show "containerd.io" >/dev/null 2>&1; then
-        echo -e "${CGREEN}✓ Docker packages available${CEND}" >> "/tmp/docker-install.log"
-    else
-        echo -e "${CRED}✗ Docker packages not available${CEND}" >> "/tmp/docker-install.log"
-        return 1
-    fi
-}
-
-function add_rhel_docker_repo_enhanced() {
-    echo -e "${CCYAN}Configuring Docker repository for RHEL-based systems...${CEND}" >> "/tmp/docker-install.log"
-    
-    # Check OS version compatibility
-    case "$os_ver" in
-        "7"|"8"|"9")
-            echo -e "${CGREEN}✓ RHEL/CentOS/Rocky/AlmaLinux $os_ver is supported${CEND}" >> "/tmp/docker-install.log"
-            ;;
-        *)
-            echo -e "${CRED}✗ RHEL/CentOS version $os_ver not supported${CEND}" >> "/tmp/docker-install.log"
-            return 1
-            ;;
-    esac
-    
-    # Determine package manager
-    local pkg_manager="dnf"
-    if ! command -v dnf >/dev/null 2>&1; then
-        pkg_manager="yum"
-    fi
-    
-    echo -e "${CCYAN}Using package manager: $pkg_manager${CEND}" >> "/tmp/docker-install.log"
-    
-    # Check if repository already exists
-    if [ -f "/etc/yum.repos.d/docker-ce.repo" ]; then
-        echo -e "${CYAN}⚠ Docker repository already exists${CEND}" >> "/tmp/docker-install.log"
-        return 0
-    fi
-    
-    # Install Docker Yum repository
-    echo -e "${CCYAN}Installing Docker Yum repository...${CEND}" >> "/tmp/docker-install.log"
-    local docker_repo_url="https://download.docker.com/linux/centos/docker-ce.repo"
-    
-    if command -v $pkg_manager-config-manager >/dev/null 2>&1; then
-        $pkg_manager config-manager --add-repo "$docker_repo_url" >> "/tmp/docker-install.log" 2>&1
-    else
-        # Fallback: manually create repo file
-        cat > /etc/yum.repos.d/docker-ce.repo << EOF
-[docker-ce-stable]
-name=Docker CE Stable - \$basearch
-baseurl=https://download.docker.com/linux/centos/7/\$basearch/stable
-enabled=1
-gpgcheck=1
-gpgkey=https://download.docker.com/linux/centos/gpg
-EOF
-    fi
-    
-    if [ $? -eq 0 ]; then
-        echo -e "${CGREEN}✓ Docker Yum repository installed${CEND}" >> "/tmp/docker-install.log"
-    else
-        echo -e "${CRED}✗ Failed to install Docker Yum repository${CEND}" >> "/tmp/docker-install.log"
-        return 1
-    fi
-    
-    # Clean package cache
-    echo -e "${CCYAN}Cleaning package cache...${CEND}" >> "/tmp/docker-install.log"
-    $pkg_manager clean all >> "/tmp/docker-install.log" 2>&1
-    
-    # Verify Docker packages are available
-    echo -e "${CCYAN}Verifying Docker package availability...${CEND}" >> "/tmp/docker-install.log"
-    if $pkg_manager info docker-ce >/dev/null 2>&1 && $pkg_manager info docker-ce-cli >/dev/null 2>&1 && $pkg_manager info containerd.io >/dev/null 2>&1; then
-        echo -e "${CGREEN}✓ Docker packages available${CEND}" >> "/tmp/docker-install.log"
-    else
-        echo -e "${CRED}✗ Docker packages not available${CEND}" >> "/tmp/docker-install.log"
-        return 1
-    fi
-}
-
-function add_fedora_docker_repo_enhanced() {
-    echo -e "${CCYAN}Configuring Docker repository for Fedora...${CEND}" >> "/tmp/docker-install.log"
-    
-    # Check Fedora version
-    local fedora_major=$(echo "$os_ver" | cut -d. -f1)
-    echo -e "${CGREEN}✓ Fedora $os_ver detected${CEND}" >> "/tmp/docker-install.log"
-    
-    # Determine package manager
-    local pkg_manager="dnf"
-    
-    # Check if repository already exists
-    if [ -f "/etc/yum.repos.d/docker-ce.repo" ]; then
-        echo -e "${CYAN}⚠ Docker repository already exists${CEND}" >> "/tmp/docker-install.log"
-        return 0
-    fi
-    
-    # Install Docker Yum repository
-    echo -e "${CCYAN}Installing Docker Yum repository...${CEND}" >> "/tmp/docker-install.log"
-    local docker_repo_url="https://download.docker.com/linux/fedora/docker-ce.repo"
-    
-    if command -v $pkg_manager-config-manager >/dev/null 2>&1; then
-        $pkg_manager config-manager --add-repo "$docker_repo_url" >> "/tmp/docker-install.log" 2>&1
-    else
-        # Fallback: manually create repo file
-        cat > /etc/yum.repos.d/docker-ce.repo << EOF
-[docker-ce-stable]
-name=Docker CE Stable - \$basearch
-baseurl=https://download.docker.com/linux/fedora/\$releasever/\$basearch/stable
-enabled=1
-gpgcheck=1
-gpgkey=https://download.docker.com/linux/fedora/gpg
-EOF
-    fi
-    
-    if [ $? -eq 0 ]; then
-        echo -e "${CGREEN}✓ Docker Yum repository installed${CEND}" >> "/tmp/docker-install.log"
-    else
-        echo -e "${CRED}✗ Failed to install Docker Yum repository${CEND}" >> "/tmp/docker-install.log"
-        return 1
-    fi
-    
-    # Clean package cache
-    echo -e "${CCYAN}Cleaning package cache...${CEND}" >> "/tmp/docker-install.log"
-    $pkg_manager clean all >> "/tmp/docker-install.log" 2>&1
-    
-    # Verify Docker packages are available
-    echo -e "${CCYAN}Verifying Docker package availability...${CEND}" >> "/tmp/docker-install.log"
-    if $pkg_manager info docker-ce >/dev/null 2>&1 && $pkg_manager info docker-ce-cli >/dev/null 2>&1 && $pkg_manager info containerd.io >/dev/null 2>&1; then
-        echo -e "${CGREEN}✓ Docker packages available${CEND}" >> "/tmp/docker-install.log"
-    else
-        echo -e "${CRED}✗ Docker packages not available${CEND}" >> "/tmp/docker-install.log"
-        return 1
+        echo -e "${CRED}Failed to setup Docker repository${CEND}"
+        exit 1
     fi
 }
 
