@@ -2094,6 +2094,10 @@ case $OPTION in
             fi
             if [[ "$GEOIP2" != 'y' ]]; then
                 sed -i '/geoip_/d' nginx.conf
+            else
+                # Remove explicit geoip2.conf include to prevent duplication
+                # since it's already included by the wildcard include
+                sed -i '/include.*geoip2\.conf/d' nginx.conf
             fi
             
             # Download additional configuration files
