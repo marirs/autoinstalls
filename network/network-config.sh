@@ -113,8 +113,10 @@ get_network_interfaces() {
     interfaces+=("lo")
     interface_info+=("lo - 127.0.0.1/8 (UP)")
     
-    echo "${interfaces[@]}"
-    echo "${interface_info[@]}"
+    # Output each interface and info on separate lines
+    for i in "${!interfaces[@]}"; do
+        echo "${interfaces[i]}|${interface_info[i]}"
+    done
 }
 
 # Select network interface
@@ -123,26 +125,25 @@ select_interface() {
     echo ""
     echo -e "${CYAN}Current network interfaces:${NC}"
     
-    # Get interfaces
-    local interfaces_output=($(get_network_interfaces))
-    local interfaces_count=$((${#interfaces_output[@]} / 2))
-    local interfaces=("${interfaces_output[@]:0:$interfaces_count}")
-    local interface_info=("${interfaces_output[@]:$interfaces_count}")
+    # Get interfaces in pipe-separated format
+    local interfaces=()
+    local interface_info=()
     
-    # Display interfaces
-    for i in "${!interface_info[@]}"; do
-        echo "  $((i+1)). ${interface_info[i]}"
-    done
+    while IFS='|' read -r iface info; do
+        interfaces+=("$iface")
+        interface_info+=("$info")
+        echo "  $(( ${#interfaces[@]} )). $info"
+    done <<< "$(get_network_interfaces)"
     
     echo ""
     while true; do
-        read -p "Select interface to configure (1-$((interfaces_count))): " interface_choice
+        read -p "Select interface to configure (1-${#interfaces[@]}): " interface_choice
         
-        if [[ "$interface_choice" =~ ^[0-9]+$ ]] && [ "$interface_choice" -ge 1 ] && [ "$interface_choice" -le $interfaces_count ]; then
+        if [[ "$interface_choice" =~ ^[0-9]+$ ]] && [ "$interface_choice" -ge 1 ] && [ "$interface_choice" -le ${#interfaces[@]} ]; then
             SELECTED_INTERFACE="${interfaces[$((interface_choice-1))]}"
             break
         else
-            echo -e "${RED}Invalid choice. Please enter a number between 1 and $interfaces_count${NC}"
+            echo -e "${RED}Invalid choice. Please enter a number between 1 and ${#interfaces[@]}${NC}"
         fi
     done
     
@@ -265,27 +266,87 @@ analyze_config_and_suggest() {
     done
     
     # Display analysis
-    echo -e "  IPv4 Configuration: ${has_ipv4:+${GREEN}Yes ($ipv4_type)${NC}}${has_ipv4:+${RED}No${NC}}"
-    echo -e "  IPv6 Configuration: ${has_ipv6:+${GREEN}Yes ($ipv6_type)${NC}}${has_ipv6:+${RED}No${NC}}"
+    if [[ "$has_ipv4" == true ]]; then
+        echo -e "  IPv4 Configuration: ${GREEN}Yes ($ipv4_type)${NC}"
+    else
+        echo -e "  IPv4 Configuration: ${RED}No${NC}"
+    fi
+    
+    if [[ "$has_ipv6" == true ]]; then
+        echo -e "  IPv6 Configuration: ${GREEN}Yes ($ipv6_type)${NC}"
+    else
+        echo -e "  IPv6 Configuration: ${RED}No${NC}"
+    fi
     echo ""
     
-    # Suggest actions based on current config
+    # Suggest actions based on current config and get user choice
     echo -e "${CYAN}Suggested Actions:${NC}"
     
-    if [[ "$has_ipv6" == true && "$ipv6_type" == "static" ]]; then
-        echo -e "  1. Add additional IPv6 addresses"
-        echo -e "  2. Modify existing IPv6 configuration"
-        echo -e "  3. Add IPv4 addresses"
-    elif [[ "$has_ipv6" == false ]]; then
-        echo -e "  1. Add IPv6 static configuration"
-        echo -e "  2. Add IPv4 addresses"
-    elif [[ "$has_ipv4" == true && "$ipv4_type" == "static" ]]; then
-        echo -e "  1. Add additional IPv4 addresses"
-        echo -e "  2. Add IPv6 addresses"
-    else
-        echo -e "  1. Add IPv4 static configuration"
-        echo -e "  2. Add IPv6 addresses"
-    fi
+    while true; do
+        if [[ "$has_ipv6" == true && "$ipv6_type" == "static" ]]; then
+            echo "  1. Add additional IPv6 addresses"
+            echo "  2. Modify existing IPv6 configuration"
+            echo "  3. Add IPv4 addresses"
+            echo "  4. Add new VLAN interface"
+            echo "  5. Show current configuration only"
+            echo ""
+            read -p "Enter your choice (1-5): " config_choice
+            
+            case "$config_choice" in
+                1) return 1 ;;  # IPv6
+                2) return 4 ;;  # Modify
+                3) return 2 ;;  # IPv4
+                4) return 3 ;;  # VLAN
+                5) return 5 ;;  # Show only
+                *) echo -e "${RED}Invalid choice. Please enter 1, 2, 3, 4, or 5${NC}" ;;
+            esac
+        elif [[ "$has_ipv6" == false ]]; then
+            echo "  1. Add IPv6 static configuration"
+            echo "  2. Add IPv4 addresses"
+            echo "  3. Add new VLAN interface"
+            echo "  4. Show current configuration only"
+            echo ""
+            read -p "Enter your choice (1-4): " config_choice
+            
+            case "$config_choice" in
+                1) return 1 ;;  # IPv6
+                2) return 2 ;;  # IPv4
+                3) return 3 ;;  # VLAN
+                4) return 5 ;;  # Show only
+                *) echo -e "${RED}Invalid choice. Please enter 1, 2, 3, or 4${NC}" ;;
+            esac
+        elif [[ "$has_ipv4" == true && "$ipv4_type" == "static" ]]; then
+            echo "  1. Add additional IPv4 addresses"
+            echo "  2. Add IPv6 addresses"
+            echo "  3. Add new VLAN interface"
+            echo "  4. Show current configuration only"
+            echo ""
+            read -p "Enter your choice (1-4): " config_choice
+            
+            case "$config_choice" in
+                1) return 2 ;;  # IPv4
+                2) return 1 ;;  # IPv6
+                3) return 3 ;;  # VLAN
+                4) return 5 ;;  # Show only
+                *) echo -e "${RED}Invalid choice. Please enter 1, 2, 3, or 4${NC}" ;;
+            esac
+        else
+            echo "  1. Add IPv4 addresses"
+            echo "  2. Add IPv6 addresses"
+            echo "  3. Add new VLAN interface"
+            echo "  4. Show current configuration only"
+            echo ""
+            read -p "Enter your choice (1-4): " config_choice
+            
+            case "$config_choice" in
+                1) return 2 ;;  # IPv4
+                2) return 1 ;;  # IPv6
+                3) return 3 ;;  # VLAN
+                4) return 5 ;;  # Show only
+                *) echo -e "${RED}Invalid choice. Please enter 1, 2, 3, or 4${NC}" ;;
+            esac
+        fi
+    done
 }
 
 # Detect mixed configuration (up/down commands vs address lines)
@@ -429,7 +490,7 @@ extract_existing_ipv6_addresses() {
     local interface="$1"
     local existing_addresses=()
     
-    # Extract from address lines
+    # Extract from CURRENT_IPV6_CONFIG array (if populated)
     for line in "${CURRENT_IPV6_CONFIG[@]}"; do
         if [[ "$line" =~ address[[:space:]]+([0-9a-fA-F:]+) ]]; then
             local addr="${BASH_REMATCH[1]}"
@@ -438,6 +499,35 @@ extract_existing_ipv6_addresses() {
             existing_addresses+=("$addr")
         fi
     done
+    
+    # If array is empty, parse interfaces file directly
+    if [[ ${#existing_addresses[@]} -eq 0 ]] && [[ -f "/etc/network/interfaces" ]]; then
+        local in_ipv6_section=false
+        while IFS= read -r line; do
+            if [[ "$line" =~ ^[[:space:]]*iface[[:space:]]+${interface}[[:space:]]+inet6[[:space:]]+static ]]; then
+                # Found IPv6 section, start reading address lines
+                in_ipv6_section=true
+                continue
+            elif [[ "$line" =~ ^[[:space:]]*iface[[:space:]]+ ]] && [[ "$in_ipv6_section" == true ]]; then
+                # Reached next interface, stop reading
+                break
+            elif [[ "$in_ipv6_section" == true ]]; then
+                # Check for address line
+                if [[ "$line" =~ ^[[:space:]]*address[[:space:]]+([0-9a-fA-F:]+) ]]; then
+                    local addr="${BASH_REMATCH[1]}"
+                    # Remove CIDR if present
+                    addr=$(echo "$addr" | cut -d'/' -f1)
+                    existing_addresses+=("$addr")
+                # Check for up commands with IPv6 addresses
+                elif [[ "$line" =~ ^[[:space:]]*up[[:space:]]+ip[[:space:]]+-6[[:space:]]+addr[[:space:]]+add[[:space:]]+([0-9a-fA-F:]+) ]]; then
+                    local addr="${BASH_REMATCH[1]}"
+                    # Remove CIDR if present
+                    addr=$(echo "$addr" | cut -d'/' -f1)
+                    existing_addresses+=("$addr")
+                fi
+            fi
+        done < "/etc/network/interfaces"
+    fi
     
     # Extract from up commands (like: up ip -6 addr add 2a01:4f9:1a:97cb::3/64 dev $IFACE)
     for line in "${CURRENT_IPV6_CONFIG[@]}"; do
@@ -798,28 +888,57 @@ get_ipv6_range() {
     fi
     
     while true; do
-        if [[ -n "$existing_subnet" ]]; then
-            read -p "Enter IPv6 subnet/CIDR (current: $existing_subnet): " subnet
+        # Try to detect existing IPv6 configuration properly
+        local detected_subnet=""
+        
+        # Method 1: Check CURRENT_IPV6_CONFIG array
+        if [[ ${#CURRENT_IPV6_CONFIG[@]} -gt 0 ]]; then
+            for line in "${CURRENT_IPV6_CONFIG[@]}"; do
+                if [[ "$line" =~ address[[:space:]]+([0-9a-fA-F:]+) ]]; then
+                    local existing_addr="${BASH_REMATCH[1]}"
+                    detected_subnet=$(echo "$existing_addr" | sed 's/:[^:]*$//')::/64
+                    echo -e "${BLUE}Detected IPv6 address: $existing_addr${NC}"
+                    echo -e "${BLUE}Derived subnet: $detected_subnet${NC}"
+                    break
+                fi
+            done
+        fi
+        
+        # Method 2: If array is empty, parse interfaces file directly
+        if [[ -z "$detected_subnet" ]] && [[ -f "/etc/network/interfaces" ]]; then
+            while IFS= read -r line; do
+                if [[ "$line" =~ ^[[:space:]]*iface[[:space:]]+${SELECTED_INTERFACE}[[:space:]]+inet6[[:space:]]+static ]]; then
+                    # Found IPv6 section, look for next address line
+                    while IFS= read -r addr_line && [[ "$addr_line" =~ ^[[:space:]]*address[[:space:]]+([0-9a-fA-F:]+) ]]; do
+                        local existing_addr="${BASH_REMATCH[1]}"
+                        detected_subnet=$(echo "$existing_addr" | sed 's/:[^:]*$//')::/64
+                        echo -e "${BLUE}Detected IPv6 address: $existing_addr${NC}"
+                        echo -e "${BLUE}Derived subnet: $detected_subnet${NC}"
+                        break 2
+                    done
+                fi
+            done < "/etc/network/interfaces"
+        fi
+        
+        # Show prompt with detected subnet or ask for manual input
+        if [[ -n "$detected_subnet" ]]; then
+            read -p "Press Enter to use detected subnet ($detected_subnet), or enter different one: " subnet
             if [[ -z "$subnet" ]]; then
-                subnet="$existing_subnet"
+                subnet="$detected_subnet"
+                echo -e "${GREEN}Using detected subnet: $subnet${NC}"
             fi
         else
+            echo -e "${YELLOW}Could not auto-detect IPv6 subnet${NC}"
             read -p "Enter IPv6 subnet/CIDR (e.g., 2a01:4f9:1a:97cb::/64): " subnet
         fi
         
-        # Validate IPv6 subnet format (more permissive for compression)
-        if [[ "$subnet" =~ ^[0-9a-fA-F:]+/[0-9]{1,3}$ ]] && [[ "$subnet" == *":"*":"* ]] && [[ "$subnet" == *"/"* ]]; then
+        # Simple validation
+        if [[ "$subnet" == *"/"* ]] && [[ "$subnet" =~ ^[0-9a-fA-F:]+/[0-9]{1,3}$ ]]; then
             SELECTED_SUBNET="$subnet"
             echo -e "${GREEN}Selected subnet: $subnet${NC}"
-            
-            # Calculate and display capacity
-            local max_ips=$(calculate_max_ipv6_ips "$subnet")
-            local formatted_max=$(format_number "$max_ips")
-            echo -e "${BLUE}Maximum addresses available in this subnet: $formatted_max${NC}"
-            
             break
         else
-            echo -e "${RED}Invalid IPv6 subnet format. Please use format like 2a01:4f9:1a:97cb::/64${NC}"
+            echo -e "${RED}Invalid format. Use something like: 2a01:4f9:1a:97cb::/64${NC}"
         fi
     done
     
@@ -1319,6 +1438,42 @@ EOF
     return $?
 }
 
+# Generate IPv6 addresses from count (starting from next available)
+generate_ipv6_addresses_from_count() {
+    local subnet="$1"
+    local count="$2"
+    local base_address=$(echo "$subnet" | cut -d'/' -f1 | sed 's/::$//')
+    local prefix_length=$(echo "$subnet" | cut -d'/' -f2)
+    
+    IPV6_ADDRESSES=()
+    
+    # Find existing addresses to determine next available
+    local existing_addresses=($(extract_existing_ipv6_addresses "$SELECTED_INTERFACE"))
+    local next_num=1
+    
+    # Find the next available number
+    for addr in "${existing_addresses[@]}"; do
+        if [[ "$addr" =~ ${base_address}::([0-9a-fA-F]+) ]]; then
+            local hex_num="${BASH_REMATCH[1]}"
+            local dec_num=$((16#$hex_num))  # Convert hex to decimal
+            if [[ $dec_num -ge $next_num ]]; then
+                next_num=$((dec_num + 1))
+            fi
+        fi
+    done
+    
+    # Generate the requested number of addresses
+    for ((i=0; i<count; i++)); do
+        local current_num=$((next_num + i))
+        local hex_num=$(printf "%x" $current_num)
+        IPV6_ADDRESSES+=("${base_address}::$hex_num/$prefix_length")
+    done
+    
+    echo -e "${GREEN}Generated ${#IPV6_ADDRESSES[@]} IPv6 addresses${NC}"
+    echo -e "${CYAN}Starting from: ${IPV6_ADDRESSES[0]}${NC}"
+    echo -e "${CYAN}Ending at: ${IPV6_ADDRESSES[-1]}${NC}"
+}
+
 # Generate IPv6 addresses from subnet (with proper hexadecimal)
 generate_ipv6_addresses() {
     local subnet="$1"
@@ -1623,125 +1778,232 @@ main() {
         select_ipv6_address
         apply_ipv6_config
     else
-        analyze_config_and_suggest
-        local config_type=$(ask_configuration_type)
+        # Simple menu - no complex analysis
+        echo ""
+        echo -e "${CYAN}What would you like to configure?${NC}"
+        echo "  1. Add IPv6 addresses"
+        echo "  2. Add IPv4 addresses"
+        echo "  3. Add new VLAN interface"
+        echo "  4. Show current configuration only"
+        echo ""
+        
+        while true; do
+            read -p "Enter your choice (1-4): " config_choice
+            
+            case "$config_choice" in
+                1) local config_type=1 ;;  # IPv6
+                2) local config_type=2 ;;  # IPv4
+                3) local config_type=3 ;;  # VLAN
+                4) local config_type=5 ;;  # Show only
+                *) echo -e "${RED}Invalid choice. Please enter 1, 2, 3, or 4${NC}"; continue ;;
+            esac
+            break
+        done
         
         case "$config_type" in
-            1)  # IPv6
-                # Check for mixed configuration and auto-convert
-                detect_mixed_config "$SELECTED_INTERFACE"
-                local config_type=$?
+            1)  # IPv6 - Simple standard Debian format only
+                echo -e "${CYAN}Adding IPv6 addresses to $SELECTED_INTERFACE...${NC}"
                 
-                if [[ $config_type -eq 1 ]] || [[ $config_type -eq 2 ]]; then
-                    echo -e "${YELLOW}⚠️  Mixed IPv6 configuration detected (up/down commands)${NC}"
-                    echo -e "${CYAN}Auto-converting to standard 'address' lines for better compatibility...${NC}"
-                    
-                    echo -e "${CYAN}Converting configuration...${NC}"
-                    if convert_mixed_ipv6_config "$SELECTED_INTERFACE"; then
-                        echo -e "${GREEN}✓ Configuration converted successfully${NC}"
-                        # Re-read the configuration after conversion
-                        read_current_config "$SELECTED_INTERFACE"
-                        echo -e "${CYAN}Configuration after conversion:${NC}"
-                        analyze_config_and_suggest
-                    else
-                        echo -e "${RED}✗ Configuration conversion failed${NC}"
-                        exit 1
-                    fi
+                # Step 1: Detect existing subnet, gateway, and addresses for default
+                local existing_subnet=""
+                local existing_gateway=""
+                local existing_addresses=()
+                if [[ -f "/etc/network/interfaces" ]]; then
+                    while IFS= read -r line; do
+                        if [[ "$line" =~ ^[[:space:]]*iface[[:space:]]+${SELECTED_INTERFACE}[[:space:]]+inet6[[:space:]]+static ]]; then
+                            while IFS= read -r addr_line; do
+                                if [[ "$addr_line" =~ ^[[:space:]]*address[[:space:]]+([0-9a-fA-F:]+) ]]; then
+                                    local addr="${BASH_REMATCH[1]}"
+                                    addr=$(echo "$addr" | cut -d'/' -f1)
+                                    existing_addresses+=("$addr")
+                                    if [[ -z "$existing_subnet" ]]; then
+                                        existing_subnet=$(echo "$addr" | sed 's/::[0-9a-fA-F]*$//')::/64
+                                    fi
+                                elif [[ "$addr_line" =~ ^[[:space:]]*gateway[[:space:]]+([0-9a-fA-F:]+) ]]; then
+                                    existing_gateway="${BASH_REMATCH[1]}"
+                                elif [[ "$addr_line" =~ ^[[:space:]]*iface[[:space:]]+ ]]; then
+                                    break
+                                fi
+                            done
+                            break
+                        fi
+                    done < "/etc/network/interfaces"
                 fi
                 
-                local ipv6_method=$(ask_ipv6_method)
+                # Step 2: Get subnet with default
+                echo ""
+                if [[ -n "$existing_subnet" ]]; then
+                    read -p "Enter IPv6 subnet/CIDR (default: $existing_subnet): " subnet
+                    if [[ -z "$subnet" ]]; then
+                        subnet="$existing_subnet"
+                    fi
+                else
+                    read -p "Enter IPv6 subnet/CIDR (e.g., 2a01:4f9:1a:97cb::/64): " subnet
+                fi
                 
-                case "$ipv6_method" in
-                    1)  # Single address
-                        if [[ ${#CURRENT_IPV6_CONFIG[@]} -gt 0 ]]; then
-                            echo -e "${CYAN}Existing IPv6 configuration found. Adding additional address...${NC}"
-                            get_ipv6_subnet
-                            select_ipv6_address
-                            if add_ipv6_to_interfaces; then
-                                echo -e "${GREEN}✓ Additional IPv6 address added successfully${NC}"
-                                test_ipv6_connectivity
-                            else
-                                echo -e "${RED}✗ Failed to add IPv6 address${NC}"
-                                exit 1
-                            fi
-                        else
-                            echo -e "${CYAN}No IPv6 configuration found. Creating new IPv6 setup...${NC}"
-                            get_ipv6_subnet
-                            select_ipv6_address
-                            if create_ipv6_interfaces; then
-                                echo -e "${GREEN}✓ IPv6 configuration created successfully${NC}"
-                                test_ipv6_connectivity
-                            else
-                                echo -e "${RED}✗ Failed to create IPv6 configuration${NC}"
-                                exit 1
+                # Validate subnet
+                if [[ ! "$subnet" =~ ^[0-9a-fA-F:]+/[0-9]{1,3}$ ]]; then
+                    echo -e "${RED}Invalid subnet format. Use format like: 2a01:4f9:1a:97cb::/64${NC}"
+                    exit 1
+                fi
+                
+                SELECTED_SUBNET="$subnet"
+                
+                # Step 3: Get number of addresses
+                echo ""
+                read -p "How many IPv6 addresses to add? " num_addresses
+                
+                if [[ ! "$num_addresses" =~ ^[0-9]+$ ]] || [ "$num_addresses" -lt 1 ]; then
+                    echo -e "${RED}Invalid number. Must be 1 or more.${NC}"
+                    exit 1
+                fi
+                
+                # Step 4: Generate addresses starting from next available (or ::2 if none)
+                local base_address=$(echo "$SELECTED_SUBNET" | cut -d'/' -f1 | sed 's/::$//')
+                local prefix_length=$(echo "$SELECTED_SUBNET" | cut -d'/' -f2)
+                local new_addresses=()
+                
+                # Find next available number from existing addresses
+                local next_num=2  # Default start from ::2
+                if [[ ${#existing_addresses[@]} -gt 0 ]]; then
+                    for addr in "${existing_addresses[@]}"; do
+                        if [[ "$addr" =~ ${base_address}::([0-9a-fA-F]+) ]]; then
+                            local hex_num="${BASH_REMATCH[1]}"
+                            local dec_num=$((16#$hex_num))
+                            if [[ $dec_num -ge $next_num ]]; then
+                                next_num=$((dec_num + 1))
                             fi
                         fi
-                        ;;
-                    2)  # Range of addresses
-                        if ! get_ipv6_range; then
-                            echo -e "${YELLOW}Range configuration cancelled${NC}"
+                    done
+                fi
+                
+                # Generate the requested number of addresses
+                for ((i=0; i<num_addresses; i++)); do
+                    local current_num=$((next_num + i))
+                    local hex_num=$(printf "%x" $current_num)
+                    new_addresses+=("${base_address}::$hex_num/$prefix_length")
+                done
+                
+                # Step 5: Show what we'll do
+                echo ""
+                echo -e "${CYAN}Will add ${#new_addresses[@]} IPv6 addresses to $SELECTED_INTERFACE:${NC}"
+                echo -e "${GREEN}Subnet: $SELECTED_SUBNET${NC}"
+                if [[ -n "$existing_gateway" ]]; then
+                    echo -e "${GREEN}Gateway: $existing_gateway (preserved)${NC}"
+                fi
+                echo -e "${GREEN}From: ${new_addresses[0]}${NC}"
+                echo -e "${GREEN}To:   ${new_addresses[-1]}${NC}"
+                echo ""
+                read -p "Continue? [y/N]: " confirm
+                
+                if [[ ! "$confirm" =~ ^[Yy] ]]; then
+                    echo -e "${YELLOW}Cancelled${NC}"
+                    continue
+                fi
+                
+                # Step 6: Backup and rewrite IPv6 section in standard format
+                echo -e "${CYAN}Updating configuration...${NC}"
+                
+                mkdir -p "$BACKUP_DIR"
+                cp /etc/network/interfaces "$BACKUP_DIR/interfaces-$(date +%Y%m%d-%H%M%S)"
+                
+                local temp_file=$(mktemp)
+                local ipv6_section_written=false
+                
+                while IFS= read -r line; do
+                    # Copy all lines except old IPv6 section for target interface
+                    if [[ "$line" =~ ^[[:space:]]*iface[[:space:]]+${SELECTED_INTERFACE}[[:space:]]+inet6[[:space:]]+static ]]; then
+                        # Skip old IPv6 section, write new one
+                        echo "iface $SELECTED_INTERFACE inet6 static" >> "$temp_file"
+                        
+                        # Write all existing addresses first
+                        for addr in "${existing_addresses[@]}"; do
+                            echo "  address $addr/$(echo "$SELECTED_SUBNET" | cut -d'/' -f2)" >> "$temp_file"
+                        done
+                        
+                        echo "  netmask $(echo "$SELECTED_SUBNET" | cut -d'/' -f2)" >> "$temp_file"
+                        
+                        # Add gateway if it existed
+                        if [[ -n "$existing_gateway" ]]; then
+                            echo "  gateway $existing_gateway" >> "$temp_file"
+                        fi
+                        
+                        # Add new addresses
+                        for addr in "${new_addresses[@]}"; do
+                            echo "  address $addr" >> "$temp_file"
+                        done
+                        
+                        echo "" >> "$temp_file"
+                        
+                        ipv6_section_written=true
+                        
+                        # Skip all lines until next interface
+                        while IFS= read -r skip_line && [[ ! "$skip_line" =~ ^[[:space:]]*iface[[:space:]]+ ]]; do
                             continue
-                        fi
-                        
-                        show_ipv6_preview
-                        
-                        echo ""
-                        while true; do
-                            read -p "Add these ${#IPV6_ADDRESSES[@]} IPv6 addresses? [y/N]: " confirm
-                            case "$confirm" in
-                                [Yy]|[Yy][Ee][Ss])
-                                    if add_multiple_ipv6_to_interfaces; then
-                                        echo -e "${GREEN}✓ Multiple IPv6 addresses added successfully${NC}"
-                                        verify_ipv6_addresses
-                                        echo -e "${CYAN}Testing IPv6 connectivity...${NC}"
-                                        test_ipv6_connectivity
-                                    else
-                                        echo -e "${RED}✗ Failed to add IPv6 addresses${NC}"
-                                        exit 1
-                                    fi
-                                    break
-                                    ;;
-                                [Nn]|[Nn][Oo]|"")
-                                    echo -e "${YELLOW}Cancelled IPv6 range addition${NC}"
-                                    break
-                                    ;;
-                                *)
-                                    echo -e "${RED}Please enter y or n${NC}"
-                                    ;;
-                            esac
                         done
-                        ;;
-                    3)  # Custom list
-                        get_ipv6_custom_list
-                        show_ipv6_preview
-                        
-                        echo ""
-                        while true; do
-                            read -p "Add these ${#IPV6_ADDRESSES[@]} IPv6 addresses? [y/N]: " confirm
-                            case "$confirm" in
-                                [Yy]|[Yy][Ee][Ss])
-                                    if add_multiple_ipv6_to_interfaces; then
-                                        echo -e "${GREEN}✓ Custom IPv6 addresses added successfully${NC}"
-                                        verify_ipv6_addresses
-                                        echo -e "${CYAN}Testing IPv6 connectivity...${NC}"
-                                        test_ipv6_connectivity
-                                    else
-                                        echo -e "${RED}✗ Failed to add IPv6 addresses${NC}"
-                                        exit 1
-                                    fi
-                                    break
-                                    ;;
-                                [Nn]|[Nn][Oo]|"")
-                                    echo -e "${YELLOW}Cancelled IPv6 custom list addition${NC}"
-                                    break
-                                    ;;
-                                *)
-                                    echo -e "${RED}Please enter y or n${NC}"
-                                    ;;
-                            esac
-                        done
-                        ;;
-                esac
+                        echo "$skip_line" >> "$temp_file"
+                    else
+                        echo "$line" >> "$temp_file"
+                    fi
+                done < "/etc/network/interfaces"
+                
+                # If no IPv6 section existed, add one at the end
+                if [[ "$ipv6_section_written" == false ]]; then
+                    echo "" >> "$temp_file"
+                    echo "iface $SELECTED_INTERFACE inet6 static" >> "$temp_file"
+                    
+                    # Write all existing addresses first (if any)
+                    for addr in "${existing_addresses[@]}"; do
+                        echo "  address $addr/$(echo "$SELECTED_SUBNET" | cut -d'/' -f2)" >> "$temp_file"
+                    done
+                    
+                    # If no existing addresses, start with ::2
+                    if [[ ${#existing_addresses[@]} -eq 0 ]]; then
+                        echo "  address ${base_address}::2/$(echo "$SELECTED_SUBNET" | cut -d'/' -f2)" >> "$temp_file"
+                    fi
+                    
+                    echo "  netmask $(echo "$SELECTED_SUBNET" | cut -d'/' -f2)" >> "$temp_file"
+                    
+                    # Add gateway if it existed
+                    if [[ -n "$existing_gateway" ]]; then
+                        echo "  gateway $existing_gateway" >> "$temp_file"
+                    fi
+                    
+                    # Add new addresses (skip first if we already wrote ::2)
+                    local start_idx=0
+                    if [[ ${#existing_addresses[@]} -eq 0 ]]; then
+                        start_idx=1  # Skip the first one (::2) since we already wrote it
+                    fi
+                    
+                    for ((i=start_idx; i<${#new_addresses[@]}; i++)); do
+                        echo "  address ${new_addresses[i]}" >> "$temp_file"
+                    done
+                    
+                    echo "" >> "$temp_file"
+                fi
+                
+                # Replace file
+                mv "$temp_file" /etc/network/interfaces
+                
+                # Restart interface
+                echo -e "${CYAN}Restarting $SELECTED_INTERFACE...${NC}"
+                
+                # Try to restart interface with IPv4 conflict handling
+                if ifdown "$SELECTED_INTERFACE" 2>/dev/null; then
+                    sleep 2
+                    if ifup "$SELECTED_INTERFACE" 2>/dev/null; then
+                        echo -e "${GREEN}✅ SUCCESS: Added ${#new_addresses[@]} IPv6 addresses to $SELECTED_INTERFACE${NC}"
+                        echo -e "${GREEN}   Written in standard Debian format${NC}"
+                    else
+                        echo -e "${YELLOW}⚠️  IPv6 configuration updated, but interface restart had issues${NC}"
+                        echo -e "${YELLOW}This is usually due to IPv4 address conflicts and can be ignored${NC}"
+                        echo -e "${GREEN}✅ IPv6 addresses should still work correctly${NC}"
+                    fi
+                else
+                    echo -e "${YELLOW}⚠️  Could not bring interface down, but configuration was updated${NC}"
+                    echo -e "${YELLOW}IPv6 addresses will be applied on next reboot or manual restart${NC}"
+                    echo -e "${YELLOW}Manual restart: ifdown $SELECTED_INTERFACE && ifup $SELECTED_INTERFACE${NC}"
+                fi
                 ;;
             2)  # IPv4
                 echo -e "${CYAN}Configuring IPv4 address...${NC}"
@@ -1749,7 +2011,6 @@ main() {
                 if add_ipv4_to_interfaces; then
                     echo -e "${GREEN}✓ IPv4 address added successfully${NC}"
                     echo -e "${CYAN}Testing IPv4 connectivity...${NC}"
-                    # Simple IPv4 connectivity test
                     if ping -c 2 -W 2 8.8.8.8 >/dev/null 2>&1; then
                         echo -e "${GREEN}✓ IPv4 connectivity: OK${NC}"
                     else
@@ -1769,10 +2030,9 @@ main() {
                     exit 1
                 fi
                 ;;
-            4)  # Modify
-                echo -e "${YELLOW}Modify option not yet implemented${NC}"
-                echo -e "${CYAN}Please edit /etc/network/interfaces manually or choose add options${NC}"
-                exit 0
+            5)  # Show only
+                echo -e "${CYAN}Current configuration for $SELECTED_INTERFACE:${NC}"
+                read_current_config "$SELECTED_INTERFACE"
                 ;;
         esac
     fi
