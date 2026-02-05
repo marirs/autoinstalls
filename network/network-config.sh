@@ -75,23 +75,33 @@ get_network_interfaces() {
     local interfaces=()
     local interface_info=()
     
-    # Get active interfaces with IP addresses
+    # Get active interfaces with IP addresses using a more reliable method
     while IFS= read -r line; do
-        if [[ -n "$line" ]]; then
-            local iface=$(echo "$line" | awk '{print $1}')
-            local ip=$(echo "$line" | awk '{print $2}')
-            local status=$(ip link show "$iface" | grep -o 'state [A-Z]*' | awk '{print $2}')
+        if [[ "$line" =~ ^[0-9]+:[[:space:]]*([^:@]+) ]]; then
+            local iface="${BASH_REMATCH[1]}"
             
-            # Check if this is a VLAN interface
-            local vlan_label=""
-            if is_vlan_interface "$iface"; then
-                vlan_label=" - VLAN"
+            # Skip loopback and docker interfaces
+            if [[ "$iface" != "lo" ]] && [[ ! "$iface" =~ ^docker[0-9]*$ ]] && [[ ! "$iface" =~ ^br-[0-9a-f]*$ ]]; then
+                # Get IP address for this interface
+                local ip=$(ip -4 addr show "$iface" 2>/dev/null | grep -oP 'inet \K[0-9.]+' | head -1)
+                if [[ -z "$ip" ]]; then
+                    ip="No IP"
+                fi
+                
+                # Get interface status
+                local status=$(ip link show "$iface" 2>/dev/null | grep -o 'state [A-Z]*' | awk '{print $2}' || echo "UNKNOWN")
+                
+                # Check if this is a VLAN interface
+                local vlan_label=""
+                if is_vlan_interface "$iface"; then
+                    vlan_label=" - VLAN"
+                fi
+                
+                interfaces+=("$iface")
+                interface_info+=("$iface - $ip/$status$vlan_label")
             fi
-            
-            interfaces+=("$iface")
-            interface_info+=("$iface - $ip ($status)$vlan_label")
         fi
-    done < <(ip addr show | grep -E '^[0-9]+:' | grep -v 'lo:' | awk '{print $2, $4}' | sed 's/://')
+    done <<< "$(ip link show | grep -E '^[0-9]+:')"
     
     # Add loopback interface
     interfaces+=("lo")
