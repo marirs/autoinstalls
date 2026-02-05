@@ -496,12 +496,14 @@ function setup_docker_repo() {
     
     case "$os" in
         "ubuntu"|"debian")
-            # Add Docker's official GPG key (overwrite if exists)
+            # Add Docker's official GPG key (force overwrite if exists)
             install -m 0755 -d /etc/apt/keyrings >> /tmp/docker-install.log 2>&1
+            # Remove existing key to avoid prompt
+            rm -f /etc/apt/keyrings/docker.gpg
             curl -fsSL https://download.docker.com/linux/$os/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg >> /tmp/docker-install.log 2>&1
             chmod a+r /etc/apt/keyrings/docker.gpg >> /tmp/docker-install.log 2>&1
             
-            # Add the repository to Apt sources (overwrite if exists)
+            # Add the repository to Apt sources (force overwrite if exists)
             echo \
                 "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$os \
                 $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
@@ -742,8 +744,28 @@ function configure_docker_security() {
     # Create Docker daemon configuration directory
     mkdir -p /etc/docker
     
-    # Create secure Docker daemon configuration (simplified for compatibility)
-    cat > /etc/docker/daemon.json << 'EOF'
+    # Try to create seccomp profile (optional, don't fail if it fails)
+    echo -e "${CCYAN}Setting up seccomp profile (optional)...${CEND}"
+    local seccomp_config=""
+    if curl -fsSL https://raw.githubusercontent.com/moby/moby/master/profiles/seccomp/default.json -o /etc/docker/seccomp.json >> /tmp/docker-install.log 2>&1; then
+        echo -e "${CGREEN}✓ Seccomp profile downloaded${CEND}"
+        seccomp_config='"seccomp-profile": "/etc/docker/seccomp.json",'
+    else
+        echo -e "${CYAN}⚠ Could not download seccomp profile, continuing without it${CEND}"
+    fi
+    
+    # Try to create Docker user namespace (optional, don't fail if it fails)
+    echo -e "${CCYAN}Setting up user namespace remapping (optional)...${CEND}"
+    local userns_config=""
+    if echo "dockremap:165536:65536" >> /etc/subuid 2>/dev/null && echo "dockremap:165536:65536" >> /etc/subgid 2>/dev/null; then
+        echo -e "${CGREEN}✓ User namespace remapping configured${CEND}"
+        userns_config='"userns-remap": "default",'
+    else
+        echo -e "${CYAN}⚠ Could not configure user namespace, continuing without it${CEND}"
+    fi
+    
+    # Create secure Docker daemon configuration with optional features
+    cat > /etc/docker/daemon.json << EOF
 {
   "log-driver": "json-file",
   "log-opts": {
@@ -769,31 +791,18 @@ function configure_docker_security() {
   "exec-root": "/var/run/docker",
   "hosts": [
     "unix:///var/run/docker.sock"
-  ]
+  ],
+  ${seccomp_config}
+  ${userns_config}
+  "registry-mirrors": [],
+  "insecure-registries": []
 }
 EOF
     
-    # Try to create seccomp profile (optional, don't fail if it fails)
-    echo -e "${CCYAN}Setting up seccomp profile (optional)...${CEND}"
-    if curl -fsSL https://raw.githubusercontent.com/moby/moby/master/profiles/seccomp/default.json -o /etc/docker/seccomp.json >> /tmp/docker-install.log 2>&1; then
-        echo -e "${CGREEN}✓ Seccomp profile downloaded${CEND}"
-        # Add seccomp to daemon.json if downloaded successfully
-        sed -i '/}/i\
-  "seccomp-profile": "/etc/docker/seccomp.json",' /etc/docker/daemon.json
-    else
-        echo -e "${CYAN}⚠ Could not download seccomp profile, continuing without it${CEND}"
-    fi
-    
-    # Try to create Docker user namespace (optional, don't fail if it fails)
-    echo -e "${CCYAN}Setting up user namespace remapping (optional)...${CEND}"
-    if echo "dockremap:165536:65536" >> /etc/subuid 2>/dev/null && echo "dockremap:165536:65536" >> /etc/subgid 2>/dev/null; then
-        echo -e "${CGREEN}✓ User namespace remapping configured${CEND}"
-        # Add userns-remap to daemon.json if successful
-        sed -i '/}/i\
-  "userns-remap": "default",' /etc/docker/daemon.json
-    else
-        echo -e "${CYAN}⚠ Could not configure user namespace, continuing without it${CEND}"
-    fi
+    # Clean up the JSON - remove trailing commas and empty lines
+    sed -i '/^[[:space:]]*$/d' /etc/docker/daemon.json
+    sed -i 's/,\s*}/}/g' /etc/docker/daemon.json
+    sed -i 's/,\s*]/]/g' /etc/docker/daemon.json
     
     # Validate JSON syntax
     if ! python3 -m json.tool /etc/docker/daemon.json >/dev/null 2>&1; then
@@ -809,6 +818,8 @@ EOF
   "storage-driver": "overlay2"
 }
 EOF
+    else
+        echo -e "${CGREEN}✓ Docker daemon configuration is valid${CEND}"
     fi
     
     # Restart Docker to apply configuration
@@ -816,7 +827,7 @@ EOF
     systemctl restart docker >> /tmp/docker-install.log 2>&1
     
     # Wait a moment for Docker to restart
-    sleep 3
+    sleep 5
     
     # Check if Docker is running properly
     if systemctl is-active --quiet docker && docker info >/dev/null 2>&1; then
@@ -828,15 +839,27 @@ EOF
         # Remove the config file and restart with defaults
         mv /etc/docker/daemon.json /etc/docker/daemon.json.bak 2>/dev/null
         systemctl restart docker >> /tmp/docker-install.log 2>&1
-        sleep 3
+        sleep 5
         
-        if systemctl is-active --quiet docker; then
+        if systemctl is-active --quiet docker && docker info >/dev/null 2>&1; then
             echo -e "${CYAN}✓ Docker restored with default configuration${CEND}"
             echo -e "${CYAN}⚠ Security configuration was not applied${CEND}"
         else
-            echo -e "${CRED}❌ Docker is not running. Please check the logs:${CEND}"
-            echo -e "${CYAN}tail -f /tmp/docker-install.log${CEND}"
-            exit 1
+            echo -e "${CRED}❌ Docker is not running. Attempting manual start...${CEND}"
+            # Try to start Docker manually
+            systemctl daemon-reload >> /tmp/docker-install.log 2>&1
+            systemctl enable docker >> /tmp/docker-install.log 2>&1
+            systemctl start docker >> /tmp/docker-install.log 2>&1
+            sleep 3
+            
+            if systemctl is-active --quiet docker; then
+                echo -e "${CGREEN}✓ Docker started successfully${CEND}"
+            else
+                echo -e "${CRED}❌ Docker failed to start. Please check the logs:${CEND}"
+                echo -e "${CYAN}journalctl -u docker -f${CEND}"
+                echo -e "${CYAN}tail -f /tmp/docker-install.log${CEND}"
+                exit 1
+            fi
         fi
     fi
 }
