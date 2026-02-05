@@ -120,7 +120,82 @@ function get_docker_compose_version() {
 }
 
 # Get appropriate versions
-docker_version=$(get_docker_version)
+echo -e "${CGREEN}Detecting available Docker versions for $os $os_ver...${CEND}"
+
+# Get available Docker versions from repository
+get_available_docker_versions() {
+    case "$os" in
+        "ubuntu"|"debian")
+            # Get available versions from apt cache
+            apt-cache policy docker-ce 2>/dev/null | grep -A 20 "Version table:" | tail -n +2 | awk '{print $1}' | head -5
+            ;;
+        "centos"|"rhel"|"rocky"|"almalinux"|"fedora")
+            # Get available versions from yum/dnf
+            if command -v dnf >/dev/null 2>&1; then
+                dnf list --showduplicates docker-ce 2>/dev/null | grep docker-ce | awk '{print $2}' | sort -V | tail -5
+            else
+                yum list --showduplicates docker-ce 2>/dev/null | grep docker-ce | awk '{print $2}' | sort -V | tail -5
+            fi
+            ;;
+        *)
+            echo "Unable to detect versions for $os"
+            ;;
+    esac
+}
+
+# Display available versions and let user choose
+select_docker_version() {
+    echo -e "${CCYAN}Available Docker versions:${CEND}"
+    echo ""
+    
+    # Get available versions
+    local available_versions=($(get_available_docker_versions))
+    
+    if [ ${#available_versions[@]} -eq 0 ]; then
+        echo -e "${CYAN}⚠ Could not detect available versions, using latest...${CEND}"
+        docker_version="latest"
+        return
+    fi
+    
+    # Display top 3 latest versions
+    echo "   1) ${available_versions[0]} (Latest)"
+    if [ ${#available_versions[@]} -gt 1 ]; then
+        echo "   2) ${available_versions[1]}"
+    fi
+    if [ ${#available_versions[@]} -gt 2 ]; then
+        echo "   3) ${available_versions[2]}"
+    fi
+    echo "   4) Install latest available version"
+    echo ""
+    
+    local choice=""
+    while [[ "$choice" != "1" && "$choice" != "2" && "$choice" != "3" && "$choice" != "4" ]]; do
+        read -p "Select Docker version [1-4]: " choice
+    done
+    
+    case "$choice" in
+        1)
+            docker_version="${available_versions[0]}"
+            echo -e "${CGREEN}Selected: $docker_version${CEND}"
+            ;;
+        2)
+            docker_version="${available_versions[1]}"
+            echo -e "${CGREEN}Selected: $docker_version${CEND}"
+            ;;
+        3)
+            docker_version="${available_versions[2]}"
+            echo -e "${CGREEN}Selected: $docker_version${CEND}"
+            ;;
+        4)
+            docker_version="latest"
+            echo -e "${CGREEN}Selected: Latest available version${CEND}"
+            ;;
+    esac
+}
+
+# Let user select Docker version
+select_docker_version
+
 docker_compose_version=$(get_docker_compose_version)
 
 # Architecture support
@@ -537,44 +612,84 @@ function install_docker() {
     
     case "$os" in
         "ubuntu"|"debian")
-            # Install Docker Engine, CLI, Containerd, and Docker Compose plugin
-            apt-get install -y \
-                docker-ce=$docker_version* \
-                docker-ce-cli=$docker_version* \
-                containerd.io \
-                docker-buildx-plugin \
-                docker-compose-plugin \
-                >> /tmp/docker-install.log 2>&1
-            ;;
-        "centos"|"rhel"|"rocky"|"almalinux")
-            # Install Docker Engine for RHEL-based systems
-            if command -v dnf >/dev/null 2>&1; then
-                dnf install -y \
-                    docker-ce-$docker_version \
-                    docker-ce-cli-$docker_version \
+            # Install Docker Engine with selected version
+            if [[ "$docker_version" != "latest" ]]; then
+                echo -e "${CCYAN}Installing Docker version: $docker_version${CEND}"
+                apt-get install -y \
+                    docker-ce=$docker_version \
                     containerd.io \
                     docker-buildx-plugin \
                     docker-compose-plugin \
                     >> /tmp/docker-install.log 2>&1
-            elif command -v yum >/dev/null 2>&1; then
-                yum install -y \
-                    docker-ce-$docker_version \
-                    docker-ce-cli-$docker_version \
+            else
+                echo -e "${CCYAN}Installing latest Docker version${CEND}"
+                apt-get install -y \
+                    docker-ce \
                     containerd.io \
                     docker-buildx-plugin \
                     docker-compose-plugin \
                     >> /tmp/docker-install.log 2>&1
             fi
             ;;
+        "centos"|"rhel"|"rocky"|"almalinux")
+            # Install Docker Engine for RHEL-based systems
+            if command -v dnf >/dev/null 2>&1; then
+                if [[ "$docker_version" != "latest" ]]; then
+                    echo -e "${CCYAN}Installing Docker version: $docker_version${CEND}"
+                    dnf install -y \
+                        docker-ce-$docker_version \
+                        containerd.io \
+                        docker-buildx-plugin \
+                        docker-compose-plugin \
+                        >> /tmp/docker-install.log 2>&1
+                else
+                    echo -e "${CCYAN}Installing latest Docker version${CEND}"
+                    dnf install -y \
+                        docker-ce \
+                        containerd.io \
+                        docker-buildx-plugin \
+                        docker-compose-plugin \
+                        >> /tmp/docker-install.log 2>&1
+                fi
+            else
+                if [[ "$docker_version" != "latest" ]]; then
+                    echo -e "${CCYAN}Installing Docker version: $docker_version${CEND}"
+                    yum install -y \
+                        docker-ce-$docker_version \
+                        containerd.io \
+                        docker-buildx-plugin \
+                        docker-compose-plugin \
+                        >> /tmp/docker-install.log 2>&1
+                else
+                    echo -e "${CCYAN}Installing latest Docker version${CEND}"
+                    yum install -y \
+                        docker-ce \
+                        containerd.io \
+                        docker-buildx-plugin \
+                        docker-compose-plugin \
+                        >> /tmp/docker-install.log 2>&1
+                fi
+            fi
+            ;;
         "fedora")
             # Install Docker Engine for Fedora
-            dnf install -y \
-                docker-ce-$docker_version \
-                docker-ce-cli-$docker_version \
-                containerd.io \
-                docker-buildx-plugin \
-                docker-compose-plugin \
-                >> /tmp/docker-install.log 2>&1
+            if [[ "$docker_version" != "latest" ]]; then
+                echo -e "${CCYAN}Installing Docker version: $docker_version${CEND}"
+                dnf install -y \
+                    docker-ce-$docker_version \
+                    containerd.io \
+                    docker-buildx-plugin \
+                    docker-compose-plugin \
+                    >> /tmp/docker-install.log 2>&1
+            else
+                echo -e "${CCYAN}Installing latest Docker version${CEND}"
+                dnf install -y \
+                    docker-ce \
+                    containerd.io \
+                    docker-buildx-plugin \
+                    docker-compose-plugin \
+                    >> /tmp/docker-install.log 2>&1
+            fi
             ;;
         *)
             echo -e "${CRED}Unsupported OS for Docker installation: $os${CEND}"
