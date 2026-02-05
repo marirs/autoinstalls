@@ -1429,9 +1429,6 @@ case $OPTION in
         while [[ $IMAGE_FILTER != "y" && $IMAGE_FILTER != "n" ]]; do
             read -p "       Image Filter Module (CPU Intensive) [y/n]: " -e IMAGE_FILTER
         done
-        while [[ $SUBSTITUTIONS != "y" && $SUBSTITUTIONS != "n" ]]; do
-            read -p "       Substitutions Filter Module [y/n]: " -e SUBSTITUTIONS
-        done
         while [[ $PROMETHEUS != "y" && $PROMETHEUS != "n" ]]; do
             read -p "       Prometheus Exporter [y/n]: " -e PROMETHEUS
         done
@@ -2107,9 +2104,6 @@ case $OPTION in
             if [[ "$IMAGE_FILTER" = 'y' ]]; then
                 wget -O /etc/nginx/conf.d/image-filter.conf https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/conf/image-filter.conf >> /tmp/nginx-install.log 2>&1
             fi
-            if [[ "$SUBSTITUTIONS" = 'y' ]]; then
-                wget -O /etc/nginx/conf.d/substitutions.conf https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/conf/substitutions.conf >> /tmp/nginx-install.log 2>&1
-            fi
             if [[ "$PROMETHEUS" = 'y' ]]; then
                 wget -O /etc/nginx/conf.d/prometheus.conf https://raw.githubusercontent.com/marirs/autoinstalls/master/nginx/conf/prometheus.conf >> /tmp/nginx-install.log 2>&1
             fi
@@ -2275,24 +2269,6 @@ case $OPTION in
 		# Image Filter Module (Built-in)
 		if [[ "$IMAGE_FILTER" = 'y' ]]; then
 			NGINX_MODULES=$(echo "$NGINX_MODULES"; echo "--with-http_image_filter_module")
-		fi
-
-		# Substitutions Filter Module
-		if [[ "$SUBSTITUTIONS" = 'y' ]]; then
-			cd /usr/local/src/nginx/modules
-			echo -ne "       Downloading Substitutions Filter [..]\r"
-			git clone https://github.com/yaoweibin/nginx_http_substitutions_filter_module >> /tmp/nginx-install.log 2>&1
-			if [ $? -eq 0 ]; then
-				echo -ne "       Downloading Substitutions Filter [${CGREEN}OK${CEND}]\r"
-				echo -ne "\n"
-			else
-				echo -e "       Downloading Substitutions Filter [${CRED}FAIL${CEND}]"
-				echo ""
-				echo "Please look at /tmp/nginx-install.log"
-				echo ""
-				exit 1
-			fi
-			NGINX_MODULES=$(echo "$NGINX_MODULES"; echo "--add-module=/usr/local/src/nginx/modules/nginx_http_substitutions_filter_module")
 		fi
 
 		# Prometheus Exporter
