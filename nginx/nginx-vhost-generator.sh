@@ -81,19 +81,6 @@ function get_available_ips() {
         fi
     done < <(ip -6 addr show | grep -oP '(?<=inet6\s)[\da-f:]+' | grep -v '::1' | grep -v '^fe80')
     
-    echo -e "${CYAN}Available IPv4 addresses:${CEND}"
-    for i in "${!ipv4_ips[@]}"; do
-        echo "  $((i+1)). ${ipv4_ips[i]}"
-    done
-    
-    if [ ${#ipv6_ips[@]} -gt 0 ]; then
-        echo -e "${CYAN}Available IPv6 addresses:${CEND}"
-        local ipv6_offset=${#ipv4_ips[@]}
-        for i in "${!ipv6_ips[@]}"; do
-            echo "  $((ipv6_offset+i+1)). ${ipv6_ips[i]}"
-        done
-    fi
-    
     # Store IPs in global arrays
     AVAILABLE_IPV4=("${ipv4_ips[@]}")
     AVAILABLE_IPV6=("${ipv6_ips[@]}")
