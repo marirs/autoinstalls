@@ -535,11 +535,13 @@ function setup_docker_repo() {
 get_available_docker_versions() {
     case "$os" in
         "ubuntu"|"debian")
-            # Get available versions from apt cache
+            # Get available versions from apt cache - improved parsing
             apt-cache policy docker-ce 2>/dev/null | \
-                grep -A 50 "Version table:" | \
+                grep -A 100 "Version table:" | \
+                grep -v "Version table:" | \
                 grep -E "^\s+[0-9]" | \
                 awk '{print $1}' | \
+                sed 's/[[:space:]]*//' | \
                 sort -V | \
                 tail -5
             ;;
@@ -569,13 +571,25 @@ get_available_docker_versions() {
 # Display available versions and let user choose
 select_docker_version() {
     echo -e "${CGREEN}Detecting available Docker versions for $os $os_ver...${CEND}"
+    
+    # Debug: Show what apt-cache policy returns
+    echo -e "${CCYAN}Debug: Checking apt-cache policy output...${CEND}"
+    if [[ "$os" == "ubuntu" || "$os" == "debian" ]]; then
+        echo -e "${CCYAN}Sample apt-cache policy docker-ce output:${CEND}"
+        apt-cache policy docker-ce 2>/dev/null | head -20
+        echo ""
+    fi
+    
     echo -e "${CCYAN}Available Docker versions:${CEND}"
     echo ""
     
     # Get available versions
     local available_versions=($(get_available_docker_versions))
     
-    if [ ${#available_versions[@]} -eq 0 ] || [[ "${available_versions[0]}" == "Unable" ]]; then
+    echo -e "${CCYAN}Debug: Found ${#available_versions[@]} versions: ${available_versions[*]}${CEND}"
+    echo ""
+    
+    if [ ${#available_versions[@]} -eq 0 ] || [[ "${available_versions[0]}" == "Unable" ]] || [[ "${available_versions[0]}" == "" ]]; then
         echo -e "${CYAN}⚠ Could not detect available versions, using latest...${CEND}"
         docker_version="latest"
         return
