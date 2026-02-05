@@ -1814,7 +1814,14 @@ main() {
                             while IFS= read -r addr_line; do
                                 if [[ "$addr_line" =~ ^[[:space:]]*address[[:space:]]+([0-9a-fA-F:]+) ]]; then
                                     local addr="${BASH_REMATCH[1]}"
-                                    addr=$(echo "$addr" | cut -d'/' -f1)
+                                    addr=$(echo "$addr" | cut -d'/' -f1)  # Remove /64 if present
+                                    existing_addresses+=("$addr")
+                                    if [[ -z "$existing_subnet" ]]; then
+                                        existing_subnet=$(echo "$addr" | sed 's/::[0-9a-fA-F]*$//')::/64
+                                    fi
+                                elif [[ "$addr_line" =~ ^[[:space:]]*up[[:space:]]+ip[[:space:]]+-6[[:space:]]+addr[[:space:]]+add[[:space:]]+([0-9a-fA-F:]+) ]]; then
+                                    local addr="${BASH_REMATCH[1]}"
+                                    addr=$(echo "$addr" | cut -d'/' -f1)  # Remove /64 if present
                                     existing_addresses+=("$addr")
                                     if [[ -z "$existing_subnet" ]]; then
                                         existing_subnet=$(echo "$addr" | sed 's/::[0-9a-fA-F]*$//')::/64
@@ -1939,11 +1946,19 @@ main() {
                         additional_addresses+=("${new_addresses[@]}")  # Add new ones
                         
                         for addr in "${additional_addresses[@]}"; do
+                            # Ensure address has /64 prefix (but don't double-add)
+                            if [[ ! "$addr" =~ */[0-9]+$ ]]; then
+                                addr="$addr/$(echo "$SELECTED_SUBNET" | cut -d'/' -f2)"
+                            fi
                             echo "  up ip -6 addr add $addr dev \$IFACE" >> "$temp_file"
                         done
                         
                         # Add corresponding down commands
                         for addr in "${additional_addresses[@]}"; do
+                            # Ensure address has /64 prefix (but don't double-add)
+                            if [[ ! "$addr" =~ */[0-9]+$ ]]; then
+                                addr="$addr/$(echo "$SELECTED_SUBNET" | cut -d'/' -f2)"
+                            fi
                             echo "  down ip -6 addr del $addr dev \$IFACE" >> "$temp_file"
                         done
                         
@@ -1985,11 +2000,19 @@ main() {
                     additional_addresses+=("${new_addresses[@]}")  # Add new ones
                     
                     for addr in "${additional_addresses[@]}"; do
+                        # Ensure address has /64 prefix
+                        if [[ ! "$addr" =~ */[0-9]+$ ]]; then
+                            addr="$addr/$(echo "$SELECTED_SUBNET" | cut -d'/' -f2)"
+                        fi
                         echo "  up ip -6 addr add $addr dev \$IFACE" >> "$temp_file"
                     done
                     
                     # Add corresponding down commands
                     for addr in "${additional_addresses[@]}"; do
+                        # Ensure address has /64 prefix
+                        if [[ ! "$addr" =~ */[0-9]+$ ]]; then
+                            addr="$addr/$(echo "$SELECTED_SUBNET" | cut -d'/' -f2)"
+                        fi
                         echo "  down ip -6 addr del $addr dev \$IFACE" >> "$temp_file"
                     done
                     
