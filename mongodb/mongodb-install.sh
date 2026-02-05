@@ -395,7 +395,7 @@ function add_ubuntu_mongodb_repo_enhanced() {
     
     # Import MongoDB GPG key
     echo -e "${CCYAN}Importing MongoDB GPG key...${CEND}" >> /tmp/mongodb-install.log
-    curl -fsSL "https://www.mongodb.org/static/pgp/server-${MONGO_VER}.asc" | gpg -o /usr/share/keyrings/mongodb-server-${MONGO_VER}.gpg >> /tmp/mongodb-install.log 2>&1
+    curl -fsSL "https://pgp.mongodb.com/server-${MONGO_VER}.asc" | gpg --dearmor -o /usr/share/keyrings/mongodb-server-${MONGO_VER}.gpg >> /tmp/mongodb-install.log 2>&1
     if [ $? -eq 0 ]; then
         echo -e "${CGREEN}✓ MongoDB GPG key imported${CEND}" >> /tmp/mongodb-install.log
     else
@@ -493,7 +493,7 @@ function add_debian_mongodb_repo_enhanced() {
     echo -e "${CCYAN}Importing MongoDB GPG key...${CEND}" >> /tmp/mongodb-install.log
     
     # Use a more reliable method for GPG key import
-    curl -fsSL "https://www.mongodb.org/static/pgp/server-${MONGO_VER}.asc" | gpg --dearmor -o /usr/share/keyrings/mongodb-server-${MONGO_VER}.gpg >> /tmp/mongodb-install.log 2>&1
+    curl -fsSL "https://pgp.mongodb.com/server-${MONGO_VER}.asc" | gpg --dearmor -o /usr/share/keyrings/mongodb-server-${MONGO_VER}.gpg >> /tmp/mongodb-install.log 2>&1
     
     if [ $? -eq 0 ]; then
         echo -e "${CGREEN}✓ MongoDB GPG key imported${CEND}" >> /tmp/mongodb-install.log
@@ -501,7 +501,7 @@ function add_debian_mongodb_repo_enhanced() {
         echo -e "${CRED}✗ Failed to import MongoDB GPG key${CEND}" >> /tmp/mongodb-install.log
         # Try alternative method
         echo -e "${CYAN}Trying alternative GPG key import method...${CEND}" >> /tmp/mongodb-install.log
-        curl -fsSL "https://www.mongodb.org/static/pgp/server-${MONGO_VER}.asc" > /tmp/mongodb-key.asc
+        curl -fsSL "https://pgp.mongodb.com/server-${MONGO_VER}.asc" > /tmp/mongodb-key.asc
         gpg --dearmor < /tmp/mongodb-key.asc > /usr/share/keyrings/mongodb-server-${MONGO_VER}.gpg 2>> /tmp/mongodb-install.log
         if [ $? -eq 0 ]; then
             echo -e "${CGREEN}✓ MongoDB GPG key imported (alternative method)${CEND}" >> /tmp/mongodb-install.log
@@ -588,7 +588,7 @@ name=MongoDB Repository
 baseurl=https://repo.mongodb.org/yum/redhat/\$releasever/mongodb-org/${MONGO_VER}/x86_64/
 gpgcheck=1
 enabled=1
-gpgkey=https://www.mongodb.org/static/pgp/server-${MONGO_VER}.asc
+gpgkey=https://pgp.mongodb.com/server-${MONGO_VER}.asc
 EOF
     
     if [ $? -eq 0 ]; then
@@ -636,7 +636,7 @@ name=MongoDB Repository
 baseurl=https://repo.mongodb.org/yum/fedora/\$releasever/mongodb-org/${MONGO_VER}/x86_64/
 gpgcheck=1
 enabled=1
-gpgkey=https://www.mongodb.org/static/pgp/server-${MONGO_VER}.asc
+gpgkey=https://pgp.mongodb.com/server-${MONGO_VER}.asc
 EOF
     
     if [ $? -eq 0 ]; then
