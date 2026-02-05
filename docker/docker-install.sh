@@ -120,82 +120,6 @@ function get_docker_compose_version() {
 }
 
 # Get appropriate versions
-echo -e "${CGREEN}Detecting available Docker versions for $os $os_ver...${CEND}"
-
-# Get available Docker versions from repository
-get_available_docker_versions() {
-    case "$os" in
-        "ubuntu"|"debian")
-            # Get available versions from apt cache
-            apt-cache policy docker-ce 2>/dev/null | grep -A 20 "Version table:" | tail -n +2 | awk '{print $1}' | head -5
-            ;;
-        "centos"|"rhel"|"rocky"|"almalinux"|"fedora")
-            # Get available versions from yum/dnf
-            if command -v dnf >/dev/null 2>&1; then
-                dnf list --showduplicates docker-ce 2>/dev/null | grep docker-ce | awk '{print $2}' | sort -V | tail -5
-            else
-                yum list --showduplicates docker-ce 2>/dev/null | grep docker-ce | awk '{print $2}' | sort -V | tail -5
-            fi
-            ;;
-        *)
-            echo "Unable to detect versions for $os"
-            ;;
-    esac
-}
-
-# Display available versions and let user choose
-select_docker_version() {
-    echo -e "${CCYAN}Available Docker versions:${CEND}"
-    echo ""
-    
-    # Get available versions
-    local available_versions=($(get_available_docker_versions))
-    
-    if [ ${#available_versions[@]} -eq 0 ]; then
-        echo -e "${CYAN}⚠ Could not detect available versions, using latest...${CEND}"
-        docker_version="latest"
-        return
-    fi
-    
-    # Display top 3 latest versions
-    echo "   1) ${available_versions[0]} (Latest)"
-    if [ ${#available_versions[@]} -gt 1 ]; then
-        echo "   2) ${available_versions[1]}"
-    fi
-    if [ ${#available_versions[@]} -gt 2 ]; then
-        echo "   3) ${available_versions[2]}"
-    fi
-    echo "   4) Install latest available version"
-    echo ""
-    
-    local choice=""
-    while [[ "$choice" != "1" && "$choice" != "2" && "$choice" != "3" && "$choice" != "4" ]]; do
-        read -p "Select Docker version [1-4]: " choice
-    done
-    
-    case "$choice" in
-        1)
-            docker_version="${available_versions[0]}"
-            echo -e "${CGREEN}Selected: $docker_version${CEND}"
-            ;;
-        2)
-            docker_version="${available_versions[1]}"
-            echo -e "${CGREEN}Selected: $docker_version${CEND}"
-            ;;
-        3)
-            docker_version="${available_versions[2]}"
-            echo -e "${CGREEN}Selected: $docker_version${CEND}"
-            ;;
-        4)
-            docker_version="latest"
-            echo -e "${CGREEN}Selected: Latest available version${CEND}"
-            ;;
-    esac
-}
-
-# Let user select Docker version
-select_docker_version
-
 docker_compose_version=$(get_docker_compose_version)
 
 # Architecture support
@@ -607,6 +531,92 @@ function setup_docker_repo() {
     fi
 }
 
+# Get available Docker versions from repository
+get_available_docker_versions() {
+    case "$os" in
+        "ubuntu"|"debian")
+            # Get available versions from apt cache
+            apt-cache policy docker-ce 2>/dev/null | \
+                grep -A 50 "Version table:" | \
+                grep -E "^\s+[0-9]" | \
+                awk '{print $1}' | \
+                sort -V | \
+                tail -5
+            ;;
+        "centos"|"rhel"|"rocky"|"almalinux"|"fedora")
+            # Get available versions from yum/dnf
+            if command -v dnf >/dev/null 2>&1; then
+                dnf list --showduplicates docker-ce 2>/dev/null | \
+                    grep docker-ce | \
+                    awk '{print $2}' | \
+                    sort -V | \
+                    tail -5
+            else
+                yum list --showduplicates docker-ce 2>/dev/null | \
+                    grep docker-ce | \
+                    awk '{print $2}' | \
+                    sort -V | \
+                    tail -5
+            fi
+            ;;
+        *)
+            echo "Unable to detect versions for $os"
+            return 1
+            ;;
+    esac
+}
+
+# Display available versions and let user choose
+select_docker_version() {
+    echo -e "${CGREEN}Detecting available Docker versions for $os $os_ver...${CEND}"
+    echo -e "${CCYAN}Available Docker versions:${CEND}"
+    echo ""
+    
+    # Get available versions
+    local available_versions=($(get_available_docker_versions))
+    
+    if [ ${#available_versions[@]} -eq 0 ] || [[ "${available_versions[0]}" == "Unable" ]]; then
+        echo -e "${CYAN}⚠ Could not detect available versions, using latest...${CEND}"
+        docker_version="latest"
+        return
+    fi
+    
+    # Display top 3 latest versions
+    echo "   1) ${available_versions[0]} (Latest)"
+    if [ ${#available_versions[@]} -gt 1 ]; then
+        echo "   2) ${available_versions[1]}"
+    fi
+    if [ ${#available_versions[@]} -gt 2 ]; then
+        echo "   3) ${available_versions[2]}"
+    fi
+    echo "   4) Install latest available version"
+    echo ""
+    
+    local choice=""
+    while [[ "$choice" != "1" && "$choice" != "2" && "$choice" != "3" && "$choice" != "4" ]]; do
+        read -p "Select Docker version [1-4]: " choice
+    done
+    
+    case "$choice" in
+        1)
+            docker_version="${available_versions[0]}"
+            echo -e "${CGREEN}Selected: $docker_version${CEND}"
+            ;;
+        2)
+            docker_version="${available_versions[1]}"
+            echo -e "${CGREEN}Selected: $docker_version${CEND}"
+            ;;
+        3)
+            docker_version="${available_versions[2]}"
+            echo -e "${CGREEN}Selected: $docker_version${CEND}"
+            ;;
+        4)
+            docker_version="latest"
+            echo -e "${CGREEN}Selected: Latest available version${CEND}"
+            ;;
+    esac
+}
+
 function install_docker() {
     echo -e "${CGREEN}Installing Docker Engine...${CEND}"
     
@@ -731,7 +741,7 @@ function configure_docker_security() {
     # Create Docker daemon configuration directory
     mkdir -p /etc/docker
     
-    # Create secure Docker daemon configuration
+    # Create secure Docker daemon configuration (simplified for compatibility)
     cat > /etc/docker/daemon.json << 'EOF'
 {
   "log-driver": "json-file",
@@ -740,9 +750,6 @@ function configure_docker_security() {
     "max-file": "3"
   },
   "storage-driver": "overlay2",
-  "storage-opts": [
-    "overlay2.override_kernel_check=true"
-  ],
   "default-ulimits": {
     "nofile": {
       "Name": "nofile",
@@ -752,34 +759,11 @@ function configure_docker_security() {
   },
   "userland-proxy": false,
   "experimental": false,
-  "metrics-addr": "127.0.0.1:9323",
   "exec-opts": ["native.cgroupdriver=systemd"],
-  "bridge": "docker0",
-  "bip": "172.17.0.1/16",
-  "fixed-cidr": "172.17.0.0/16",
-  "mtu": 1500,
-  "ip-forward": true,
   "iptables": true,
   "live-restore": true,
-  "userns-remap": "default",
-  "no-new-privileges": true,
-  "seccomp-profile": "/etc/docker/seccomp.json",
-  "default-runtime": "runc",
-  "runtimes": {
-    "runc": {
-      "path": "runc",
-      "runtimeArgs": [
-        "--seccomp",
-        "/etc/docker/seccomp.json"
-      ]
-    }
-  },
-  "registry-mirrors": [],
-  "insecure-registries": [],
-  "disable-legacy-registry": true,
   "max-concurrent-downloads": 3,
   "max-concurrent-uploads": 3,
-  "max-download-attempts": 5,
   "data-root": "/var/lib/docker",
   "exec-root": "/var/run/docker",
   "hosts": [
@@ -788,22 +772,71 @@ function configure_docker_security() {
 }
 EOF
     
-    # Create seccomp profile
-    mkdir -p /etc/docker
-    curl -fsSL https://raw.githubusercontent.com/moby/moby/master/profiles/seccomp/default.json -o /etc/docker/seccomp.json >> /tmp/docker-install.log 2>&1
+    # Try to create seccomp profile (optional, don't fail if it fails)
+    echo -e "${CCYAN}Setting up seccomp profile (optional)...${CEND}"
+    if curl -fsSL https://raw.githubusercontent.com/moby/moby/master/profiles/seccomp/default.json -o /etc/docker/seccomp.json >> /tmp/docker-install.log 2>&1; then
+        echo -e "${CGREEN}✓ Seccomp profile downloaded${CEND}"
+        # Add seccomp to daemon.json if downloaded successfully
+        sed -i '/}/i\
+  "seccomp-profile": "/etc/docker/seccomp.json",' /etc/docker/daemon.json
+    else
+        echo -e "${CYAN}⚠ Could not download seccomp profile, continuing without it${CEND}"
+    fi
     
-    # Create Docker user namespace
-    echo "dockremap:165536:65536" >> /etc/subuid
-    echo "dockremap:165536:65536" >> /etc/subgid
+    # Try to create Docker user namespace (optional, don't fail if it fails)
+    echo -e "${CCYAN}Setting up user namespace remapping (optional)...${CEND}"
+    if echo "dockremap:165536:65536" >> /etc/subuid 2>/dev/null && echo "dockremap:165536:65536" >> /etc/subgid 2>/dev/null; then
+        echo -e "${CGREEN}✓ User namespace remapping configured${CEND}"
+        # Add userns-remap to daemon.json if successful
+        sed -i '/}/i\
+  "userns-remap": "default",' /etc/docker/daemon.json
+    else
+        echo -e "${CYAN}⚠ Could not configure user namespace, continuing without it${CEND}"
+    fi
+    
+    # Validate JSON syntax
+    if ! python3 -m json.tool /etc/docker/daemon.json >/dev/null 2>&1; then
+        echo -e "${CRED}❌ Invalid JSON in daemon.json, using minimal config${CEND}"
+        # Fallback to minimal configuration
+        cat > /etc/docker/daemon.json << 'EOF'
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  },
+  "storage-driver": "overlay2"
+}
+EOF
+    fi
     
     # Restart Docker to apply configuration
+    echo -e "${CCYAN}Restarting Docker to apply configuration...${CEND}"
     systemctl restart docker >> /tmp/docker-install.log 2>&1
     
-    if [ $? -eq 0 ]; then
-        echo -e "${CGREEN}Docker security configuration applied${CEND}"
+    # Wait a moment for Docker to restart
+    sleep 3
+    
+    # Check if Docker is running properly
+    if systemctl is-active --quiet docker && docker info >/dev/null 2>&1; then
+        echo -e "${CGREEN}✓ Docker security configuration applied successfully${CEND}"
     else
-        echo -e "${CRED}Failed to apply Docker security configuration${CEND}"
-        exit 1
+        echo -e "${CRED}❌ Docker failed to restart after configuration${CEND}"
+        echo -e "${CYAN}Attempting to restore Docker functionality...${CEND}"
+        
+        # Remove the config file and restart with defaults
+        mv /etc/docker/daemon.json /etc/docker/daemon.json.bak 2>/dev/null
+        systemctl restart docker >> /tmp/docker-install.log 2>&1
+        sleep 3
+        
+        if systemctl is-active --quiet docker; then
+            echo -e "${CYAN}✓ Docker restored with default configuration${CEND}"
+            echo -e "${CYAN}⚠ Security configuration was not applied${CEND}"
+        else
+            echo -e "${CRED}❌ Docker is not running. Please check the logs:${CEND}"
+            echo -e "${CYAN}tail -f /tmp/docker-install.log${CEND}"
+            exit 1
+        fi
     fi
 }
 
@@ -1230,6 +1263,10 @@ function verify_installation() {
 # Main installation process
 install_deps
 setup_docker_repo
+
+# Let user select Docker version after repository is set up
+select_docker_version
+
 install_docker
 install_docker_compose_standalone
 configure_docker_security
