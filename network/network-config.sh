@@ -631,16 +631,24 @@ create_vlan_interface() {
     local vlan_added=false
     
     while IFS= read -r line; do
-        echo "$line" >> "$temp_file"
-        
-        # Add VLAN configuration after the parent interface
-        if [[ "$line" =~ ^[[:space:]]*iface[[:space:]]+${parent_interface}[[:space:]]+.* ]] && [[ "$vlan_added" == false ]]; then
+        if [[ "$line" =~ ^[[:space:]]*iface[[:space:]]+${parent_interface}[[:space:]]+inet[[:space:]]+static ]] && [[ "$vlan_added" == false ]]; then
+            # Found the parent interface, copy it and its config
+            echo "$line" >> "$temp_file"
+            
+            # Copy all parent interface configuration lines
+            while IFS= read -r parent_line && [[ ! "$parent_line" =~ ^[[:space:]]*iface[[:space:]]+ ]] && [[ ! "$parent_line" =~ ^[[:space:]]*auto[[:space:]]+ ]] && [[ ! "$parent_line" =~ ^[[:space:]]*source[[:space:]]+ ]]; do
+                echo "$parent_line" >> "$temp_file"
+            done
+            
+            # Add VLAN configuration after parent interface
             echo "" >> "$temp_file"
             echo "auto $vlan_interface" >> "$temp_file"
             
             if [[ "$ip_type" == "1" ]] || [[ "$ip_type" == "3" ]]; then
                 echo "iface $vlan_interface inet static" >> "$temp_file"
-                get_vlan_ipv4_config >> "$temp_file"
+                # Call the function and capture its output
+                local vlan_ipv4_config=$(get_vlan_ipv4_config)
+                echo "$vlan_ipv4_config" >> "$temp_file"
             fi
             
             if [[ "$ip_type" == "2" ]] || [[ "$ip_type" == "3" ]]; then
@@ -648,10 +656,26 @@ create_vlan_interface() {
                     echo "" >> "$temp_file"
                 fi
                 echo "iface $vlan_interface inet6 static" >> "$temp_file"
-                get_vlan_ipv6_config >> "$temp_file"
+                # Call the function and capture its output
+                local vlan_ipv6_config=$(get_vlan_ipv6_config)
+                echo "$vlan_ipv6_config" >> "$temp_file"
             fi
             
+            echo "" >> "$temp_file"
             vlan_added=true
+            
+            # Put back the line that broke the loop and continue copying
+            if [[ -n "$parent_line" ]]; then
+                echo "$parent_line" >> "$temp_file"
+            fi
+            
+            # Copy the rest of the file
+            while IFS= read -r rest_line; do
+                echo "$rest_line" >> "$temp_file"
+            done
+            break
+        else
+            echo "$line" >> "$temp_file"
         fi
     done < "/etc/network/interfaces"
     
@@ -662,7 +686,9 @@ create_vlan_interface() {
         
         if [[ "$ip_type" == "1" ]] || [[ "$ip_type" == "3" ]]; then
             echo "iface $vlan_interface inet static" >> "$temp_file"
-            get_vlan_ipv4_config >> "$temp_file"
+            # Call the function and capture its output
+            local vlan_ipv4_config=$(get_vlan_ipv4_config)
+            echo "$vlan_ipv4_config" >> "$temp_file"
         fi
         
         if [[ "$ip_type" == "2" ]] || [[ "$ip_type" == "3" ]]; then
@@ -670,7 +696,9 @@ create_vlan_interface() {
                 echo "" >> "$temp_file"
             fi
             echo "iface $vlan_interface inet6 static" >> "$temp_file"
-            get_vlan_ipv6_config >> "$temp_file"
+            # Call the function and capture its output
+            local vlan_ipv6_config=$(get_vlan_ipv6_config)
+            echo "$vlan_ipv6_config" >> "$temp_file"
         fi
     fi
     
@@ -704,19 +732,19 @@ create_vlan_interface() {
 
 # Get IPv4 configuration for VLAN
 get_vlan_ipv4_config() {
-    echo -e "${CYAN}IPv4 Configuration for VLAN:${NC}"
+    echo -e "${CYAN}IPv4 Configuration for VLAN:${NC}" >&2
     
     # Suggest private IP ranges
-    echo ""
-    echo "Available private IP ranges for VLAN:"
-    echo "  1. 10.30.74.0/24 (suggested)"
-    echo "  2. 192.168.100.0/24"
-    echo "  3. 172.16.100.0/24"
-    echo "  4. Custom IP range"
-    echo ""
+    echo "" >&2
+    echo "Available private IP ranges for VLAN:" >&2
+    echo "  1. 10.30.74.0/24 (suggested)" >&2
+    echo "  2. 192.168.100.0/24" >&2
+    echo "  3. 172.16.100.0/24" >&2
+    echo "  4. Custom IP range" >&2
+    echo "" >&2
     
     while true; do
-        read -p "Enter your choice (1-4): " range_choice
+        read -p "Enter your choice (1-4): " range_choice < /dev/tty
         case "$range_choice" in
             1)
                 vlan_ip="10.30.74.1"
@@ -735,26 +763,26 @@ get_vlan_ipv4_config() {
                 ;;
             4)
                 while true; do
-                    read -p "Enter VLAN IP address: " vlan_ip
+                    read -p "Enter VLAN IP address: " vlan_ip < /dev/tty
                     if [[ "$vlan_ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
                         break
                     else
-                        echo -e "${RED}Invalid IP format${NC}"
+                        echo -e "${RED}Invalid IP format${NC}" >&2
                     fi
                 done
-                read -p "Enter netmask (default: 255.255.255.0): " netmask
+                read -p "Enter netmask (default: 255.255.255.0): " netmask < /dev/tty
                 if [[ -z "$netmask" ]]; then
                     netmask="255.255.255.0"
                 fi
                 break
                 ;;
             *)
-                echo -e "${RED}Invalid choice${NC}"
+                echo -e "${RED}Invalid choice${NC}" >&2
                 ;;
         esac
     done
     
-    read -p "Enter gateway (optional, press Enter to skip): " gateway
+    read -p "Enter gateway (optional, press Enter to skip): " gateway < /dev/tty
     
     # Suggest MTU based on existing VLANs
     local suggested_mtu="1500"
@@ -762,12 +790,12 @@ get_vlan_ipv4_config() {
         suggested_mtu="1400"
     fi
     
-    read -p "MTU for VLAN (default $suggested_mtu, Press Enter for default or enter new value): " mtu
+    read -p "MTU for VLAN (default $suggested_mtu, Press Enter for default or enter new value): " mtu < /dev/tty
     if [[ -z "$mtu" ]]; then
         mtu="$suggested_mtu"
     fi
     
-    # Generate configuration
+    # Output the configuration (this goes to stdout and gets captured)
     echo "  address $vlan_ip"
     echo "  netmask $netmask"
     if [[ -n "$gateway" ]]; then
@@ -779,19 +807,19 @@ get_vlan_ipv4_config() {
 
 # Get IPv6 configuration for VLAN
 get_vlan_ipv6_config() {
-    echo -e "${CYAN}IPv6 Configuration for VLAN:${NC}"
+    echo -e "${CYAN}IPv6 Configuration for VLAN:${NC}" >&2
     
     # Suggest private IPv6 ranges
-    echo ""
-    echo "Available private IPv6 ranges for VLAN:"
-    echo "  1. fd00:30:74::1/64 (suggested)"
-    echo "  2. fd00:100::1/64"
-    echo "  3. fd00:16:100::1/64"
-    echo "  4. Custom IPv6"
-    echo ""
+    echo "" >&2
+    echo "Available private IPv6 ranges for VLAN:" >&2
+    echo "  1. fd00:30:74::1/64 (suggested)" >&2
+    echo "  2. fd00:100::1/64" >&2
+    echo "  3. fd00:16:100::1/64" >&2
+    echo "  4. Custom IPv6" >&2
+    echo "" >&2
     
     while true; do
-        read -p "Enter your choice (1-4): " ipv6_choice
+        read -p "Enter your choice (1-4): " ipv6_choice < /dev/tty
         case "$ipv6_choice" in
             1)
                 ipv6_addr="fd00:30:74::1"
@@ -810,28 +838,28 @@ get_vlan_ipv6_config() {
                 ;;
             4)
                 while true; do
-                    read -p "Enter IPv6 address: " ipv6_addr
+                    read -p "Enter IPv6 address: " ipv6_addr < /dev/tty
                     if [[ "$ipv6_addr" =~ ^[0-9a-fA-F:]+ ]] && [[ "$ipv6_addr" == *":"*":"* ]]; then
                         break
                     else
-                        echo -e "${RED}Invalid IPv6 format${NC}"
+                        echo -e "${RED}Invalid IPv6 format${NC}" >&2
                     fi
                 done
-                read -p "Enter prefix (default: 64): " prefix
+                read -p "Enter prefix (default: 64): " prefix < /dev/tty
                 if [[ -z "$prefix" ]]; then
                     prefix="64"
                 fi
                 break
                 ;;
             *)
-                echo -e "${RED}Invalid choice${NC}"
+                echo -e "${RED}Invalid choice${NC}" >&2
                 ;;
         esac
     done
     
-    read -p "Enter IPv6 gateway (optional, press Enter to skip): " ipv6_gateway
+    read -p "Enter IPv6 gateway (optional, press Enter to skip): " ipv6_gateway < /dev/tty
     
-    # Generate configuration
+    # Output the configuration (this goes to stdout and gets captured)
     echo "  address $ipv6_addr"
     echo "  netmask $prefix"
     if [[ -n "$ipv6_gateway" ]]; then
