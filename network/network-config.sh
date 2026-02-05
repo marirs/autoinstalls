@@ -1820,9 +1820,10 @@ main() {
                                     if [[ -z "$existing_subnet" ]]; then
                                         existing_subnet=$(echo "$addr" | sed 's/::[0-9a-fA-F]*$//')::/64
                                     fi
-                                elif [[ "$addr_line" =~ ^[[:space:]]*up[[:space:]]+ip[[:space:]]+-6[[:space:]]+addr[[:space:]]+add[[:space:]]+([0-9a-fA-F:]+)(/[0-9]+)? ]]; then
+                                elif [[ "$addr_line" =~ ^[[:space:]]*up[[:space:]]+ip[[:space:]]+-6[[:space:]]+addr[[:space:]]+add[[:space:]]+([0-9a-fA-F:]+) ]]; then
                                     local addr="${BASH_REMATCH[1]}"
-                                    # addr should already be clean from regex
+                                    # Remove any CIDR suffix
+                                    addr=$(echo "$addr" | cut -d'/' -f1)
                                     existing_addresses+=("$addr")
                                     if [[ -z "$existing_subnet" ]]; then
                                         existing_subnet=$(echo "$addr" | sed 's/::[0-9a-fA-F]*$//')::/64
@@ -1928,11 +1929,11 @@ main() {
                         # Skip old IPv6 section, write new one
                         echo "iface $SELECTED_INTERFACE inet6 static" >> "$temp_file"
                         
-                        # Write first address with netmask and gateway
+                        # Write first address with netmask and gateway (no /64 since netmask is defined)
                         if [[ ${#existing_addresses[@]} -gt 0 ]]; then
-                            echo "  address ${existing_addresses[0]}/$(echo "$SELECTED_SUBNET" | cut -d'/' -f2)" >> "$temp_file"
+                            echo "  address ${existing_addresses[0]}" >> "$temp_file"
                         else
-                            echo "  address ${base_address}::2/$(echo "$SELECTED_SUBNET" | cut -d'/' -f2)" >> "$temp_file"
+                            echo "  address ${base_address}::2" >> "$temp_file"
                         fi
                         
                         echo "  netmask $(echo "$SELECTED_SUBNET" | cut -d'/' -f2)" >> "$temp_file"
@@ -1947,20 +1948,16 @@ main() {
                         additional_addresses+=("${new_addresses[@]}")  # Add new ones
                         
                         for addr in "${additional_addresses[@]}"; do
-                            # Ensure address has /64 prefix (but don't double-add)
-                            if [[ ! "$addr" =~ */[0-9]+$ ]]; then
-                                addr="$addr/$(echo "$SELECTED_SUBNET" | cut -d'/' -f2)"
-                            fi
-                            echo "  up ip -6 addr add $addr dev \$IFACE" >> "$temp_file"
+                            # Remove any existing /64 and add clean one
+                            local clean_addr=$(echo "$addr" | sed 's|/.*||')
+                            echo "  up ip -6 addr add ${clean_addr}/$(echo "$SELECTED_SUBNET" | cut -d'/' -f2) dev \$IFACE" >> "$temp_file"
                         done
                         
                         # Add corresponding down commands
                         for addr in "${additional_addresses[@]}"; do
-                            # Ensure address has /64 prefix (but don't double-add)
-                            if [[ ! "$addr" =~ */[0-9]+$ ]]; then
-                                addr="$addr/$(echo "$SELECTED_SUBNET" | cut -d'/' -f2)"
-                            fi
-                            echo "  down ip -6 addr del $addr dev \$IFACE" >> "$temp_file"
+                            # Remove any existing /64 and add clean one
+                            local clean_addr=$(echo "$addr" | sed 's|/.*||')
+                            echo "  down ip -6 addr del ${clean_addr}/$(echo "$SELECTED_SUBNET" | cut -d'/' -f2) dev \$IFACE" >> "$temp_file"
                         done
                         
                         echo "" >> "$temp_file"
@@ -1982,11 +1979,11 @@ main() {
                     echo "" >> "$temp_file"
                     echo "iface $SELECTED_INTERFACE inet6 static" >> "$temp_file"
                     
-                    # Write first address with netmask and gateway
+                    # Write first address with netmask and gateway (no /64 since netmask is defined)
                     if [[ ${#existing_addresses[@]} -gt 0 ]]; then
-                        echo "  address ${existing_addresses[0]}/$(echo "$SELECTED_SUBNET" | cut -d'/' -f2)" >> "$temp_file"
+                        echo "  address ${existing_addresses[0]}" >> "$temp_file"
                     else
-                        echo "  address ${base_address}::2/$(echo "$SELECTED_SUBNET" | cut -d'/' -f2)" >> "$temp_file"
+                        echo "  address ${base_address}::2" >> "$temp_file"
                     fi
                     
                     echo "  netmask $(echo "$SELECTED_SUBNET" | cut -d'/' -f2)" >> "$temp_file"
@@ -2001,20 +1998,16 @@ main() {
                     additional_addresses+=("${new_addresses[@]}")  # Add new ones
                     
                     for addr in "${additional_addresses[@]}"; do
-                        # Ensure address has /64 prefix
-                        if [[ ! "$addr" =~ */[0-9]+$ ]]; then
-                            addr="$addr/$(echo "$SELECTED_SUBNET" | cut -d'/' -f2)"
-                        fi
-                        echo "  up ip -6 addr add $addr dev \$IFACE" >> "$temp_file"
+                        # Remove any existing /64 and add clean one
+                        local clean_addr=$(echo "$addr" | sed 's|/.*||')
+                        echo "  up ip -6 addr add ${clean_addr}/$(echo "$SELECTED_SUBNET" | cut -d'/' -f2) dev \$IFACE" >> "$temp_file"
                     done
                     
                     # Add corresponding down commands
                     for addr in "${additional_addresses[@]}"; do
-                        # Ensure address has /64 prefix
-                        if [[ ! "$addr" =~ */[0-9]+$ ]]; then
-                            addr="$addr/$(echo "$SELECTED_SUBNET" | cut -d'/' -f2)"
-                        fi
-                        echo "  down ip -6 addr del $addr dev \$IFACE" >> "$temp_file"
+                        # Remove any existing /64 and add clean one
+                        local clean_addr=$(echo "$addr" | sed 's|/.*||')
+                        echo "  down ip -6 addr del ${clean_addr}/$(echo "$SELECTED_SUBNET" | cut -d'/' -f2) dev \$IFACE" >> "$temp_file"
                     done
                     
                     echo "" >> "$temp_file"
