@@ -1923,10 +1923,10 @@ main() {
                 local temp_file=$(mktemp)
                 local ipv6_section_written=false
                 
+                # Copy entire file, only replace IPv6 section for target interface
                 while IFS= read -r line; do
-                    # Copy all lines except old IPv6 section for target interface
                     if [[ "$line" =~ ^[[:space:]]*iface[[:space:]]+${SELECTED_INTERFACE}[[:space:]]+inet6[[:space:]]+static ]]; then
-                        # Skip old IPv6 section, write new one
+                        # Found target IPv6 section, replace it
                         echo "iface $SELECTED_INTERFACE inet6 static" >> "$temp_file"
                         
                         # Write first address with netmask and gateway (no /64 since netmask is defined)
@@ -1961,14 +1961,26 @@ main() {
                         done
                         
                         echo "" >> "$temp_file"
-                        
                         ipv6_section_written=true
                         
-                        # Skip all lines until next interface
-                        while IFS= read -r skip_line && [[ ! "$skip_line" =~ ^[[:space:]]*iface[[:space:]]+ ]]; do
-                            continue
+                        # Skip old IPv6 section lines until next interface or auto line
+                        while IFS= read -r skip_line; do
+                            # Stop skipping when we hit a new section
+                            if [[ "$skip_line" =~ ^[[:space:]]*iface[[:space:]]+ ]] || [[ "$skip_line" =~ ^[[:space:]]*auto[[:space:]]+ ]] || [[ "$skip_line" =~ ^[[:space:]]*source[[:space:]]+ ]]; then
+                                break
+                            fi
                         done
-                        echo "$skip_line" >> "$temp_file"
+                        
+                        # Put back the line that broke the loop (it's the next section)
+                        if [[ -n "$skip_line" ]]; then
+                            echo "$skip_line" >> "$temp_file"
+                        fi
+                        
+                        # Continue copying the rest of the file exactly as it is
+                        while IFS= read -r rest_line; do
+                            echo "$rest_line" >> "$temp_file"
+                        done
+                        break
                     else
                         echo "$line" >> "$temp_file"
                     fi
@@ -2016,10 +2028,17 @@ main() {
                 # Replace file
                 mv "$temp_file" /etc/network/interfaces
                 
-                # Restart interface
-                echo -e "${CYAN}Restarting $SELECTED_INTERFACE...${NC}"
+                # Restart networking service to ensure all interfaces come up correctly
+                echo -e "${CYAN}Restarting networking service...${NC}"
+                if service networking restart 2>/dev/null; then
+                    echo -e "${GREEN}✓ Networking service restarted successfully${NC}"
+                elif systemctl restart networking 2>/dev/null; then
+                    echo -e "${GREEN}✓ Networking service restarted successfully${NC}"
+                else
+                    echo -e "${YELLOW}⚠ Could not restart networking service, trying manual interface restart${NC}"
+                    ifdown "$SELECTED_INTERFACE" 2>/dev/null && ifup "$SELECTED_INTERFACE"
+                fi
                 
-                # Try to restart interface with IPv4 conflict handling
                 if ifdown "$SELECTED_INTERFACE" 2>/dev/null; then
                     sleep 2
                     if ifup "$SELECTED_INTERFACE" 2>/dev/null; then
