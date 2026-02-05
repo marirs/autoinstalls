@@ -1019,6 +1019,9 @@ function start_docker_services() {
         echo -e "${CGREEN}Docker service is running${CEND}"
     else
         echo -e "${CRED}Docker service failed to start${CEND}"
+        echo -e "${CYAN}🔥 Docker needs some warm-up time after installation...${CEND}"
+        echo -e "${CYAN}If it fails, try again in some more time as it needs warm up time 😂${CEND}"
+        echo -e "${CYAN}You can check status with: systemctl status docker${CEND}"
         exit 1
     fi
     
