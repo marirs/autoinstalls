@@ -1814,14 +1814,15 @@ main() {
                             while IFS= read -r addr_line; do
                                 if [[ "$addr_line" =~ ^[[:space:]]*address[[:space:]]+([0-9a-fA-F:]+) ]]; then
                                     local addr="${BASH_REMATCH[1]}"
-                                    addr=$(echo "$addr" | cut -d'/' -f1)  # Remove /64 if present
+                                    # Remove any CIDR suffix
+                                    addr=$(echo "$addr" | cut -d'/' -f1)
                                     existing_addresses+=("$addr")
                                     if [[ -z "$existing_subnet" ]]; then
                                         existing_subnet=$(echo "$addr" | sed 's/::[0-9a-fA-F]*$//')::/64
                                     fi
-                                elif [[ "$addr_line" =~ ^[[:space:]]*up[[:space:]]+ip[[:space:]]+-6[[:space:]]+addr[[:space:]]+add[[:space:]]+([0-9a-fA-F:]+) ]]; then
+                                elif [[ "$addr_line" =~ ^[[:space:]]*up[[:space:]]+ip[[:space:]]+-6[[:space:]]+addr[[:space:]]+add[[:space:]]+([0-9a-fA-F:]+)(/[0-9]+)? ]]; then
                                     local addr="${BASH_REMATCH[1]}"
-                                    addr=$(echo "$addr" | cut -d'/' -f1)  # Remove /64 if present
+                                    # addr should already be clean from regex
                                     existing_addresses+=("$addr")
                                     if [[ -z "$existing_subnet" ]]; then
                                         existing_subnet=$(echo "$addr" | sed 's/::[0-9a-fA-F]*$//')::/64
