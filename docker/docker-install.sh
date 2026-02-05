@@ -496,12 +496,12 @@ function setup_docker_repo() {
     
     case "$os" in
         "ubuntu"|"debian")
-            # Add Docker's official GPG key
+            # Add Docker's official GPG key (overwrite if exists)
             install -m 0755 -d /etc/apt/keyrings >> /tmp/docker-install.log 2>&1
             curl -fsSL https://download.docker.com/linux/$os/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg >> /tmp/docker-install.log 2>&1
             chmod a+r /etc/apt/keyrings/docker.gpg >> /tmp/docker-install.log 2>&1
             
-            # Add the repository to Apt sources
+            # Add the repository to Apt sources (overwrite if exists)
             echo \
                 "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$os \
                 $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
@@ -510,11 +510,11 @@ function setup_docker_repo() {
             apt-get update >> /tmp/docker-install.log 2>&1
             ;;
         "centos"|"rhel"|"rocky"|"almalinux")
-            # Add Docker repository for RHEL-based systems
+            # Add Docker repository for RHEL-based systems (overwrite if exists)
             yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo >> /tmp/docker-install.log 2>&1
             ;;
         "fedora")
-            # Add Docker repository for Fedora
+            # Add Docker repository for Fedora (overwrite if exists)
             dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo >> /tmp/docker-install.log 2>&1
             ;;
         *)
@@ -570,23 +570,11 @@ get_available_docker_versions() {
 # Display available versions and let user choose
 select_docker_version() {
     echo -e "${CGREEN}Detecting available Docker versions for $os $os_ver...${CEND}"
-    
-    # Debug: Show what apt-cache policy returns
-    echo -e "${CCYAN}Debug: Checking apt-cache policy output...${CEND}"
-    if [[ "$os" == "ubuntu" || "$os" == "debian" ]]; then
-        echo -e "${CCYAN}Sample apt-cache policy docker-ce output:${CEND}"
-        apt-cache policy docker-ce 2>/dev/null | head -20
-        echo ""
-    fi
-    
     echo -e "${CCYAN}Available Docker versions:${CEND}"
     echo ""
     
     # Get available versions
     local available_versions=($(get_available_docker_versions))
-    
-    echo -e "${CCYAN}Debug: Found ${#available_versions[@]} versions: ${available_versions[*]}${CEND}"
-    echo ""
     
     if [ ${#available_versions[@]} -eq 0 ] || [[ "${available_versions[0]}" == "Unable" ]] || [[ "${available_versions[0]}" == "" ]]; then
         echo -e "${CYAN}⚠ Could not detect available versions, using latest...${CEND}"
