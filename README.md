@@ -2,7 +2,7 @@
 ![GitHub](https://img.shields.io/github/license/marirs/autoinstalls?label=Apache-2.0)
 ![https://img.shields.io/badge/shell-bash-blue](https://img.shields.io/badge/shell-bash-blue)
 ![https://img.shields.io/badge/platform-ubuntu%2018.04%2C%2020.04%2C%2022.04%2C%2024.04%20%7C%20Debian%209.x%2C%2010.x%2C%2011.x%2C%2012.x%2C%2013.x%20%7C%20macOS%20%7C%20Windows-orange](https://img.shields.io/badge/platform-ubuntu%2018.04%2C%2020.04%2C%2022.04%2C%2024.04%20%7C%20Debian%209.x%2C%2010.x%2C%2011.x%2C%2012.x%2C%2013.x%20%7C%20macOS%20%7C%20Windows-orange)
-![https://img.shields.io/badge/components-17-green](https://img.shields.io/badge/components-17-green)
+![https://img.shields.io/badge/components-18-green](https://img.shields.io/badge/components-18-green)
 ![https://img.shields.io/badge/cross%20compilation-enabled-purple](https://img.shields.io/badge/cross%20compilation-enabled-purple)
 ![https://img.shields.io/badge/ai%20ml-ready-blue](https://img.shields.io/badge/ai%20ml-ready-blue)
 ![https://img.shields.io/badge/security-hardened-red](https://img.shields.io/badge/security-hardened-red)
@@ -78,6 +78,135 @@ Using yum package manager
 Found cmake3 for build system
 ✓ Critical dependencies are available
 ```
+
+---
+
+### 🌐 Network Configuration Tool
+**Intelligent IPv6/IPv4 network configuration with bulk address management and capacity analysis**
+![https://img.shields.io/badge/platform-ubuntu%2018.04%2C%2020.04%2C%2022.04%2C%2024.04%20%7C%20Debian%209.x%2C%2010.x%2C%2011.x%2C%2012.x%2C%2013.x-orange](https://img.shields.io/badge/platform-ubuntu%2018.04%2C%2020.04%2C%2022.04%2C%2024.04%20%7C%20Debian%209.x%2C%2010.x%2C%2011.x%2C%2012.x%2C%2013.x-orange)
+![https://img.shields.io/badge/ipv6%20%7C%20ipv4-dual%20stack-blue](https://img.shields.io/badge/ipv6%20%7C%20ipv4-dual%20stack-blue)
+![https://img.shields.io/badge/bulk%20management-enabled-green](https://img.shields.io/badge/bulk%20management-enabled-green)
+![https://img.shields.io/badge/capacity%20analysis-intelligent-purple](https://img.shields.io/badge/capacity%20analysis-intelligent-purple)
+
+**Features:**
+- ✅ **Intelligent Configuration Analysis** - Reads existing `/etc/network/interfaces` and suggests actions
+- ✅ **Bulk IPv6 Management** - Add hundreds/thousands of IPv6 addresses in one operation
+- ✅ **Subnet Capacity Analysis** - Calculate and display maximum available IPs based on CIDR
+- ✅ **Multi-Protocol Support** - Handle both IPv4 and IPv6 configurations
+- ✅ **Smart Defaults** - Context-aware suggestions based on subnet size
+- ✅ **Automatic Backups** - Timestamped backups with easy restoration
+- ✅ **Multi-Distro Support** - Debian interfaces, Netplan, NetworkManager, ifcfg
+- ✅ **Performance Warnings** - Alerts for large address additions
+
+**Bulk IPv6 Features:**
+- 🔄 **Range Addition** - Add addresses like `::1` to `::100` automatically
+- 🔄 **Custom Lists** - Add specific IPv6 addresses of your choice
+- 🔄 **Capacity Display** - Shows available IPs in human-readable format (18 quintillion for /64)
+- 🔄 **Smart Validation** - Verifies all addresses were assigned successfully
+- 🔄 **Connectivity Testing** - Tests IPv6 connectivity after configuration
+
+**Capacity Analysis Examples:**
+```bash
+Current IPv6 subnet detected: 2a01:4f9:1a:97cb::/64
+Maximum addresses available in this subnet: 18 quintillion
+
+Address Range Selection:
+Suggested range: 1 to 1000
+Maximum reasonable range: 1 to 10000
+```
+
+**Installation:**
+```bash
+cd network/
+sudo ./network-config.sh
+
+# Interactive configuration:
+# - Select network interface (auto-detects available interfaces)
+# - Choose configuration type (IPv6 bulk, IPv6 single, IPv4)
+# - Specify subnet and range (with capacity analysis)
+# - Preview and confirm changes
+# - Automatic backup and verification
+```
+
+**Bulk IPv6 Examples:**
+```bash
+# Add 100 IPv6 addresses in a range
+How would you like to add IPv6 addresses?
+  1. Add single IPv6 address
+  2. Add range of IPv6 addresses (bulk)
+  3. Add specific IPv6 addresses (custom list)
+
+Enter your choice (1-3): 2
+
+IPv6 Range Configuration:
+Current IPv6 subnet detected: 2a01:4f9:1a:97cb::/64
+Maximum addresses available in this subnet: 18 quintillion
+
+Enter IPv6 subnet/CIDR (current: 2a01:4f9:1a:97cb::/64): [Press Enter]
+Enter starting address number (default: 1): 1
+Enter ending address number (default: 1000): 100
+
+Generated 100 IPv6 addresses
+Range: 2a01:4f9:1a:97cb::1/64 to 2a01:4f9:1a:97cb::100/64
+
+Add these 100 IPv6 addresses? [y/N]: y
+
+✓ Added 100 IPv6 addresses to configuration
+✓ Successfully assigned: 100/100 addresses
+✓ IPv6 connectivity tests passed
+```
+
+**Configuration File Changes:**
+```bash
+# Before:
+iface enp7s0 inet6 static
+  address 2a01:4f9:1a:97cb::2
+  netmask 64
+  gateway fe80::1
+
+# After (100 addresses added):
+iface enp7s0 inet6 static
+  address 2a01:4f9:1a:97cb::2
+  netmask 64
+  gateway fe80::1
+  address 2a01:4f9:1a:97cb::1/64
+  address 2a01:4f9:1a:97cb::3/64
+  # ... continues to ::100/64
+  address 2a01:4f9:1a:97cb::100/64
+```
+
+**Subnet Capacity Reference:**
+| CIDR | Maximum IPs | Typical Use | Suggested Range |
+|------|-------------|-------------|-----------------|
+| /48  | 1.2 sextillion | Large data centers | 1-10000 |
+| /56  | 4.7 quintillion | Enterprise networks | 1-5000 |
+| /64  | 18 quintillion | Standard allocation | 1-1000 |
+| /72  | 4 trillion | Medium networks | 1-500 |
+| /80  | 281 billion | Small networks | 1-100 |
+| /96  | 4 billion | Micro networks | 1-50 |
+
+**Management Tools:**
+```bash
+# Verify IPv6 addresses
+ip -6 addr show enp7s0
+
+# Test connectivity
+ping6 -c 2 2001:4860:4860::8888
+
+# Restore from backup
+sudo cp /tmp/network-config-backup-20250205-105500/interfaces /etc/network/interfaces
+sudo ifdown enp7s0 && sudo ifup enp7s0
+```
+
+**What's Included:**
+- Intelligent network configuration analysis
+- Bulk IPv6 address management (100+ addresses)
+- Subnet capacity calculation and display
+- Multi-distro configuration method support
+- Automatic backup and restoration
+- Connectivity verification and testing
+- Performance warnings for large additions
+- Human-readable number formatting
 
 ---
 
@@ -965,6 +1094,8 @@ sudo ./<install-script>.sh
 - **Check permissions**: Ensure proper user permissions
 
 ### Log Locations:
+- **Server Setup**: `/tmp/server-setup.log`
+- **Network Config**: `/tmp/network-config-backup-*/`
 - **Nginx**: `/tmp/nginx-install.log`
 - **MySQL/MariaDB**: `/tmp/mysql-install.log`
 - **Redis**: `/tmp/redis-install.log`
