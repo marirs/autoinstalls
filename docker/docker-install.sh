@@ -535,13 +535,12 @@ function setup_docker_repo() {
 get_available_docker_versions() {
     case "$os" in
         "ubuntu"|"debian")
-            # Get available versions from apt cache - improved parsing
+            # Get available versions from apt cache - fixed parsing
             apt-cache policy docker-ce 2>/dev/null | \
                 grep -A 100 "Version table:" | \
                 grep -v "Version table:" | \
-                grep -E "^\s+[0-9]" | \
+                grep -E "^\s+[0-9]+:" | \
                 awk '{print $1}' | \
-                sed 's/[[:space:]]*//' | \
                 sort -V | \
                 tail -5
             ;;
