@@ -662,7 +662,7 @@ function add_ubuntu_mariadb_repo_enhanced() {
     echo -e "${CCYAN}Installing required packages...${CEND}" >> "$LOG_FILE"
     apt update >> "$LOG_FILE" 2>&1
     
-    local required_packages=("curl" "gnupg")
+    local required_packages=("curl" "gnupg" "apt-transport-https")
     for pkg in "${required_packages[@]}"; do
         if ! dpkg -l | grep -q "$pkg"; then
             echo -e "${CCYAN}Installing $pkg...${CEND}" >> "$LOG_FILE"
@@ -676,9 +676,49 @@ function add_ubuntu_mariadb_repo_enhanced() {
         fi
     done
     
-    # Add MariaDB repository using official script
-    echo -e "${CCYAN}Adding MariaDB repository...${CEND}" >> "$LOG_FILE"
-    curl -LsS https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | bash -s -- --mariadb-server-version="$MARIADB_VERSION" >> "$LOG_FILE" 2>&1
+    # Get OS codename for repository
+    local os_codename=""
+    if [[ "$os" == "debian" ]]; then
+        case "$os_ver" in
+            "9") os_codename="stretch" ;;
+            "10") os_codename="buster" ;;
+            "11") os_codename="bullseye" ;;
+            "12") os_codename="bookworm" ;;
+            "13") os_codename="trixie" ;;
+            *) os_codename="bookworm" ;;
+        esac
+        
+        # For Debian 13, use bookworm repository as trixie may not be supported yet
+        if [[ "$os_ver" == "13" ]]; then
+            os_codename="bookworm"
+            echo -e "${CYAN}Using Debian 12 (bookworm) repository for Debian 13 (trixie) compatibility${CEND}" >> "$LOG_FILE"
+        fi
+    else
+        # Ubuntu codenames
+        case "$os_ver" in
+            "18.04") os_codename="bionic" ;;
+            "20.04") os_codename="focal" ;;
+            "22.04") os_codename="jammy" ;;
+            "24.04") os_codename="noble" ;;
+            *) os_codename="jammy" ;;
+        esac
+    fi
+    
+    # Add MariaDB repository manually instead of using setup script
+    echo -e "${CCYAN}Adding MariaDB repository manually...${CEND}" >> "$LOG_FILE"
+    
+    # Import MariaDB GPG key
+    curl -fsSL https://downloads.mariadb.com/MariaDB/MariaDB-Server-GPG-KEY | gpg --dearmor -o /etc/apt/trusted.gpg.d/mariadb.gpg >> "$LOG_FILE" 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${CGREEN}✓ MariaDB GPG key imported${CEND}" >> "$LOG_FILE"
+    else
+        echo -e "${CRED}✗ Failed to import MariaDB GPG key${CEND}" >> "$LOG_FILE"
+        return 1
+    fi
+    
+    # Add repository
+    echo "deb [arch=amd64,arm64,ppc64el signed-by=/etc/apt/trusted.gpg.d/mariadb.gpg] https://downloads.mariadb.com/MariaDB/mariadb_repo_setup $os_codename main" | tee /etc/apt/sources.list.d/mariadb.list >> "$LOG_FILE" 2>&1
     
     if [ $? -eq 0 ]; then
         echo -e "${CGREEN}✓ MariaDB repository added${CEND}" >> "$LOG_FILE"
@@ -699,7 +739,7 @@ function add_ubuntu_mariadb_repo_enhanced() {
     
     # Verify MariaDB packages are available
     echo -e "${CCYAN}Verifying MariaDB package availability...${CEND}" >> "$LOG_FILE"
-    if apt-cache show "mariadb-server" >/dev/null 2>&1; then
+    if apt-cache show mariadb-server >/dev/null 2>&1; then
         echo -e "${CGREEN}✓ MariaDB packages available${CEND}" >> "$LOG_FILE"
     else
         echo -e "${CRED}✗ MariaDB packages not available${CEND}" >> "$LOG_FILE"
