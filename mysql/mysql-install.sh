@@ -797,14 +797,6 @@ EOF
         return 1
     fi
 }
-    
-    if [ $? -ne 0 ]; then
-        echo -e "${CRED}Failed to add repository${CEND}"
-        exit 1
-    fi
-    
-    echo -e "${CGREEN}Repository added successfully${CEND}"
-}
 
 function install_database() {
     echo -e "${CGREEN}Installing ${DB_TYPE}...${CEND}"
