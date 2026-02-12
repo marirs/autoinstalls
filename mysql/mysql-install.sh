@@ -1054,7 +1054,14 @@ function secure_mysql() {
     fi
     
     # Secure database
-    mysql -u root << EOF
+    echo -e "${CCYAN}Securing database installation...${CEND}"
+    
+    # Try different authentication methods for MariaDB on Debian
+    if [ "$DB_TYPE" = "mariadb" ]; then
+        # MariaDB on Debian might use socket authentication or require sudo
+        if mysql -u root -e "SELECT 1;" >/dev/null 2>&1; then
+            # Direct connection works
+            mysql -u root << EOF
 -- Set root password
 ALTER USER 'root'@'localhost' IDENTIFIED BY '$DB_ROOT_PASSWORD';
 
@@ -1068,13 +1075,74 @@ DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.
 DROP DATABASE IF EXISTS test;
 DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';
 
--- Create debian-sys-maint user if it doesn't exist
-CREATE USER IF NOT EXISTS 'debian-sys-maint'@'localhost' IDENTIFIED BY '$DB_DEBIAN_PASSWORD';
-GRANT ALL PRIVILEGES ON *.* TO 'debian-sys-maint'@'localhost' WITH GRANT OPTION;
-
--- Reload privileges
+-- Flush privileges
 FLUSH PRIVILEGES;
 EOF
+        elif sudo mysql -u root -e "SELECT 1;" >/dev/null 2>&1; then
+            # Need sudo for socket authentication
+            sudo mysql -u root << EOF
+-- Set root password
+ALTER USER 'root'@'localhost' IDENTIFIED BY '$DB_ROOT_PASSWORD';
+
+-- Remove anonymous users
+DELETE FROM mysql.user WHERE User='';
+
+-- Remove remote root access
+DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
+
+-- Remove test database
+DROP DATABASE IF EXISTS test;
+DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';
+
+-- Flush privileges
+FLUSH PRIVILEGES;
+EOF
+        else
+            echo -e "${CYAN}Unable to connect to MariaDB for security hardening${CEND}"
+            echo -e "${CYAN}You may need to secure MariaDB manually with:${CEND}"
+            echo -e "${CCYAN}mysql_secure_installation${CEND}"
+            echo -e "${CYAN}Or connect with: sudo mysql -u root${CEND}"
+        fi
+    else
+        # MySQL 8.0 with temporary password
+        if [ -n "$TEMP_PASSWORD" ]; then
+            mysql -u root -p"$TEMP_PASSWORD" << EOF
+-- Set root password
+ALTER USER 'root'@'localhost' IDENTIFIED BY '$DB_ROOT_PASSWORD';
+
+-- Remove anonymous users
+DELETE FROM mysql.user WHERE User='';
+
+-- Remove remote root access
+DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
+
+-- Remove test database
+DROP DATABASE IF EXISTS test;
+DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';
+
+-- Flush privileges
+FLUSH PRIVILEGES;
+EOF
+        else
+            mysql -u root << EOF
+-- Set root password
+ALTER USER 'root'@'localhost' IDENTIFIED BY '$DB_ROOT_PASSWORD';
+
+-- Remove anonymous users
+DELETE FROM mysql.user WHERE User='';
+
+-- Remove remote root access
+DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
+
+-- Remove test database
+DROP DATABASE IF EXISTS test;
+DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';
+
+-- Flush privileges
+FLUSH PRIVILEGES;
+EOF
+        fi
+    fi
     
     if [ $? -eq 0 ]; then
         echo -e "${CGREEN}${DB_TYPE} secured successfully${CEND}"
