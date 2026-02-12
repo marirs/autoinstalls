@@ -252,40 +252,55 @@ function add_debian_php_repository() {
             ;;
     esac
     
-    # Check if add-apt-repository is available
-    if ! command -v add-apt-repository >/dev/null 2>&1; then
-        echo -e "${CCYAN}Installing software-properties-common...${CEND}"
-        apt update >> "$LOG_FILE" 2>&1
-        
-        # Try different package names for software-properties
-        local sw_props_packages=("software-properties-common" "python3-software-properties" "software-properties")
-        for pkg in "${sw_props_packages[@]}"; do
-            if apt-cache show "$pkg" >/dev/null 2>&1; then
-                apt install -y "$pkg" >> "$LOG_FILE" 2>&1
-                if [ $? -eq 0 ]; then
-                    echo -e "${CGREEN}✓ $pkg installed${CEND}"
-                    break
-                fi
-            fi
-        done
-        
-        # Check again
-        if ! command -v add-apt-repository >/dev/null 2>&1; then
-            echo -e "${CRED}✗ Cannot install add-apt-repository${CEND}"
-            return 1
-        fi
+    # Get Debian codename
+    local debian_codename=""
+    case "$OS_VERSION" in
+        "9") debian_codename="stretch" ;;
+        "10") debian_codename="buster" ;;
+        "11") debian_codename="bullseye" ;;
+        "12") debian_codename="bookworm" ;;
+        "13") debian_codename="trixie" ;;
+        *) debian_codename="bookworm" ;;
+    esac
+    
+    # For Debian 13, use bookworm repository as trixie may not be supported yet
+    if [[ "$OS_VERSION" == "13" ]]; then
+        debian_codename="bookworm"
+        echo -e "${CYAN}Using Debian 12 (bookworm) repository for Debian 13 (trixie) compatibility${CEND}"
     fi
     
-    # Check if PPA is already added
-    if apt-cache policy | grep -q "ondrej/php"; then
-        echo -e "${CYAN}⚠ Ondrej's PHP PPA already exists${CEND}"
+    # Install required packages
+    echo -e "${CCYAN}Installing required packages...${CEND}"
+    apt update >> "$LOG_FILE" 2>&1
+    local required_packages=("curl" "gnupg" "lsb-release" "ca-certificates" "apt-transport-https")
+    for pkg in "${required_packages[@]}"; do
+        if ! dpkg -l | grep -q "$pkg"; then
+            echo -e "${CCYAN}Installing $pkg...${CEND}"
+            apt install -y "$pkg" >> "$LOG_FILE" 2>&1
+        fi
+    done
+    
+    # Check if repository already exists
+    if [ -f "/etc/apt/sources.list.d/ondrej-php.list" ] || apt-cache policy | grep -q "packages.sury.org"; then
+        echo -e "${CYAN}⚠ Ondrej's PHP repository already exists${CEND}"
     else
-        echo -e "${CCYAN}Adding Ondrej's PHP PPA...${CEND}"
-        add-apt-repository -y ppa:ondrej/php >> "$LOG_FILE" 2>&1
+        echo -e "${CCYAN}Adding Ondrej's PHP repository...${CEND}"
+        
+        # Import GPG key
+        curl -fsSL https://packages.sury.org/php/apt.gpg | gpg --dearmor -o /etc/apt/trusted.gpg.d/php.gpg >> "$LOG_FILE" 2>&1
         if [ $? -eq 0 ]; then
-            echo -e "${CGREEN}✓ Ondrej's PHP PPA added${CEND}"
+            echo -e "${CGREEN}✓ GPG key imported${CEND}"
         else
-            echo -e "${CRED}✗ Failed to add Ondrej's PHP PPA${CEND}"
+            echo -e "${CRED}✗ Failed to import GPG key${CEND}"
+            return 1
+        fi
+        
+        # Add repository
+        echo "deb [signed-by=/etc/apt/trusted.gpg.d/php.gpg] https://packages.sury.org/php/ $debian_codename main" | tee /etc/apt/sources.list.d/ondrej-php.list >> "$LOG_FILE" 2>&1
+        if [ $? -eq 0 ]; then
+            echo -e "${CGREEN}✓ Ondrej's PHP repository added${CEND}"
+        else
+            echo -e "${CRED}✗ Failed to add Ondrej's PHP repository${CEND}"
             return 1
         fi
     fi
@@ -299,16 +314,6 @@ function add_debian_php_repository() {
         echo -e "${CRED}✗ Failed to update package list${CEND}"
         return 1
     fi
-    
-    # Verify PHP packages are available
-    echo -e "${CCYAN}Verifying PHP package availability...${CEND}"
-    for version in "${PHP_VERSIONS[@]}"; do
-        if apt-cache show "php$version-fpm" >/dev/null 2>&1; then
-            echo -e "${CGREEN}✓ PHP $version packages available${CEND}"
-        else
-            echo -e "${CYAN}⚠ PHP $version packages not available${CEND}"
-        fi
-    done
 }
 
 function add_rhel_php_repository() {
