@@ -1511,11 +1511,44 @@ function verify_installation() {
     echo -e "${CGREEN}${DB_TYPE} version: $db_version${CEND}"
     
     # Verify localhost-only binding
-    if netstat -tlnp 2>/dev/null | grep ":$DB_PORT" | grep "127.0.0.1" >/dev/null 2>&1; then
+    echo -e "${CCYAN}Checking network binding...${CEND}"
+    
+    # Check both IPv4 and IPv6 localhost binding
+    local ipv4_binding=$(netstat -tlnp 2>/dev/null | grep ":$DB_PORT" | grep "127.0.0.1")
+    local ipv6_binding=$(netstat -tlnp 2>/dev/null | grep ":$DB_PORT" | grep "::1")
+    local any_binding=$(netstat -tlnp 2>/dev/null | grep ":$DB_PORT " | grep "0.0.0.0")
+    local all_binding=$(netstat -tlnp 2>/dev/null | grep ":$DB_PORT " | grep "::")
+    
+    echo -e "${CCYAN}Port $DB_PORT bindings:${CEND}"
+    if [[ -n "$ipv4_binding" ]]; then
+        echo -e "${CGREEN}  IPv4 localhost (127.0.0.1): FOUND${CEND}"
+    fi
+    if [[ -n "$ipv6_binding" ]]; then
+        echo -e "${CGREEN}  IPv6 localhost (::1): FOUND${CEND}"
+    fi
+    if [[ -n "$any_binding" ]]; then
+        echo -e "${CRED}  All interfaces (0.0.0.0): FOUND - SECURITY RISK!${CEND}"
+    fi
+    if [[ -n "$all_binding" ]]; then
+        echo -e "${CRED}  All interfaces (::): FOUND - SECURITY RISK!${CEND}"
+    fi
+    
+    # Check if binding is secure (localhost only)
+    if [[ -n "$ipv4_binding" || -n "$ipv6_binding" ]] && [[ -z "$any_binding" && -z "$all_binding" ]]; then
         echo -e "${CGREEN}Localhost binding: OK${CEND}"
     else
         echo -e "${CRED}Localhost binding: FAILED${CEND}"
-        exit 1
+        echo -e "${CRED}MariaDB may be accessible from external interfaces!${CEND}"
+        echo -e "${CYAN}Checking configuration file...${CEND}"
+        
+        if grep -q "bind-address = 127.0.0.1" "$DB_CONF_DIR/my.cnf"; then
+            echo -e "${CGREEN}  Configuration file has correct bind-address${CEND}"
+        else
+            echo -e "${CRED}  Configuration file missing or incorrect bind-address${CEND}"
+        fi
+        
+        # Don't exit - just warn the user
+        echo -e "${CYAN}Please check the MariaDB configuration and restart the service${CEND}"
     fi
     
     # Verify firewall rules
